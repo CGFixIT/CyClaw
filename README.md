@@ -1,7 +1,8 @@
 ┌──────────────────────────────────────────────────────────────────────────────┐
 |     --PsyClaw – Offline‑First, RAG‑First, MCP‑Exposed                        │
 └──────────────────────────────────────────────────────────────────────────────┘
-
+https://cgfixit.com/zSafeClaw
+^persistent memory and "personality" coming soon just need to verify latest changes work locally
                              ┌────────────────────────────┐
                              │   User / Client Devices   │
                              │  - Browser UI (HTTP)       │
