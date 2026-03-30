@@ -1,3 +1,6 @@
+### https://cgfixit.com/zSafeClaw/!!!!!PyCla-3.29.36/PsyClaw/
+- Currently shows latest changes i confirmed working locally on ny hpe proloant at home (will add code here and add readme, etc to properly describe the project of PsyClaw (was safeclaw until i found a repo here named that; essentially its openclaw inspired but python based using langraph for security, chromadb+BM25+RRF for RAG retrieval via mini-lm/sentencetransformers - and a custom soul file that is under data/personality (also logs daily insights for "memory"/"learning") - outside the offline mcp rag its connected to lmstudio using qwen 8b instruct and even thats a bit heavy for my server with lots of cpu and ram not much / no real gpu (when i add the demo video youll see what i mean but imagine that running on a solid graphics card compatible with cuda or a gpu proper; not worth the money fir me until i have good enough app for it and i dont trust cloud or the lack of cobtrol abd malware infested clawhub so this is like the v0.2 of PsyClaw
+
 ## Status:
 - working prototype locally; next update will have terminal.html integrated - https://cgfixit.com/zSafeClaw/ contains the build before adding my version of "soul" and persistent memory via sqllite memory checkpointers but i may re-visit using sqllite depending on how it scales
 
