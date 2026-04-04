@@ -8,7 +8,7 @@ https://cgfixit.com/zSafeClaw/!!!!!PyCla-3.29.36/
 ``
 
 ```
-PsyClaw v0.3 — Offline-First · RAG-First · Soul-Persistent W/ AES-256 hashed logging
+PsyClaw v0.3 — Offline-First · RAG-First · Soul-Persistent W/ SHA-256 hashed logging
 ============================================================
 
 CLIENT LAYER
