@@ -1,1 +1,1044 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PsyClaw Terminal</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-primary: #0d0f11;
+    --bg-secondary: #13161a;
+    --bg-tertiary: #1a1e24;
+    --bg-input: #0a0c0e;
+    --border: #2a2f38;
+    --border-focus: #d4920b;
+    --text-primary: #c8cdd5;
+    --text-secondary: #6b7280;
+    --text-muted: #454d59;
+    --accent-amber: #d4920b;
+    --accent-amber-dim: #a06e08;
+    --accent-green: #2dd4a0;
+    --accent-green-dim: rgba(45,212,160,0.12);
+    --accent-red: #ef5350;
+    --accent-red-dim: rgba(239,83,80,0.12);
+    --accent-blue: #4a9eff;
+    --accent-blue-dim: rgba(74,158,255,0.08);
+    --mono: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace;
+    --sans: 'IBM Plex Sans', -apple-system, sans-serif;
+    --radius: 3px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-family: var(--sans);
+    font-size: 13px;
+    line-height: 1.5;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── HEADER BAR ── */
+  .header {
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border);
+    padding: 10px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+  .header-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .logo {
+    font-family: var(--mono);
+    font-weight: 700;
+    font-size: 15px;
+    color: var(--accent-amber);
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+  }
+  .logo-sub {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-muted);
+    letter-spacing: 0.5px;
+  }
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .status-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--accent-green);
+    box-shadow: 0 0 6px rgba(45,212,160,0.5);
+    animation: pulse-dot 2s ease-in-out infinite;
+  }
+  .status-dot.offline { background: var(--text-muted); box-shadow: none; animation: none; }
+  .status-dot.error { background: var(--accent-red); box-shadow: 0 0 6px rgba(239,83,80,0.5); }
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+  .status-text {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-secondary);
+  }
+  .mode-badge {
+    font-family: var(--mono);
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 2px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  /* ── MAIN LAYOUT ── */
+  .main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ── RESULTS PANEL ── */
+  .results {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .results::-webkit-scrollbar { width: 6px; }
+  .results::-webkit-scrollbar-track { background: var(--bg-primary); }
+  .results::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  /* ── INDIVIDUAL RESULT ENTRY ── */
+  .entry {
+    border-left: 2px solid var(--border);
+    padding: 10px 14px;
+    animation: entry-in 0.2s ease-out;
+  }
+  @keyframes entry-in {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .entry.query-entry {
+    border-left-color: var(--accent-amber-dim);
+    background: rgba(212,146,11,0.03);
+  }
+  .entry.answer-entry {
+    border-left-color: var(--accent-green);
+    background: var(--accent-green-dim);
+  }
+  .entry.confirm-entry {
+    border-left-color: var(--accent-amber);
+    background: rgba(212,146,11,0.06);
+  }
+  .entry.error-entry {
+    border-left-color: var(--accent-red);
+    background: var(--accent-red-dim);
+  }
+  .entry.system-entry {
+    border-left-color: var(--text-muted);
+    opacity: 0.6;
+  }
+
+  .entry-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 4px;
+  }
+  .entry.query-entry .entry-label { color: var(--accent-amber); }
+  .entry.answer-entry .entry-label { color: var(--accent-green); }
+  .entry.confirm-entry .entry-label { color: var(--accent-amber); }
+  .entry.error-entry .entry-label { color: var(--accent-red); }
+  .entry.system-entry .entry-label { color: var(--text-muted); }
+
+  .entry-text {
+    font-family: var(--sans);
+    font-size: 13px;
+    color: var(--text-primary);
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  /* ── METADATA ROW ── */
+  .meta-row {
+    display: flex;
+    gap: 16px;
+    margin-top: 8px;
+    flex-wrap: wrap;
+  }
+  .meta-tag {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .meta-tag .val {
+    color: var(--text-secondary);
+  }
+
+  /* ── SOURCES COLLAPSIBLE ── */
+  .sources-toggle {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--accent-blue);
+    cursor: pointer;
+    margin-top: 8px;
+    padding: 2px 0;
+    user-select: none;
+    display: inline-block;
+  }
+  .sources-toggle:hover { color: var(--text-primary); }
+  .sources-list {
+    display: none;
+    margin-top: 6px;
+    padding: 8px 10px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-secondary);
+    line-height: 1.7;
+  }
+  .sources-list.open { display: block; }
+  .source-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 6px 0;
+    border-bottom: 1px dashed rgba(255,255,255,0.05);
+  }
+  .source-item:last-child {
+    border-bottom: none;
+  }
+  .source-topline {
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+  }
+  .source-score {
+    color: var(--accent-amber);
+    min-width: 72px;
+  }
+  .source-path {
+    color: var(--text-secondary);
+    word-break: break-all;
+  }
+  .source-provenance {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    font-size: 10px;
+    color: var(--text-muted);
+  }
+  .prov-tag {
+    display: inline-flex;
+    gap: 4px;
+    align-items: center;
+  }
+  .prov-val {
+    color: var(--text-secondary);
+  }
+
+  /* ── CONFIRM BUTTONS ── */
+  .confirm-buttons {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+  }
+  .btn-confirm {
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 5px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    transition: all 0.15s;
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+  }
+  .btn-confirm:hover {
+    border-color: var(--accent-amber);
+    color: var(--text-primary);
+  }
+  .btn-confirm.yes {
+    border-color: var(--accent-amber-dim);
+    color: var(--accent-amber);
+  }
+  .btn-confirm.yes:hover {
+    background: rgba(212,146,11,0.1);
+    border-color: var(--accent-amber);
+  }
+  .btn-confirm.no:hover {
+    border-color: var(--text-secondary);
+  }
+  .btn-confirm:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+  }
+
+  /* ── INPUT BAR ── */
+  .input-bar {
+    background: var(--bg-secondary);
+    border-top: 1px solid var(--border);
+    padding: 12px 20px;
+    display: flex;
+    gap: 10px;
+    align-items: flex-end;
+    flex-shrink: 0;
+  }
+  .input-wrapper {
+    flex: 1;
+    position: relative;
+  }
+  .input-prefix {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--accent-amber);
+    pointer-events: none;
+  }
+  .query-input {
+    width: 100%;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 10px 12px 10px 28px;
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--text-primary);
+    outline: none;
+    transition: border-color 0.15s;
+    resize: none;
+    overflow: hidden;
+    line-height: 1.4;
+    min-height: 38px;
+    max-height: 120px;
+  }
+  .query-input::placeholder { color: var(--text-muted); }
+  .query-input:focus { border-color: var(--border-focus); }
+
+  .send-btn {
+    background: var(--accent-amber);
+    color: var(--bg-primary);
+    border: none;
+    border-radius: var(--radius);
+    padding: 9px 18px;
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    transition: all 0.15s;
+    white-space: nowrap;
+    height: 38px;
+  }
+  .send-btn:hover { background: #e8a40c; }
+  .send-btn:disabled {
+    background: var(--bg-tertiary);
+    color: var(--text-muted);
+    cursor: not-allowed;
+  }
+
+  /* ── LOADING SPINNER ── */
+  .spinner {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border: 2px solid var(--text-muted);
+    border-top-color: var(--accent-amber);
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+    vertical-align: middle;
+    margin-right: 6px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── EMPTY STATE ── */
+  .empty-state {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    gap: 8px;
+    padding: 40px;
+  }
+  .empty-state .logo-large {
+    font-family: var(--mono);
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--border);
+    letter-spacing: 3px;
+    text-transform: uppercase;
+  }
+  .empty-state .hint {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-muted);
+    max-width: 400px;
+    text-align: center;
+    line-height: 1.7;
+  }
+
+  /* ── FOOTER STATUS ── */
+  .footer-bar {
+    background: var(--bg-tertiary);
+    border-top: 1px solid var(--border);
+    padding: 4px 20px;
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+  }
+
+  /* ── SOUL CONSOLE ── */
+  .soul-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 20px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .toolbar-btn {
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 6px 10px;
+    font-family: var(--mono);
+    font-size: 11px;
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .toolbar-btn:hover {
+    color: var(--text-primary);
+    border-color: var(--accent-amber);
+  }
+  .toolbar-hint {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-muted);
+  }
+  .soul-panel {
+    display: none;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 20px 16px;
+    flex-shrink: 0;
+    gap: 12px;
+  }
+  .soul-panel.open {
+    display: flex;
+    flex-direction: column;
+  }
+  .soul-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .soul-title {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--accent-amber);
+  }
+  .soul-meta {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-muted);
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .soul-editor, .soul-reason {
+    width: 100%;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text-primary);
+    font-family: var(--mono);
+    font-size: 12px;
+    outline: none;
+  }
+  .soul-editor {
+    min-height: 180px;
+    padding: 12px;
+    resize: vertical;
+    line-height: 1.5;
+  }
+  .soul-reason {
+    padding: 9px 10px;
+  }
+  .soul-editor:focus, .soul-reason:focus {
+    border-color: var(--border-focus);
+  }
+  .soul-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .soul-btn {
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 7px 12px;
+    font-family: var(--mono);
+    font-size: 11px;
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .soul-btn:hover {
+    color: var(--text-primary);
+    border-color: var(--accent-amber);
+  }
+  .soul-btn.apply {
+    border-color: var(--accent-green);
+    color: var(--accent-green);
+  }
+  .soul-btn.apply:hover {
+    background: rgba(45,212,160,0.08);
+  }
+  .soul-status {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-secondary);
+    min-height: 16px;
+  }
+  .soul-status.error { color: var(--accent-red); }
+  .soul-status.success { color: var(--accent-green); }
+  .proposal-box {
+    display: none;
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 10px 12px;
+  }
+  .proposal-meta,
+  .proposal-warning {
+    font-family: var(--mono);
+    font-size: 10px;
+    line-height: 1.6;
+    color: var(--text-secondary);
+  }
+  .proposal-warning {
+    color: var(--accent-amber);
+    margin-top: 6px;
+  }
+  .proposal-preview {
+    margin-top: 10px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-primary);
+    max-height: 220px;
+    overflow: auto;
+  }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+  <div class="header-left">
+    <div>
+      <div class="logo">PsyClaw</div>
+      <div class="logo-sub">RAG-First Query Terminal</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="mode-badge" id="modeBadge">offline</div>
+    <div style="display:flex;align-items:center;gap:6px;">
+      <div class="status-dot" id="statusDot"></div>
+      <span class="status-text" id="statusText">checking...</span>
+    </div>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+  <div class="soul-toolbar">
+    <button class="toolbar-btn" id="soulToggleBtn" onclick="toggleSoulPanel()">Soul Console</button>
+    <span class="toolbar-hint">view, reload, propose, and apply the personality layer</span>
+  </div>
+
+  <div class="soul-panel" id="soulPanel">
+    <div class="soul-header">
+      <div class="soul-title">Soul Console</div>
+      <div class="soul-meta">
+        <span id="soulVersion">version: --</span>
+        <span id="soulSource">source: unavailable</span>
+      </div>
+    </div>
+    <textarea class="soul-editor" id="soulEditor" placeholder="soul.md content will load here..."></textarea>
+    <input class="soul-reason" id="soulReason" type="text" placeholder="reason for change, e.g. tighten tone or update identity constraints">
+    <div class="soul-actions">
+      <button class="soul-btn" onclick="loadSoul()">Load</button>
+      <button class="soul-btn" onclick="reloadSoul()">Reload Disk</button>
+      <button class="soul-btn" onclick="proposeSoulEvolution()">Propose</button>
+      <button class="soul-btn apply" onclick="applySoulEvolution()">Apply</button>
+    </div>
+    <div class="soul-status" id="soulStatus"></div>
+    <div class="proposal-box" id="proposalBox">
+      <div class="proposal-meta" id="proposalMeta"></div>
+      <div class="proposal-warning" id="proposalWarning"></div>
+      <pre class="proposal-preview" id="proposalPreview"></pre>
+    </div>
+  </div>
+
+  <div class="results" id="results">
+    <div class="empty-state" id="emptyState">
+      <div class="logo-large">PsyClaw</div>
+      <div class="hint">
+        Query your local knowledge base. All queries hit retrieval first —
+        no LLM sees your input until context is retrieved and scored.
+      </div>
+      <div class="hint" style="margin-top:4px; color:var(--border);">
+        ctrl+enter to send &nbsp;·&nbsp; gateway at 127.0.0.1:8787
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- INPUT -->
+<div class="input-bar">
+  <div class="input-wrapper">
+    <span class="input-prefix">›</span>
+    <textarea class="query-input" id="queryInput"
+      placeholder="query the vault..."
+      rows="1"></textarea>
+  </div>
+  <button class="send-btn" id="sendBtn" onclick="submitQuery()">Send</button>
+</div>
+
+<!-- FOOTER -->
+<div class="footer-bar">
+  <span id="footerLeft">psyclaw v1.1 · localhost:8787</span>
+  <span id="footerRight"></span>
+</div>
+
+<script>
+const API = 'http://127.0.0.1:8787';
+const resultsEl = document.getElementById('results');
+const emptyState = document.getElementById('emptyState');
+const input = document.getElementById('queryInput');
+const sendBtn = document.getElementById('sendBtn');
+const statusDot = document.getElementById('statusDot');
+const statusText = document.getElementById('statusText');
+const modeBadge = document.getElementById('modeBadge');
+const footerRight = document.getElementById('footerRight');
+const soulPanel = document.getElementById('soulPanel');
+const soulEditor = document.getElementById('soulEditor');
+const soulReason = document.getElementById('soulReason');
+const soulStatus = document.getElementById('soulStatus');
+const soulVersion = document.getElementById('soulVersion');
+const soulSource = document.getElementById('soulSource');
+const proposalBox = document.getElementById('proposalBox');
+const proposalMeta = document.getElementById('proposalMeta');
+const proposalWarning = document.getElementById('proposalWarning');
+const proposalPreview = document.getElementById('proposalPreview');
+const soulToggleBtn = document.getElementById('soulToggleBtn');
+
+let queryCount = 0;
+let pendingConfirmQuery = null;
+let pendingSoulProposal = null;
+let entryCounter = 0;
+
+input.addEventListener('input', () => {
+  input.style.height = 'auto';
+  input.style.height = Math.min(input.scrollHeight, 120) + 'px';
+});
+
+input.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+    e.preventDefault();
+    submitQuery();
+  }
+  if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
+    e.preventDefault();
+    submitQuery();
+  }
+});
+
+function extractErrorMessage(err, fallback = 'Unknown error') {
+  if (!err) return fallback;
+  if (typeof err === 'string') return err;
+  if (err.detail && typeof err.detail === 'string') return err.detail;
+  if (err.detail && typeof err.detail === 'object') return err.detail.error || err.detail.message || fallback;
+  return err.error || err.message || fallback;
+}
+
+function setSoulStatus(message, tone = '') {
+  soulStatus.textContent = message || '';
+  soulStatus.className = `soul-status${tone ? ` ${tone}` : ''}`;
+}
+
+async function checkHealth() {
+  try {
+    const resp = await fetch(`${API}/health`, { signal: AbortSignal.timeout(3000) });
+    const data = await resp.json();
+    statusDot.className = 'status-dot';
+    statusText.textContent = `gateway ${data.status}`;
+    modeBadge.textContent = data.mode || 'offline';
+    if (data.status !== 'ok') {
+      statusDot.classList.add('error');
+    }
+  } catch (e) {
+    statusDot.className = 'status-dot offline';
+    statusText.textContent = 'gateway unreachable';
+  }
+}
+
+async function submitQuery(confirmedOnline = null) {
+  const query = confirmedOnline !== null ? pendingConfirmQuery : input.value.trim();
+  if (!query) return;
+
+  if (confirmedOnline === null) {
+    input.value = '';
+    input.style.height = 'auto';
+  }
+
+  if (emptyState) emptyState.remove();
+
+  if (confirmedOnline === null) {
+    addEntry('query', 'QUERY', query);
+  }
+
+  const loadingId = addEntry('system', '', '<span class="spinner"></span>searching vault...', true);
+  sendBtn.disabled = true;
+  const startTime = performance.now();
+
+  try {
+    const body = { query };
+    if (confirmedOnline !== null) {
+      body.user_confirmed_online = confirmedOnline;
+    }
+
+    const resp = await fetch(`${API}/query`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+
+    const elapsed = Math.round(performance.now() - startTime);
+    removeEntry(loadingId);
+
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({ error: resp.statusText }));
+      addEntry('error', 'ERROR', `${resp.status}: ${extractErrorMessage(err)}`);
+      return;
+    }
+
+    const data = await resp.json();
+    queryCount++;
+
+    if (data.needs_confirm) {
+      pendingConfirmQuery = query;
+      addConfirmEntry(data.confirm_message || 'Low confidence. Send to Grok online?');
+      return;
+    }
+
+    const meta = [
+      { k: 'model', v: data.model_used },
+      { k: 'mode', v: data.retrieval_mode },
+      { k: 'hits', v: data.hit_count },
+      { k: 'time', v: `${elapsed}ms` }
+    ];
+/*
+    const answerEl = addEntry('answer', 'ANSWER', data.answer, false, meta);
+
+    if (data.sources && data.sources.length > 0) {
+      addSources(answerEl, data.sources);
+    }
+*/
+	const answerId = addEntry('answer', 'ANSWER', data.answer, false, meta);
+	if (data.sources && data.sources.length > 0) {
+	  addSources(document.getElementById(answerId), data.sources);
+	}
+
+    if (data.error) {
+      addEntry('error', 'WARNING', data.error);
+    }
+
+    footerRight.textContent = `queries: ${queryCount} · last: ${elapsed}ms`;
+  } catch (e) {
+    removeEntry(loadingId);
+    addEntry('error', 'ERROR', `Network error: ${e.message}`);
+  } finally {
+    sendBtn.disabled = false;
+    input.focus();
+  }
+}
+
+function addEntry(type, label, text, isHtml = false, meta = null) {
+  const id = `entry-${entryCounter++}`;
+  const el = document.createElement('div');
+  el.className = `entry ${type}-entry`;
+  el.id = id;
+
+  let html = '';
+  if (label) {
+    html += `<div class="entry-label">${label}</div>`;
+  }
+  html += `<div class="entry-text">${isHtml ? text : escHtml(text)}</div>`;
+
+  if (meta) {
+    html += '<div class="meta-row">';
+    for (const m of meta) {
+      html += `<span class="meta-tag">${m.k}: <span class="val">${m.v}</span></span>`;
+    }
+    html += '</div>';
+  }
+
+  el.innerHTML = html;
+  resultsEl.appendChild(el);
+  resultsEl.scrollTop = resultsEl.scrollHeight;
+  return id;
+}
+
+function removeEntry(id) {
+  const el = document.getElementById(id);
+  if (el) el.remove();
+}
+
+function addConfirmEntry(message) {
+  const id = `entry-${entryCounter++}`;
+  const el = document.createElement('div');
+  el.className = 'entry confirm-entry';
+  el.id = id;
+  el.innerHTML = `
+    <div class="entry-label">CONFIRMATION REQUIRED</div>
+    <div class="entry-text">${escHtml(message)}</div>
+    <div class="confirm-buttons">
+      <button class="btn-confirm yes" onclick="handleConfirm(true, '${id}')">Yes — Send to Grok</button>
+      <button class="btn-confirm no" onclick="handleConfirm(false, '${id}')">No — Stay Offline</button>
+    </div>
+  `;
+  resultsEl.appendChild(el);
+  resultsEl.scrollTop = resultsEl.scrollHeight;
+}
+
+function handleConfirm(confirmed, entryId) {
+  const el = document.getElementById(entryId);
+  if (el) {
+    const btns = el.querySelectorAll('.btn-confirm');
+    btns.forEach(b => b.disabled = true);
+  }
+  addEntry('system', '', confirmed ? '→ Escalating to Grok...' : '→ Staying offline (best-effort local)');
+  submitQuery(confirmed);
+}
+
+function fmtMaybeNumber(value, digits = 4) {
+  return typeof value === 'number' ? value.toFixed(digits) : '—';
+}
+
+function fmtMaybeRank(value) {
+  return typeof value === 'number' ? `#${value + 1}` : '—';
+}
+
+function addSources(parentEl, sources) {
+  const toggle = document.createElement('div');
+  toggle.className = 'sources-toggle';
+  toggle.textContent = `▸ ${sources.length} sources`;
+
+  const list = document.createElement('div');
+  list.className = 'sources-list';
+
+  for (const s of sources) {
+    const item = document.createElement('div');
+    item.className = 'source-item';
+    const score = fmtMaybeNumber(s.rrf_score ?? s.score, 4);
+    const path = s.source || 'unknown';
+    item.innerHTML = `
+      <div class="source-topline">
+        <span class="source-score">rrf ${score}</span>
+        <span class="source-path">${escHtml(path)}</span>
+      </div>
+      <div class="source-provenance">
+        <span class="prov-tag">sem rank <span class="prov-val">${fmtMaybeRank(s.semantic_rank)}</span></span>
+        <span class="prov-tag">sem score <span class="prov-val">${fmtMaybeNumber(s.semantic_score, 4)}</span></span>
+        <span class="prov-tag">sem rrf <span class="prov-val">${fmtMaybeNumber(s.rrf_semantic_contrib, 5)}</span></span>
+        <span class="prov-tag">bm25 rank <span class="prov-val">${fmtMaybeRank(s.keyword_rank)}</span></span>
+        <span class="prov-tag">bm25 score <span class="prov-val">${fmtMaybeNumber(s.keyword_score, 4)}</span></span>
+        <span class="prov-tag">bm25 rrf <span class="prov-val">${fmtMaybeNumber(s.rrf_keyword_contrib, 5)}</span></span>
+      </div>
+    `;
+    list.appendChild(item);
+  }
+
+  toggle.addEventListener('click', () => {
+    list.classList.toggle('open');
+    toggle.textContent = list.classList.contains('open')
+      ? `▾ ${sources.length} sources`
+      : `▸ ${sources.length} sources`;
+  });
+
+  parentEl.appendChild(toggle);
+  parentEl.appendChild(list);
+}
+
+async function toggleSoulPanel() {
+  soulPanel.classList.toggle('open');
+  soulToggleBtn.textContent = soulPanel.classList.contains('open') ? 'Hide Soul' : 'Soul Console';
+  if (soulPanel.classList.contains('open') && !soulEditor.value.trim()) {
+    await loadSoul();
+  }
+}
+
+async function loadSoul() {
+  setSoulStatus('Loading soul...');
+  try {
+    const resp = await fetch(`${API}/soul`, { signal: AbortSignal.timeout(5000) });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) {
+      throw new Error(extractErrorMessage(data, 'Failed to load soul'));
+    }
+    soulEditor.value = data.soul || '';
+    soulVersion.textContent = `version: ${data.version ?? '--'}`;
+    soulSource.textContent = `source: ${data.source || 'unknown'}`;
+    pendingSoulProposal = null;
+    proposalBox.style.display = 'none';
+    setSoulStatus('Soul loaded.', 'success');
+  } catch (e) {
+    setSoulStatus(e.message, 'error');
+  }
+}
+
+async function reloadSoul() {
+  setSoulStatus('Reloading soul from disk...');
+  try {
+    const resp = await fetch(`${API}/soul/reload`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) {
+      throw new Error(extractErrorMessage(data, 'Failed to reload soul'));
+    }
+    addEntry('system', '', '→ Soul reloaded from disk');
+    await loadSoul();
+    setSoulStatus(data.message || 'Soul reloaded.', 'success');
+  } catch (e) {
+    setSoulStatus(e.message, 'error');
+  }
+}
+
+async function proposeSoulEvolution() {
+  const newSoul = soulEditor.value.trim();
+  const reason = soulReason.value.trim() || 'user-requested';
+  if (!newSoul) {
+    setSoulStatus('Soul text is empty.', 'error');
+    return;
+  }
+
+  setSoulStatus('Creating proposal...');
+  try {
+    const resp = await fetch(`${API}/soul/propose`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ new_soul: newSoul, reason })
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) {
+      throw new Error(extractErrorMessage(data, 'Failed to create proposal'));
+    }
+
+    pendingSoulProposal = {
+      new_soul: data.proposed_soul || newSoul,
+      reason: data.reason || reason
+    };
+    proposalMeta.textContent = `current: ${data.current_sha || 'n/a'} · proposed: ${data.proposed_sha || 'n/a'} · reason: ${pendingSoulProposal.reason}`;
+    proposalWarning.textContent = data.warning || 'Review before applying.';
+    proposalPreview.textContent = pendingSoulProposal.new_soul;
+    proposalBox.style.display = 'block';
+    setSoulStatus('Proposal created. Review it, then apply if correct.', 'success');
+    addEntry('system', '', '→ Soul evolution proposed and awaiting apply');
+  } catch (e) {
+    setSoulStatus(e.message, 'error');
+  }
+}
+
+async function applySoulEvolution() {
+  if (!pendingSoulProposal) {
+    setSoulStatus('Create a proposal first.', 'error');
+    return;
+  }
+
+  setSoulStatus('Applying soul evolution...');
+  try {
+    const resp = await fetch(`${API}/soul/apply`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(pendingSoulProposal)
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) {
+      throw new Error(extractErrorMessage(data, 'Failed to apply soul evolution'));
+    }
+
+    addEntry('system', '', '→ Soul updated and active for future queries');
+    pendingSoulProposal = null;
+    proposalBox.style.display = 'none';
+    await loadSoul();
+    setSoulStatus(data.message || 'Soul updated.', 'success');
+  } catch (e) {
+    setSoulStatus(e.message, 'error');
+  }
+}
+
+function escHtml(str) {
+  const d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
+}
+
+checkHealth();
+setInterval(checkHealth, 15000);
+input.focus();
+</script>
+</body>
+</html>
 
