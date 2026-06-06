@@ -1,7 +1,5 @@
-https://github.com/CGFixIT/PsyClaw/blob/main/PsyClaw_Architecture.pdf
+https://github.com/CGFixIT/PsyClaw/blob/main/PsyClaw_Architecture_v1.3.0.pdf
 <hr>
-<b>https://cgfixit.com/zSafeClaw/!!!!!PyCla-3.29.36/PsyClaw/</b> or <a href="https://cgfixit.com/zSafeClaw/!!!!!PyCla-3.29.36/">start here</a> and read PDF first:  
-
 
 ```
 PsyClaw v0.3 — Offline-First · RAG-First · Soul-Persistent W/ SHA-256 hashed logging
