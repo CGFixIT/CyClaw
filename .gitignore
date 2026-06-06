@@ -1,0 +1,59 @@
+# ==============================================================================
+# PsyClaw .gitignore
+# ==============================================================================
+
+# Python
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# PsyClaw runtime artifacts (never commit these)
+index/
+.emb_cache/
+logs/
+*.jsonl
+data/personality/*.db
+data/personality/*.db-shm
+data/personality/*.db-wal
+data/personality/soul.md.bak
+
+# Corpus content (personal knowledge base — keep private)
+# data/corpus/   <-- uncomment this line to gitignore your corpus
+
+# Secrets
+*.env
+!psyclaw_telemetry_kill.env
+.env.*
+!.env.example
+
+# OS
+.DS_Store
+Thumbs.db
+*.lnk
+
+# Windows shortcuts and junk
+desktop.ini
+
+# Zip archives
+*.zip
+*.tar.gz

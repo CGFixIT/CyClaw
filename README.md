@@ -1,478 +1,307 @@
-https://psyclaw-130.pplx.app/
-<hr>
-https://github.com/CGFixIT/PsyClaw/blob/main/PsyClaw_Architecture_v1.3.0.pdf
-<hr>
+# PsyClaw
 
-```
-PsyClaw v1.3.0 — Offline-First · RAG-First · Soul-Persistent W/ SHA-256 hashed logging
-============================================================
+> **Offline-first, RAG-enforced, soul-governed personal AI assistant**
+> Version 1.4.0 (planning) · Baseline 1.3.0 (production) · Python 3.11+ · LM Studio + ChromaDB + BM25 + LangGraph
 
-CLIENT LAYER
-─────────────────────────────────────────────────────────────
-  ┌──────────────────────┐   ┌─────────────────┐   ┌────────────────────┐
-  │   terminal.html      │   │  CLI / Scripts  │   │ Claude Desktop /   │
-  │  (Soul Console +     │   │  (HTTP / curl / │   │ LM Studio MCP      │
-  │   RAG terminal UI)   │   │   PowerShell)   │   │ (JSON-RPC stdio)   │
-  └──────────┬───────────┘   └────────┬────────┘   └─────────┬──────────┘
-             │  HTTP                  │  HTTP                 │  MCP
-             └────────────────────────┴─────────┬────────────┘
-                                                 │
-                                                 ▼
-
-A. FASTAPI GATEWAY — gate.py (127.0.0.1:8787)
-─────────────────────────────────────────────────────────────
-  ┌─────────────────────────────────────────────────────────┐
-  │                   PsyClaw Gateway v1.1                  │
-  │                                                         │
-  │  RAG Endpoints:          Soul Endpoints (NEW v1.1):     │
-  │  ├── POST /query    ───▶  gate keeps user-confirm loop  │
-  │  └── GET  /health        ├── GET  /soul                 │
-  │                          ├── POST /soul/reload          │
-  │  Pipeline:               ├── POST /soul/propose ──────▶ │
-  │  1. Load PersonalityMgr  │     (injection scan, diff)   │
-  │  2. Load HybridRetriever └── POST /soul/apply  ───────▶ │
-  │  3. Build LangGraph            (write disk + SQLite)     │
-  │  4. Sanitize input (banned                               │
-  │     patterns, max 4000 chars)                            │
-  │  5. Build GraphState{query, user_confirmed_online}       │
-  │  6. Invoke graph                                         │
-  └──────────────────────────────┬──────────────────────────┘
-                                 │ GraphState
-                                 ▼
-
-B. LANGGRAPH CONTROLLER — graph.py (Topology = Enforcement)
-─────────────────────────────────────────────────────────────
-  ENTRY POINT ──────────────────────────────────────────────
-       │
-       ▼
-  ┌──────────────────────────────────────────────────────┐
-  │  Node 1: retrieve                                    │
-  │  ─────────────────                                   │
-  │  • HybridRetriever.hybrid_search(query)              │
-  │  • Writes: retrieved_docs[], top_score, mode         │
-  │  • On error → sets error flag → offline_best_effort  │
-  └──────────────────────┬───────────────────────────────┘
-                         │ (always)
-                         ▼
-  ┌──────────────────────────────────────────────────────┐
-  │  Node 2: route_by_score                              │
-  │  ──────────────────────                              │
-  │  • Reads top_score vs cfg.retrieval.min_score(0.025) │
-  │  • Sets needs_user_confirm: True / False             │
-  └────────────┬───────────────────────┬─────────────────┘
-               │ score >= 0.025        │ score < 0.025
-               │                       │
-               ▼                       ▼
-  ┌────────────────────┐  ┌────────────────────────────────┐
-  │  Node 3: local_llm │  │  Node 4: user_gate             │
-  │  ──────────────────│  │  ─────────────────             │
-  │  • soul_preamble + │  │  if user_confirmed_online=None:│
-  │    retrieved_docs  │  │    → return needs_confirm=True │
-  │    → LM Studio     │  │      (gateway pauses, asks     │
-  │    http://127.0.0.1│  │       user to re-submit)       │
-  │    :1234/v1        │  │  if True/False → route below   │
-  │  • answer_model=   │  └───┬────────────────────────────┘
-  │    "local"         │      │ user_confirmed_online=True
-  └────────┬───────────┘      │ + hybrid + grok.enabled
-           │                  ▼
-           │    ┌─────────────────────────────────────────┐
-           │    │  Node 5: grok_fallback                  │
-           │    │  ─────────────────────                  │
-           │    │  ONLY reachable when ALL true:          │
-           │    │  • cfg.app.mode == "hybrid"             │
-           │    │  • cfg.models.grok.enabled == true      │
-           │    │  • GROK_API_KEY set in env              │
-           │    │  • user_confirmed_online == True        │
-           │    │  • grok.is_available()                  │
-           │    │  → api.x.ai/v1  (grok-beta)            │
-           │    │  → answer_model = "grok"                │
-           │    └────────────────┬────────────────────────┘
-           │                     │
-           │    ┌────────────────▼────────────────────────┐
-           │    │  Node 6: offline_best_effort            │
-           │    │  ────────────────────────               │
-           │    │  Used when:                             │
-           │    │  • user said "no" to Grok, OR           │
-           │    │  • app.mode == "offline", OR            │
-           │    │  • Grok unavailable/unconfigured        │
-           │    │  • soul_preamble + partial context      │
-           │    │  → LM Studio (same local endpoint)      │
-           │    │  → answer_model = "offline-best-effort" │
-           │    └────────────────┬────────────────────────┘
-           │                     │
-           └──────────┬──────────┘
-                      │ ALL paths converge
-                      ▼
-  ┌──────────────────────────────────────────────────────┐
-  │  Node 7: audit_logger                               │
-  │  ──────────────────────                              │
-  │  • hash_query(query) → SHA-256 (raw never stored)   │
-  │  • Redact PII (emails, IPs, AWS keys, Slack tokens) │
-  │  • Write JSONL to logs/audit.jsonl                  │
-  │  • personality.record_interaction(q_hash, outcome)  │
-  └──────────────────────────┬───────────────────────────┘
-                             │
-                            END
-                             │
-                             ▼
-  Gateway returns QueryResponse to client:
-  { answer, sources[], retrieval_mode, hit_count,
-    model_used, needs_confirm, confirm_message, error }
-
-C. SOUL GOVERNANCE — utils/personality.py (OUTSIDE GRAPH)
-─────────────────────────────────────────────────────────────
-  ┌─────────────────────────────────────────────────────────┐
-  │  PersonalityManager — soul lives outside the graph      │
-  │                                                         │
-  │  FILE-AS-TRUTH:                                         │
-  │  data/personality/soul.md ◄──── source of truth        │
-  │                                                         │
-  │  SHADOW DB:                                             │
-  │  data/personality/psyclaw_soul.db (SQLite)             │
-  │  ├── soul_versions  (id, sha256, content, reason, ts)  │
-  │  └── interactions   (q_hash, outcome, ts) TTL=90 days  │
-  │                                                         │
-  │  CRASH-SAFE WRITE ORDER:                               │
-  │  1. Backup soul.md → soul.md.bak                       │
-  │  2. INSERT version row into SQLite                      │
-  │  3. Write soul.md to disk                              │
-  │  4. Update in-memory soul_core                         │
-  │  (failure at any step = recoverable)                    │
-  │                                                         │
-  │  STARTUP DRIFT DETECTION:                              │
-  │  SHA-256(soul.md on disk) vs DB latest hash            │
-  │  On mismatch → insert recovery version + log forensic  │
-  │                                                         │
-  │  INJECTION GATING (13+ patterns, OWASP-sourced):       │
-  │  POST /soul/propose runs scan BEFORE any write         │
-  │  → returns diff + injection_flags count                 │
-  │  POST /soul/apply writes ONLY after human review       │
-  │                                                         │
-  │  SOUL INJECTION (at prompt time, NOT a graph node):    │
-  │  local_llm_node & offline_best_effort_node only        │
-  │  → soul_preamble + "\n\n---\n\n" + [untrusted context] │
-  └─────────────────────────────────────────────────────────┘
-
-D. RETRIEVAL LAYER — retrieval/
-─────────────────────────────────────────────────────────────
-  Corpus:
-  data/corpus/*.md, *.txt
-       │
-       ▼ [python -m retrieval.indexer] (batch job)
-  ┌─────────────────────────────────────────────────────────┐
-  │  indexer.py                                             │
-  │  chunk_size=512, overlap=50, batch_size=50             │
-  │  ├── sentence-transformers all-MiniLM-L6-v2 (CPU)     │
-  │  │   → index/chroma_db (dim=384, cached .emb_cache/)  │
-  │  └── rank-bm25 + stemmer.py (Porter, tech-tuned)       │
-  │      → index/bm25.pkl                                   │
-  └─────────────────────────────────────────────────────────┘
-       │ Query-time (HybridRetriever.hybrid_search)
-       ▼
-  semantic search (Chroma, top_k=5)
-       +
-  keyword search (BM25, top_k=5)
-       │
-       ▼ RRF fusion (k=60, vector_weight=0.6, bm25_weight=0.4)
-       │
-  returns SearchResult[] with top_score → Node 1
-
-E. MCP SERVER — mcp_hybrid_server.py (stdio, no sampling)
-─────────────────────────────────────────────────────────────
-  JSON-RPC over stdio
-  Tool: hybrid_search { query, top_k?, mode? }
-  sampling: null  ← protocol-level LLM lockout
-  Cannot invoke local_llm or Grok by design, not config
-
-F. MODEL LAYER
-─────────────────────────────────────────────────────────────
-  ┌──────────────────────┬──────────────────────────────────┐
-  │  sentence-transformers│  LM Studio (local, required)    │
-  │  all-MiniLM-L6-v2    │  http://127.0.0.1:1234/v1       │
-  │  CPU-only, dim=384    │  model: qwen2.5-7b-instruct     │
-  │  .emb_cache/          │  temp=0.3, max_tokens=2048      │
-  │  (indexer + query)    │  timeout=400s                   │
-  ├──────────────────────┴──────────────────────────────────┤
-  │  Grok (optional, hybrid mode only)                      │
-  │  https://api.x.ai/v1  model: grok-beta                 │
-  │  Requires: GROK_API_KEY env + 4 additional conditions  │
-  └─────────────────────────────────────────────────────────┘
-
-PROJECT TREE
-─────────────────────────────────────────────────────────────
-psyclaw/
-├── gate.py              FastAPI + soul endpoints
-├── graph.py             LangGraph state machine
-├── mcp_hybrid_server.py MCP server (retrieval-only)
-├── metrics.py           Audit JSONL analyzer
-├── config.yaml          Single config source
-├── requirements.txt     Pinned deps
-├── terminal.html        Browser UI + Soul Console
-├── llm/
-│   └── client.py        LocalLLMClient + GrokClient
-├── retrieval/
-│   ├── embeddings.py    ST wrapper
-│   ├── hybrid_search.py ChromaDB + BM25 + RRF
-│   ├── indexer.py       Corpus ingestion
-│   └── stemmer.py       Porter stemmer (tech-tuned)
-├── schemas/
-│   └── api.py           Pydantic models incl. soul schemas
-├── utils/
-│   ├── errors.py        Typed RAGError hierarchy
-│   ├── health.py        Startup health checks
-│   ├── logger.py        Audit JSONL + hash_query
-│   ├── personality.py   PersonalityManager (soul CRUD)
-│   └── sanitizer.py     Prompt filter + PII redaction
-├── data/
-│   ├── corpus/          .md/.txt knowledge base
-│   └── personality/
-│       └── soul.md      Identity source-of-truth
-└── tests/
-    ├── conftest.py
-    ├── test_personality.py   Soul lifecycle + injection
-    ├── test_sanitizer.py
-    └── test_stemmer.py
-```
-# Dependencies:
-```
-# PsyClaw v1.1 — Offline-First, RAG-First, Soul-Persistent
-# Python 3.10+
-# Merged from: SafeClaw v1.0 (cgfixit.com) + PsyClaw v1.1 (attached files)
-
-# ── Core web framework ──────────────────────────────────────────
-fastapi==0.110.0
-uvicorn[standard]==0.27.1
-pydantic==2.6.1
-pyyaml==6.0.1
-httpx==0.26.0
-
-# ── LangGraph orchestration ─────────────────────────────────────
-langgraph==0.2.60
-langchain-core==0.3.30
-
-# ── Retrieval stack ─────────────────────────────────────────────
-chromadb==0.4.22
-sentence-transformers==2.5.1
-rank-bm25==0.2.2
-numpy==1.26.4
-
-# ── Soul / Personality layer (NEW in v1.1) ──────────────────────
-# sqlite3 is stdlib — no pip install needed
-# difflib is stdlib — no pip install needed
-# hashlib is stdlib — no pip install needed
-
-# ── Testing ─────────────────────────────────────────────────────
-pytest==8.0.2
-pytest-asyncio==0.23.5
-
-# ── Optional: metrics visualization ────────────────────────────
-matplotlib==3.8.3
-
-# ── Future roadmap (not yet required) ──────────────────────────
-# openai-whisper          # STT voice pipeline
-# piper-tts               # TTS voice pipeline
-# rapidfuzz               # Hybrid parser fuzzy matching
-# dateparser              # Natural language date parsing
-# nltk                    # PsySoul typo-correction learning
-# vaderSentiment          # PsySoul sentiment baseline
-# playwright              # Perplexity share link scraping
-```
-
-<hr>
-
-```
-PsyClaw (SafeClaw) is an early-stage **v0.1 prototype**. It is already usable as a
-local RAG gateway but the API and internals may change.
-
-What works today:
-
-- ✅ RAG-first pipeline (ChromaDB + BM25 + RRF) over `.md` / `.txt` corpus
-- ✅ FastAPI `/query` endpoint with LangGraph controller and score gate
-- ✅ Local LLM via LM Studio (Qwen/Llama GGUF) for grounded answers
-- ✅ Optional Grok fallback, gated by config **and** per-query user confirmation
-- ✅ MCP server exposing retrieval-only tools (no sampling / no LLM in MCP)
-- ✅ Audit logging (`audit.jsonl`) and basic metrics script
-- ✅ Soul.md persistence without excessive context bloat
-- ✅ static\Terminal.html front-end interface to enter inputs (will add more to this later but only runs on localhost by design currently)
-- ✅ "Shadow database of soul evolution" - Interactions or edits to soul.md are logged and correlated with soul version history for ez auditing
-
-Coming soon (Hopefully):
-- Vision (Univeral video input/vision - Really only Grok with x videos and Gemini with YT kinda do this well but ideally an opencv/ffmpeg based picture every few seconds and then figure out whats happening haha we'll see how difficult to get at least a basic stop motion prototype that can narrate obvious low detail scenes with few changes and build from there otherwise it'd be connecting it to other tools (ie whatsapp relay, veeam api, chrome mcp, whatever really) or finding a way to make it run faster on a 10 year old HP server lol... Other than cloud or spending a ton of money (which I will do but only when there is more to this project to justify buying a GPU or some shiz)
-
-What this project is **not** (yet):
-
-- ❌ General “do anything” agent
-- ❌ Full-featured chat UI
-- ❌ Production-hardened security product (no external audit)
-
-Treat this as a reference implementation / lab project you can read, run,
-and adapt at your own risk.
-```
-
-<!--
-## Roadmap
-
-Short term (0.2.x):
-
-- Web front end: simple single-page “terminal” UI for `/query`
-- Config polish and better error messages from the gateway
-- More tests around LangGraph paths and Grok gating logic
-- Improved metrics and visualizations from `audit.jsonl`
-
-Medium term (0.3.x+):
-
-- Optional **tool nodes** (e.g., system health, Veeam/Slack APIs),
-  kept behind explicit config flags and user confirmation
-- More embedding and model options (different sentence-transformers,
-  alternative local LLMs)
-- Better corpus tooling (ingestion status, document listing, reindex UX)
-
-Long term (0.4.x+):
-
-- Hardening for always-on home lab / small-team use
-- Documentation on threat model and deployment patterns
-- Optional packaging / installer for non-developers
-
-
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.111-green.svg)](https://fastapi.tiangolo.com/)
+[![LangGraph](https://img.shields.io/badge/LangGraph-0.1-orange.svg)](https://github.com/langchain-ai/langgraph)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ---
 
+## What It Does
 
-┌──────────────────────────────────────────────────────────────────────────────┐
-|     --PsyClaw – Offline‑First, RAG‑First, MCP‑Exposed                        │
-└──────────────────────────────────────────────────────────────────────────────┘
-https://cgfixit.com/zSafeClaw
-^persistent memory and "personality" coming soon just need to verify latest changes work locally
-                             ┌────────────────────────────┐
-                             │   User / Client Devices   │
-                             │  - Browser UI (HTTP)       │
-                             │  - CLI / scripts (HTTP)    │
-                             │  - LM Studio UI (MCP)      │
-                             └─────────────┬──────────────┘
-                                           │  User query
-                                           ▼
+PsyClaw is a personal RAG (Retrieval-Augmented Generation) backend that:
 
-┌──────────────────────────────────────────────────────────────────────────────┐
-│ A. FastAPI Gateway Layer (psyclaw/gate.py)                                   │
-└──────────────────────────────────────────────────────────────────────────────┘
+1. **Answers questions exclusively from your local Markdown corpus** — no internet by default
+2. **Enforces every safety invariant via LangGraph topology** — not prompts, not config flags, not discipline
+3. **Maintains a persistent soul/personality layer** (`soul.md`) with SHA-256 drift detection, atomic evolution writes, and user-gated modification
+4. **Falls back to Grok (xAI) only with explicit user confirmation** in hybrid mode — triple-gated at config, env, and per-query level
+5. **Exposes both a FastAPI HTTP gateway and an MCP server** for Claude Desktop / Copilot Studio integration
 
-                         ┌────────────────────────────┐
-                         │  FastAPI Gateway :8787     │
-                         │  - POST /query             │
-                         │  - GET  /health            │
-                         │  - Input prompt filter     │
-                         │  - Binds 127.0.0.1 only    │
-                         └─────────────┬──────────────┘
-                                       │
-                             builds initial GraphState
-                             { query, user_confirmed_online? }
-                                       │
-                                       ▼
+Zero telemetry. Binds to `127.0.0.1:8787` only. All embeddings run locally via `sentence-transformers`. No cloud dependency for offline operation.
 
-┌──────────────────────────────────────────────────────────────────────────────┐
-│ B. LangGraph Controller (psyclaw/graph.py)                                   │
-│    Topology = Enforcement                                                    │
-└──────────────────────────────────────────────────────────────────────────────┘
+---
 
-                         ┌────────────────────────────┐
-                         │     LangGraph Graph        │
-                         │   ("PsyClaw Clawbot")      │
-                         └─────────────┬──────────────┘
-                                       │
-                                       ▼
+## Version History
 
-   [Node 1: retrieve]
-   ──────────────────
-   • Reads state.query
-   • Calls Hybrid Retrieval Service (Section C)
-   • Writes:
-       - retrieved_docs[ ] (chunks + scores)
-       - top_score: float
-       - retrieval_mode: "hybrid" | "vector" | "bm25" | "none"
+| Version | Status | Key Changes |
+|---|---|---|
+| v1.2.0 | Superseded | 8 OWASP patterns, 90-day TTL, sanitizer baseline |
+| v1.3.0 | **Production (current)** | Rate limiting (60/min), 13 OWASP patterns, soul SHA-256 drift detection, atomic writes, TTL→365 days |
+| v1.4.0 | **Planning** | Dropbox corpus sync, `plan_node`, `insightextractor.py`, conversation compaction, BM25 SHA-256 integrity |
 
-             │
-             ▼
+---
 
-   [Node 2: route_by_score]
-   ───────────────────────
-   • Compares top_score to cfg.retrieval.min_score (e.g. 0.75)
-   • If top_score ≥ threshold:
-   │     state.needs_user_confirm = False
-   │     ──► route to local_llm
-   • Else:
-         state.needs_user_confirm = True
-         ──► route to user_gate
+## Architecture
 
-             │
-   ┌─────────┴───────────┐
-   │                     │
-   ▼                     ▼
+```
+User Query (HTTP POST /query or MCP tool call)
+         │
+         ▼
+    ┌─────────────────────────────────────────────────────┐
+    │  gate.py  (FastAPI, 127.0.0.1:8787)                 │
+    │  • Rate limit (60 req/min per IP — RUNS FIRST)      │
+    │  • Prompt injection filter (sanitizer.py, 13 pat.)  │
+    │  • Soul init (PersonalityManager closure)           │
+    │  • Telemetry kill block (before any SDK import)     │
+    └──────────────────┬──────────────────────────────────┘
+                       │
+                       ▼
+    ┌─────────────────────────────────────────────────────┐
+    │  graph.py  (LangGraph 7-node State Machine)         │
+    │                                                     │
+    │  [ENTRY]                                            │
+    │     ↓                                               │
+    │  1. retrieve  (Chroma + BM25 + RRF fusion)          │
+    │     ↓                                               │
+    │  2. route_score  (top_score >= 0.028 RRF?)          │
+    │     ├─ YES ──→ 3. local_llm (LM Studio :1234)       │
+    │     └─ NO  ──→ 4. user_gate (needs_confirm=true)    │
+    │                    ├─ confirmed + hybrid ──→        │
+    │                    │      5. grok_fallback          │
+    │                    └─ declined / offline ──→        │
+    │                           6. offline_best_effort    │
+    │     ↓ (all paths converge)                          │
+    │  7. audit_logger (SHA-256 + PII redact → jsonl)     │
+    │     ↓                                               │
+    │  [END]                                              │
+    └─────────────────────────────────────────────────────┘
+                       │
+                       ▼
+    ┌─────────────────────────────────────────────────────┐
+    │  HybridRetriever  (retrieval/hybrid_search.py)      │
+    │  • ChromaDB  (semantic, all-MiniLM-L6-v2, 384d)    │
+    │  • BM25Okapi (keyword, Porter stemming)             │
+    │  • RRF fusion (k=60, equal 1.0/1.0 weighting)      │
+    │  • Per-chunk provenance metadata in every result    │
+    └─────────────────────────────────────────────────────┘
+```
 
-[Node 3: local_llm]                     [Node 4: user_gate]
-────────────────────                     ───────────────────
-• Builds prompt from                     • If user_confirmed_online is None:
-  retrieved_docs + query                   - Graph returns to gateway with:
-• Calls LM Studio chat                       needs_confirm = true
-  http://127.0.0.1:1234/v1                  confirm_message: "Vault miss
-  with configured model                     (score X < 0.75). Go online? (y/n)"
-• Writes:                                  • Client prompts user and resubmits:
-    - state.answer                            { query, user_confirmed_online }
-    - state.answer_model = "local"
-    - state.answer_sources = top N docs
+**Five security invariants enforced by graph edges — not prompts:**
 
-   │                                         │
-   │                                         ▼
+| # | Invariant | Enforcement |
+|---|---|---|
+| 1 | RAG-First | `retrieve` is the unconditional graph entry point — no LLM call can precede it |
+| 2 | Topology = Policy | Routing is graph edges, not LLM decisions or if/else code |
+| 3 | Triple-Gated External | Grok requires: `mode=hybrid` AND `grok.enabled=true` AND `user_confirmed_online=true` — simultaneously |
+| 4 | Audit Convergence | All 6 execution paths converge at `audit_logger` — no shortcut path exists |
+| 5 | Soul Governance | Soul evolution requires explicit human reason string; no autonomous modification from any path |
 
-   │                         [Conditional routing from user_gate]
-   │                         ────────────────────────────────────
-   │                         • If:
-   │                             - cfg.app.mode == "hybrid"
-   │                             - cfg.models.grok.enabled
-   │                             - state.user_confirmed_online is True
-   │                           ──► grok_fallback
-   │                         • Else
-   │                           ──► offline_best
-   │
-   ▼
+---
 
-[Node 5: grok_fallback]              [Node 6: offline_best]
-────────────────────────              ─────────────────────────────
-• Only reachable when:               • Used when:
-    - hybrid mode enabled               - user said "no", OR
-    - Grok enabled                      - hybrid/online disabled
-    - user_confirmed_online = True   • Generates best‑effort answer from
-• Prompt:                               local LLM (with disclaimer)
-    - query alone, or                • Writes:
-    - query + sanitized context         - state.answer
-      (if config allows)                - state.answer_model = "offline-best-effort"
-• Calls Grok via xAI API                - state.answer_sources = retrieved_docs
-  with GROK_API_KEY
+## Quick Start
 
-             │
-             └──────────────┬─────────────────────────────┐
-                            ▼                             ▼
+### Prerequisites
 
-                      [Node 7: audit_logger]
-                      ──────────────────────
-                      • Runs for ALL paths (local, grok, offline)
-                      • Computes query_hash = SHA256(query)
-                      • Writes JSONL line to logs/audit.jsonl:
-                           { event, timestamp, query_hash,
-                             top_score, retrieval_mode,
-                             online_escalated, model_used }
-                      • Attaches state.audit
-                      • Graph terminates (END)
+| Requirement | Version | Notes |
+|---|---|---|
+| Python | 3.11+ | 3.12 recommended |
+| [LM Studio](https://lmstudio.ai/) | Any | Must be running on `localhost:1234` |
+| GGUF model loaded in LM Studio | — | `mistral-7b-instruct` or `qwen2.5-7b` work well |
+| 4 GB+ RAM | — | For sentence-transformers + ChromaDB in-process |
 
-                                       │
-                                       ▼
-                         ┌────────────────────────────┐
-                         │   Gateway HTTP / MCP Resp  │
-                         │  - answer                  │
-                         │  - sources (chunks/meta)   │
-                         │  - retrieval_mode          │
-                         │  - hit_count               │
-                         │  - model_used              │
-                         │  - needs_confirm           │
-                         │  - confirm_message (opt)   │
-                         └────────────────────────────┘
--->
+### Install
+
+```bash
+git clone https://github.com/CGFixIT/PsyClaw
+cd PsyClaw
+python -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+### Configure
+
+Key settings in `config.yaml`:
+
+```yaml
+app:
+  mode: "offline"          # "offline" | "hybrid" (hybrid enables Grok fallback)
+
+models:
+  local_llm:
+    base_url: "http://127.0.0.1:1234/v1"   # LM Studio default
+    model: "your-model-name-here"           # must match LM Studio loaded model name exactly
+    timeout_sec: 720                        # long-context inference budget
+    max_tokens: 5000
+
+personality:
+  enabled: true
+  soul_path: "data/personality/soul.md"    # your identity file — source of truth
+  interaction_ttl_days: 365               # audit window
+
+retrieval:
+  min_score: 0.028          # RRF fused-rank threshold (NOT cosine sim — different scale)
+  top_k_semantic: 5
+  top_k_keyword: 5
+  rrf_k: 60
+  max_context_tokens: 5000
+```
+
+> **Note:** `vector_weight` / `bm25_weight` in `config.yaml` are documentation-only placeholders. The retriever uses equal 1.0/1.0 weighting — a deliberate design decision documented in the v1.3.0 architecture spec. To enable true weighted RRF, multiply `contrib *= weight` in `hybrid_search.py` and retune `min_score`.
+
+### Set Environment (hybrid mode only)
+
+```bash
+# Required only if app.mode = "hybrid"
+export GROK_API_KEY=your_xai_api_key_here
+
+# Kill all SDK telemetry (also set automatically by gate.py on startup)
+source psyclaw_telemetry_kill.env
+```
+
+### Build the Index
+
+```bash
+# Place .md / .txt files into data/corpus/
+python -m retrieval.indexer
+# Builds: index/chroma_db/   and   index/bm25.pkl
+```
+
+### Run
+
+```bash
+uvicorn gate:app --host 127.0.0.1 --port 8787
+```
+
+Open `http://127.0.0.1:8787` — the Soul Console terminal loads automatically.
+
+---
+
+## Project Structure
+
+```
+PsyClaw/
+├── gate.py                     FastAPI gateway + soul endpoints
+├── graph.py                    LangGraph 7-node state machine
+├── mcp_hybrid_server.py        MCP server (retrieval-only, no LLM)
+├── metrics.py                  Audit JSONL analyzer
+├── config.yaml                 Single source of truth for all config
+├── requirements.txt            Pinned Python deps
+├── psyclaw_telemetry_kill.env  Kill-switch for LangChain/Chroma/OTel telemetry
+├── psyclaw_suggestions_fix.md  Dev notes and open issues
+├── .gitignore
+├── old.md                      Archived prior README
+├── llm/
+│   └── client.py               LocalLLMClient + GrokClient
+├── retrieval/
+│   ├── embeddings.py           sentence-transformers wrapper
+│   ├── hybrid_search.py        ChromaDB + BM25 + RRF fusion
+│   ├── indexer.py              Corpus ingestion + index build
+│   └── stemmer.py              Porter stemmer (tech-vocabulary tuned)
+├── schemas/
+│   └── api.py                  Pydantic request/response models
+├── utils/
+│   ├── errors.py               Typed RAGError hierarchy
+│   ├── health.py               Startup dependency health checks
+│   ├── logger.py               Audit JSONL + SHA-256 query hashing
+│   ├── personality.py          PersonalityManager (soul CRUD + governance)
+│   └── sanitizer.py            Prompt injection filter + PII redaction
+├── static/
+│   └── terminal.html           Browser UI / Soul Console
+├── data/
+│   ├── corpus/                 .md / .txt knowledge base (gitignored runtime content)
+│   └── personality/
+│       └── soul.md             Identity source-of-truth
+└── tests/
+    ├── conftest.py
+    ├── test_gate.py
+    ├── test_graph.py
+    ├── test_hybrid_search.py
+    ├── test_sanitizer.py
+    ├── test_personality.py
+    ├── test_personality_changes.py
+    ├── test_rate_limit.py
+    ├── test_audit.py
+    ├── test_stemmer.py
+    ├── apipsTest.ps1           Windows PowerShell smoke test
+    └── cmd2index.bat           Windows index rebuild shortcut
+```
+
+---
+
+## Soul / Personality Layer
+
+PsyClaw maintains a persistent identity through `soul.md`. Key properties:
+
+- **File-as-truth**: `data/personality/soul.md` is always the canonical version
+- **Shadow SQLite DB**: `psyclaw_soul.db` stores version history and interaction logs
+- **SHA-256 drift detection**: on startup, file hash vs. DB hash — mismatch triggers forensic log entry
+- **Atomic writes**: backup → DB insert → disk write → memory update (failure at any step is recoverable)
+- **OWASP injection scan**: `POST /soul/propose` runs 13 injection patterns before any write
+- **Human-in-the-loop evolution**: apply only via `POST /soul/apply` after reviewing the diff
+
+---
+
+## Security Model
+
+| Layer | Mechanism |
+|---|---|
+| Network | Binds `127.0.0.1:8787` — no external exposure by design |
+| Input | 13-pattern OWASP injection filter, 4000 char max |
+| Rate limit | 60 req/min per IP (in-memory sliding window) |
+| Telemetry | Kill block runs before any SDK import in `gate.py` |
+| Audit | All paths log SHA-256 query hash + PII-redacted metadata |
+| Grok gating | Triple gate: config flag + env var + per-query confirmation |
+| Soul writes | Injection scan + human reason string + atomic crash-safe write |
+| Corpus | Chunk sanitization at index time via `sanitizer.py` |
+
+> **This is a personal lab project, not a production security product.** No external audit has been performed.
+
+---
+
+## MCP Server
+
+For Claude Desktop or other MCP-compatible clients:
+
+```json
+{
+  "mcpServers": {
+    "psyclaw": {
+      "command": "python",
+      "args": ["/path/to/PsyClaw/mcp_hybrid_server.py"]
+    }
+  }
+}
+```
+
+The MCP server exposes a single `hybrid_search` tool. It has **no sampling capability** — `sampling: null` is set at the protocol level, making it architecturally impossible for this server to invoke an LLM.
+
+---
+
+## Status & Roadmap
+
+**What works in v1.3.0:**
+- RAG-first pipeline (ChromaDB + BM25 + RRF)
+- FastAPI `/query` with LangGraph 7-node controller
+- Local LLM via LM Studio
+- Optional Grok fallback (triple-gated)
+- MCP server (retrieval-only)
+- Audit JSONL with SHA-256 hashing and PII redaction
+- Soul persistence with drift detection and atomic writes
+- Rate limiting (60/min per IP)
+- Browser UI via `static/terminal.html`
+
+**v1.4.0 targets:**
+- Dropbox/cloud corpus sync
+- `plan_node` for multi-step query decomposition
+- `insightextractor.py` for automated corpus enrichment
+- Conversation compaction (rolling summary)
+- BM25 index SHA-256 integrity check on load
+
+**Not yet / not planned:**
+- General-purpose agent (tool invocation from corpus context)
+- Multi-user or network-exposed deployment
+- Production security hardening (external pentest)
+
+---
+
+## License
+
+MIT — see [LICENSE](LICENSE). Personal lab project. Use at your own risk.
+
+---
+
+*Built by [Chris Grady](https://cgfixit.com) · [cgfixit.com/zSafeClaw](https://cgfixit.com/zSafeClaw)*

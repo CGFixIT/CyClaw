@@ -1,0 +1,26 @@
+# PsyClaw v1.3.0 — Offline-First, RAG-First, Soul-Persistent
+# Python 3.10+
+
+# Core web framework
+fastapi==0.110.0
+uvicorn[standard]==0.27.1
+pydantic==2.6.1
+pyyaml==6.0.1
+httpx==0.26.0
+
+# LangGraph orchestration
+langgraph==0.2.60
+langchain-core==0.3.30
+
+# Retrieval stack
+chromadb==0.4.22
+sentence-transformers==2.5.1
+rank-bm25==0.2.2
+numpy==1.26.4
+
+# Testing
+pytest==8.0.2
+pytest-asyncio==0.23.5
+
+# Optional: metrics visualization
+matplotlib==3.8.3

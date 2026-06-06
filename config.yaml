@@ -1,0 +1,129 @@
+# ==============================================================================
+# PsyClaw Configuration — Single source of truth
+# ==============================================================================
+# NOTE: LAN IP in allowed_origins (10.0.0.112) is intentional.
+# gate.py binds to 127.0.0.1:8787 only. The CORS origin list allows
+# the local network browser client to hit the API. This is a personal
+# home-lab tool — not internet-exposed.
+# ==============================================================================
+
+app:
+  name: "psyclaw"
+  env: "local"
+  mode: "offline"  # "offline" | "hybrid"
+  debug: false
+
+models:
+  local_llm:
+    provider: "lmstudio"
+    base_url: "http://127.0.0.1:1234/v1"
+    model: "qwen2.5-7b-instruct"
+    max_tokens: 5000
+    temperature: 0.3
+    timeout_sec: 720
+  embeddings:
+    provider: "sentence-transformers"
+    model: "all-MiniLM-L6-v2"
+    dim: 384
+    cache_dir: ".emb_cache"
+  grok:
+    enabled: false
+    base_url: "https://api.x.ai/v1"
+    model: "grok-beta"
+    timeout_sec: 30
+    max_tokens: 2048
+    temperature: 0.2
+
+corpus:
+  path: "data/corpus"
+  extensions: [".md", ".txt"]
+
+indexing:
+  chroma_path: "index/chroma_db"
+  bm25_path: "index/bm25.pkl"
+  collection_name: "psyclaw_kb"
+  chunk_size: 512
+  chunk_overlap: 50
+  batch_size: 50
+
+retrieval:
+  top_k_semantic: 5
+  top_k_keyword: 5
+  rrf_k: 60
+  max_context_tokens: 5000
+  min_score: 0.028
+  hybrid:
+    enabled: true
+    rrf:
+      k: 60
+      # NOTE: vector_weight / bm25_weight are documentation-only placeholders.
+      # The retriever uses equal 1.0/1.0 weighting by design (see hybrid_search.py).
+      # To enable true weighted RRF: multiply contrib *= weight and retune min_score.
+      vector_weight: 0.6
+      bm25_weight: 0.4
+
+personality:
+  enabled: true
+  soul_path: "data/personality/soul.md"
+  db_path: "data/personality/psyclaw_soul.db"
+  interaction_ttl_days: 365
+  injection_patterns_path: null  # uses built-in 13 OWASP patterns
+
+policy:
+  fallback:
+    enabled: true
+    require_user_confirm: true
+    send_local_context_to_grok: false
+  prompt_filter:
+    enabled: true
+    banned_patterns:
+      - "ignore previous instructions"
+      - "ignore all previous"
+      - "disregard previous"
+      - "forget previous instructions"
+      - "new instructions:"
+      - "system prompt:"
+      - "you are now"
+      - "pretend you are"
+      - "act as"
+      - "jailbreak"
+      - "DAN mode"
+      - "developer mode"
+      - "override instructions"
+    max_input_chars: 4000
+  privacy:
+    redact_emails: true
+    redact_ips: true
+    redact_secrets_like:
+      - "AKIA[0-9A-Z]{16}"           # AWS access keys
+      - "xox[baprs]-[0-9a-zA-Z-]+"  # Slack tokens
+      - "ghp_[a-zA-Z0-9]{36}"        # GitHub PATs
+      - "sk-[a-zA-Z0-9]{32,}"
+
+api:
+  host: "127.0.0.1"
+  port: 8787
+  request_timeout_sec: 30
+
+logging:
+  level: "INFO"
+  log_file: "logs/psyclaw.log"
+  audit_file: "logs/audit.jsonl"
+  audit_fields:
+    include_query_hash: true
+    include_top_score: true
+    include_retrieval_mode: true
+    include_online_escalated: true
+    include_model_used: true
+
+security:
+  require_env:
+    - "GROK_API_KEY"
+  allowed_origins:
+    - "http://127.0.0.1"
+    - "http://127.0.0.1:8787"
+    - "http://localhost"
+    - "http://localhost:8787"
+    - "http://10.0.0.112"
+    - "http://10.0.0.112:8787"   # with port, browsers sometimes treat these as different origins
+    - null                        # allows non-browser clients (curl, MCP)
