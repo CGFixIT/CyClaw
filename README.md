@@ -1,8 +1,10 @@
+https://psyclaw-130.pplx.app/
+<hr>
 https://github.com/CGFixIT/PsyClaw/blob/main/PsyClaw_Architecture_v1.3.0.pdf
 <hr>
 
 ```
-PsyClaw v0.3 — Offline-First · RAG-First · Soul-Persistent W/ SHA-256 hashed logging
+PsyClaw v1.3.0 — Offline-First · RAG-First · Soul-Persistent W/ SHA-256 hashed logging
 ============================================================
 
 CLIENT LAYER
