@@ -1,4 +1,4 @@
-<h1>[<a href="https://github.com/CGFixIT/PsyClaw/blob/main/PsyClaw_Architecture.pdf">PsyClaw Architecture PDF</a>]</h1>
+https://github.com/CGFixIT/PsyClaw/blob/main/PsyClaw_Architecture.pdf
 <hr>
 <b>https://cgfixit.com/zSafeClaw/!!!!!PyCla-3.29.36/PsyClaw/</b> or <a href="https://cgfixit.com/zSafeClaw/!!!!!PyCla-3.29.36/">start here</a> and read PDF first:  
 
