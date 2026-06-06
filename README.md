@@ -331,7 +331,7 @@ Known Issues
 
 ## License
 
-MIT — see [LICENSE](LICENSE). Personal lab project. Use at your own risk.
+*** This Application is not available for share, copy, download, or monetization [yet;)] ***
 
 ---
 
