@@ -17,7 +17,7 @@ chromadb==0.4.22
 sentence-transformers==2.5.1
 rank-bm25==0.2.2
 numpy==1.26.4
-nltk==3.8.1
+nltk==3.9.2
 
 # Testing
 pytest==8.0.2
