@@ -9,8 +9,8 @@ pyyaml==6.0.1
 httpx==0.26.0
 
 # LangGraph orchestration
-langgraph==0.2.60
-langchain-core==0.3.30
+langgraph==1.0.10rc1
+langchain-core==1.3.3
 
 # Retrieval stack
 chromadb==0.4.22
@@ -20,7 +20,7 @@ numpy==1.26.4
 nltk==3.9.2
 
 # Testing
-pytest==8.0.2
+pytest==9.0.3
 pytest-asyncio==0.23.5
 
 # Optional: metrics visualization
