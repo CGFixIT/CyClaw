@@ -6,7 +6,7 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.111-green.svg)](https://fastapi.tiangolo.com/)
 [![LangGraph](https://img.shields.io/badge/LangGraph-0.1-orange.svg)](https://github.com/langchain-ai/langgraph)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)<br><hr>
+[![CodeQL Advanced](https://github.com/CGFixIT/PsyClaw/actions/workflows/codeql.yml/badge.svg)](https://github.com/CGFixIT/PsyClaw/actions/workflows/codeql.yml)
 [![Screenshots of local AI web app!](https://i.imgur.com/kGZBkIj.png)](https://github.com/CGFixIT/PsyClaw/tree/main/screenshots)   <-- Screenshots of Local AI web interface
 
 ---
