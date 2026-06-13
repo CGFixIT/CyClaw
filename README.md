@@ -30,8 +30,9 @@ Zero telemetry. Binds to `127.0.0.1:8787` only. All embeddings run locally via `
 | Version | Status | Key Changes |
 |---|---|---|
 | v1.2.0 | Superseded | 8 OWASP patterns, 90-day TTL, sanitizer baseline |
-| v1.3.0 | **Production (current)** | Rate limiting (60/min), 13 OWASP patterns, soul SHA-256 drift detection, atomic writes, TTL→365 days |
-| v1.4.0 | **Planning** | Dropbox corpus sync, `plan_node`, `insightextractor.py`, conversation compaction, BM25 SHA-256 integrity |
+| v1.3.0 | **Pre-Langgrinch** | Rate limiting (60/min), 13 OWASP patterns, soul SHA-256 drift detection, atomic writes, TTL→365 days |
+| v1.4.0 | **Production (current)** | Updated requirements.txt to patch vulns and modernize for Python 3.12 |
+| v1.5.0 | **Planning** | Fix Stemmer.py, sql write placeholder code sections, other cleanups,test Dropbox corpus sync integration, BM25 SHA Integrity Detection
 
 ---
 
