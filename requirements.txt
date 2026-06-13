@@ -1,27 +1,50 @@
-# PsyClaw v1.3.0 — Offline-First, RAG-First, Soul-Persistent
-# Python 3.10+
+# PsyClaw / SafeClaw — requirements.txt
+# Target runtime: Python 3.12  (also works on 3.11)
+#
+# Modernization audit: 2026-06-13. Every pin below was resolved AND installed in a
+# clean Python 3.12 venv, imported, and exercised (graph build + FastAPI boot + unit
+# tests). See REQUIREMENTS_AUDIT.md for the full report, CVE table, and test results.
+#
+# Reproducible install (pins the entire transitive tree):
+#   1) Install CPU torch first (see "Torch" section below) — keeps the install CPU-only.
+#   2) pip install -r requirements.txt -c constraints.txt
+#
+# NOTE: chromadb was upgraded 0.4.x -> 1.5.x. The on-disk index format changed; you
+# MUST rebuild the index after upgrading:  python -m retrieval.indexer
 
-# Core web framework
-fastapi==0.110.0
-uvicorn[standard]==0.27.1
-pydantic==2.6.1
-pyyaml==6.0.1
-httpx==0.26.0
+# ── Core web framework ───────────────────────────────────────────────────────
+fastapi==0.136.3            # pulls starlette>=1.0.1 -> fixes CVE-2025-62727 (Range DoS) + CVE-2026-48710 (BadHost)
+uvicorn[standard]==0.49.0
+pydantic==2.13.4            # v2; required by fastapi 0.136 (>=2.9)
+pyyaml==6.0.2               # 3.12 wheels / Cython 3 build fix (6.0.1 failed to build under Cython 3)
+httpx==0.28.1
 
-# LangGraph orchestration
-langgraph==0.2.60
-langchain-core==0.3.30
+# ── LangGraph controller (conservative-mature 1.1.x line) ────────────────────
+# The app uses only `from langgraph.graph import StateGraph, END` + .compile()/.invoke().
+# No checkpointers are used (soul persistence is stdlib sqlite3 in utils/personality.py),
+# so langgraph-checkpoint / langgraph-checkpoint-sqlite are intentionally NOT pinned here —
+# langgraph pulls a CVE-safe langgraph-checkpoint (>=4.1.0) transitively; it is pinned in
+# constraints.txt for reproducibility.
+langgraph==1.1.10           # >1.0.9, so unaffected by CVE-2026-28277 (checkpoint deserialization)
+langchain-core==1.3.3       # fixes CVE-2026-44843 (unsafe deserialization; affected <=1.3.2)
 
-# Retrieval stack
-chromadb==0.4.22
-sentence-transformers==2.5.1
+# ── Retrieval (hybrid RAG) ───────────────────────────────────────────────────
+chromadb==1.5.6             # PersistentClient/get_collection/query/add API unchanged vs 0.4.x
+sentence-transformers==5.5.1
 rank-bm25==0.2.2
-numpy==1.26.4
-nltk==3.9.2
+numpy==1.26.4               # PINNED to 1.x on purpose: numpy 2.x breaks chromadb's onnxruntime dep (np.float_ removed)
+nltk==3.9.4                 # REQUIRED by retrieval/stemmer.py (PorterStemmer + word_tokenize).
+                            # >=3.9.0 fixes CVE-2024-39705 (pickle RCE in punkt). 3.9.x verified on 3.12.
 
-# Testing
-pytest==8.0.2
-pytest-asyncio==0.23.5
+# ── Torch — install SEPARATELY (CPU-only, offline-first) ─────────────────────
+# Do NOT add a bare `torch==` line here: on Linux that pulls the ~2.5 GB CUDA build
+# from PyPI. Install the lean CPU wheel from the PyTorch index BEFORE the line above:
+#
+#   pip install torch==2.4.1+cpu --index-url https://download.pytorch.org/whl/cpu
+#
+# sentence-transformers only needs torch>=1.11; 2.4.1 has verified cp312 CPU wheels.
 
-# Optional: metrics visualization
-matplotlib==3.8.3
+# ── Testing ──────────────────────────────────────────────────────────────────
+pytest==9.0.3              # >=9.0.3 fixes CVE-2025-71176 (insecure temp dir)
+# pytest-asyncio: REMOVED — the test suite has no async tests (no @pytest.mark.asyncio).
+# matplotlib:     REMOVED — not imported anywhere in the codebase (metrics.py prints to stdout).

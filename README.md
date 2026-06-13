@@ -1,11 +1,11 @@
 # PsyClaw
 
 > **Offline-first, RAG-enforced, soul-governed personal AI assistant**
-> Version 1.4.0 (planning) · Baseline 1.3.0 (production) · Python 3.11+ · LM Studio + ChromaDB + BM25 + LangGraph
+> Version 1.4.0 (planning) · Baseline 1.3.0 (production) · Python 3.12 · LM Studio + ChromaDB + BM25 + LangGraph
 
-[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.111-green.svg)](https://fastapi.tiangolo.com/)
-[![LangGraph](https://img.shields.io/badge/LangGraph-0.1-orange.svg)](https://github.com/langchain-ai/langgraph)
+[![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.136-green.svg)](https://fastapi.tiangolo.com/)
+[![LangGraph](https://img.shields.io/badge/LangGraph-1.1-orange.svg)](https://github.com/langchain-ai/langgraph)
 [![CodeQL Advanced](https://github.com/CGFixIT/PsyClaw/actions/workflows/codeql.yml/badge.svg)](https://github.com/CGFixIT/PsyClaw/actions/workflows/codeql.yml)<hr>
 [![Screenshots of local AI web app!](https://i.imgur.com/kGZBkIj.png)](https://github.com/CGFixIT/PsyClaw/tree/main/screenshots)   <-- Screenshots of Local AI web interface
 
@@ -98,7 +98,7 @@ User Query (HTTP POST /query or MCP tool call)
 
 | Requirement | Version | Notes |
 |---|---|---|
-| Python | 3.11+ | 3.12 recommended |
+| Python | 3.12 | Primary supported runtime (3.11 also works) |
 | [LM Studio](https://lmstudio.ai/) | Any | Must be running on `localhost:1234` |
 | GGUF model loaded in LM Studio | — | `mistral-7b-instruct` or `qwen2.5-7b` work well |
 | 4 GB+ RAM | — | For sentence-transformers + ChromaDB in-process |
@@ -108,10 +108,23 @@ User Query (HTTP POST /query or MCP tool call)
 ```bash
 git clone https://github.com/CGFixIT/PsyClaw
 cd PsyClaw
-python -m venv .venv
+python3.12 -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
+
+# 1) Install CPU-only torch first (keeps the install lean + offline-friendly;
+#    a bare transitive install would pull the ~2.5 GB CUDA build on Linux).
+pip install torch==2.4.1+cpu --index-url https://download.pytorch.org/whl/cpu
+
+# 2) Install the rest, pinned to the verified transitive tree.
+pip install -r requirements.txt -c constraints.txt
 ```
+
+> **Upgrading from a pre-1.4.0 checkout?** ChromaDB moved from 0.4.x to 1.5.x and the
+> on-disk index format changed — delete `index/` and rebuild with `python -m retrieval.indexer`.
+>
+> **Offline note:** embeddings use `all-MiniLM-L6-v2`. Because `psyclaw_telemetry_kill.env`
+> sets `HF_HUB_OFFLINE=1`, the model must be cached locally first. On a machine with network,
+> run the indexer once (it downloads + caches the model); afterwards it runs fully offline.
 
 ### Configure
 
