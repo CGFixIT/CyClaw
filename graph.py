@@ -36,6 +36,9 @@ from utils.logger import audit_log, hash_query
 from utils.errors import RAGError, LLMServiceError, GrokServiceError
 from utils.personality import PersonalityManager
 
+import logging
+logger = logging.getLogger("psyclaw.graph")
+
 # =============================================================================
 # State Definition
 # =============================================================================
@@ -195,6 +198,16 @@ def user_gate_node(state: GraphState, cfg: dict) -> dict:
 
 def grok_fallback_node(state: GraphState, grok: GrokClient, cfg: dict) -> dict:
     """Node 5: Call Grok API. Only reachable when hybrid + confirmed."""
+    if grok is None:
+        # Defensive: in offline mode (or Grok disabled) no GrokClient is built.
+        # The topology should not route here, but guard against None so an edge
+        # path degrades gracefully instead of crashing on None.generate().
+        logger.warning("grok_fallback_node reached with grok=None; returning offline response")
+        return {
+            "answer": "[Grok unavailable: offline mode or Grok disabled \u2014 no external fallback executed]",
+            "answer_model": "offline-best-effort",
+            "answer_sources": []
+        }
     query = state["query"]
     send_ctx = cfg["policy"]["fallback"].get("send_local_context_to_grok", False)
 
@@ -304,8 +317,10 @@ def audit_logger_node(state: GraphState, cfg: dict,
                 f"|hits={len(state.get('retrieved_docs', []))}"
             )
             personality.record_interaction(query_hash, outcome)
-        except Exception:
-            pass  # Personality DB failure should never break query flow
+        except Exception as e:
+            # Personality DB failure must never break query flow — but log it
+            # (silent swallowing here is what hid the earlier record_interaction bug).
+            logger.warning("personality.record_interaction failed (non-fatal): %s", e)
 
     return {"audit_event": event}
 

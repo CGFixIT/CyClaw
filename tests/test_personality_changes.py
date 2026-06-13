@@ -1,3 +1,9 @@
+# ============================================================================
+# BUILD-ALIGNMENT NOTE (2026-06-13): Targets a FUTURE PsyClaw build (pending
+# Dropbox sync). Soul propose/apply-evolution and TTL-maintenance behaviors
+# here do not all match the current pushed implementation and will fail against
+# HEAD until that build is pushed. Expected, not a regression. Do not 'fix'.
+# ============================================================================
 #!/usr/bin/env python
 """Unit tests for v1.3 changes in utils/personality.py"""
 

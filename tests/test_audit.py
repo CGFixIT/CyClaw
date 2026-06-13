@@ -1,3 +1,9 @@
+# ============================================================================
+# BUILD-ALIGNMENT NOTE (2026-06-13): Some tests target a FUTURE build (pending
+# Dropbox sync) whose audit_log() usage/signature differs from HEAD. Expected
+# to fail against the current pushed implementation until that build lands.
+# Do not 'fix' to match the older pushed API.
+# ============================================================================
 """Unit tests for audit logging — hashing, redaction, JSONL format."""
 
 import json

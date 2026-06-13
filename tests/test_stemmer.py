@@ -1,3 +1,9 @@
+# ============================================================================
+# BUILD-ALIGNMENT NOTE (2026-06-13): Targets a FUTURE build (pending Dropbox
+# sync). Imports retrieval.stemmer.enhanced_porter_stem, which does not exist
+# at HEAD (current build exposes stem_token / tokenize_and_stem). Expected to
+# fail until the future build is pushed. Do not 'fix' to match the pushed API.
+# ============================================================================
 """Unit tests for Porter stemmer."""
 
 import pytest
