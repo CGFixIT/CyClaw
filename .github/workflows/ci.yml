@@ -38,10 +38,12 @@ jobs:
           python -c "import nltk; nltk.download('punkt', quiet=True); nltk.download('punkt_tab', quiet=True)"
 
       - name: Unit Tests + Coverage
+        shell: bash
         run: |
-          pytest tests/ --cov=gate --cov=graph --cov=retrieval --cov=utils \
-                        --cov-report=xml --cov-report=html --cov-report=term-missing \
-                        -q --tb=no
+          pytest tests/ \
+            --cov=gate --cov=graph --cov=retrieval --cov=utils \
+            --cov-report=xml --cov-report=html --cov-report=term-missing \
+            -q --tb=no
 
       - name: Runtime Smoke (Indexer + Gate + Offline RAG)
         run: |
