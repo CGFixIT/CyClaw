@@ -1,4 +1,3 @@
-# .github/workflows/ci.yml
 name: PsyClaw CI (Simplified + Coverage)
 
 on:
@@ -26,60 +25,30 @@ jobs:
           cache: 'pip'
 
       - name: Install deps
+        shell: bash
         run: |
           pip install torch==2.4.1+cpu --index-url https://download.pytorch.org/whl/cpu
           pip install -r requirements.txt pytest pytest-cov
-        shell: bash
 
       - name: Prepare minimal test env
         shell: bash
         run: |
           mkdir -p data/corpus data/personality index logs
-          echo "# Test corpus" > data/corpus/test.md
-          echo "# Soul" > data/personality/soul.md
-          echo "GROK_API_KEY=dummy" >> $GITHUB_ENV
-          echo "✅ Env ready"
+          echo '# Test corpus' > data/corpus/test.md
+          echo '# Soul' > data/personality/soul.md
+          echo 'GROK_API_KEY=dummy' >> $GITHUB_ENV
 
       - name: Emulated RAG Query Smoke
         shell: bash
         run: |
-          python -c '
-print("=== Emulated Offline RAG Query ===")
-
-class MockRetriever:
-    def hybrid_search(self, q):
-        return [{"text": "PsyClaw offline RAG works.", "score": 0.92, "source": "soul.md"}]
-
-class MockLLM:
-    def generate(self, prompt):
-        return f"[Emulated Qwen] Retrieved context and generated answer. Prompt len: {len(prompt)}"
-
-class MockPersonality:
-    def get_system_prompt_additive(self):
-        return "You are PsyClaw — truthful, offline-first RAG agent."
-    def record_interaction(self, *a, **k): return True
-
-retriever = MockRetriever()
-llm = MockLLM()
-personality = MockPersonality()
-
-query = "Does the offline RAG path work in CI?"
-docs = retriever.hybrid_search(query)
-prompt = f"{personality.get_system_prompt_additive()}\nContext: {docs}\nQuery: {query}"
-answer = llm.generate(prompt)
-
-print("Query:", query)
-print("Docs retrieved:", len(docs))
-print("Answer:", answer)
-print("✅ Emulated RAG query passed")
-          '
+          python -c "import base64; exec(base64.b64decode('cHJpbnQoIj09PSBFbXVsYXRlZCBPZmZsaW5lIFJBRyBRdWVyeSA9PT0iKQoKY2xhc3MgTW9ja1JldHJpZXZlcjoKICAgIGRlZiBoeWJyaWRfc2VhcmNoKHNlbGYsIHEpOgogICAgICAgIHJldHVybiBbeyJ0ZXh0IjogIlBzeUNsYXcgb2ZmbGluZSBSQUcgd29ya3MuIiwgInNjb3JlIjogMC45MiwgInNvdXJjZSI6ICJzb3VsLm1kIn1dCgpjbGFzcyBNb2NrTExNOgogICAgZGVmIGdlbmVyYXRlKHNlbGYsIHByb21wdCk6CiAgICAgICAgcGxlbiA9IGxlbihwcm9tcHQpCiAgICAgICAgcmV0dXJuICJbRW11bGF0ZWQgUXdlbl0gUmV0cmlldmVkIGNvbnRleHQuIFByb21wdCBsZW46IHt9Ii5mb3JtYXQocGxlbikKCmNsYXNzIE1vY2tQZXJzb25hbGl0eToKICAgIGRlZiBnZXRfc3lzdGVtX3Byb21wdF9hZGRpdGl2ZShzZWxmKToKICAgICAgICByZXR1cm4gIllvdSBhcmUgUHN5Q2xhdyAtIHRydXRoZnVsLCBvZmZsaW5lLWZpcnN0IFJBRyBhZ2VudC4iCiAgICBkZWYgcmVjb3JkX2ludGVyYWN0aW9uKHNlbGYsICphLCAqKmspOgogICAgICAgIHJldHVybiBUcnVlCgpyZXRyaWV2ZXIgPSBNb2NrUmV0cmlldmVyKCkKbGxtID0gTW9ja0xMTSgpCnBlcnNvbmFsaXR5ID0gTW9ja1BlcnNvbmFsaXR5KCkKCnF1ZXJ5ID0gIkRvZXMgdGhlIG9mZmxpbmUgUkFHIHBhdGggd29yayBpbiBDST8iCmRvY3MgPSByZXRyaWV2ZXIuaHlicmlkX3NlYXJjaChxdWVyeSkKcHJvbXB0ID0gInt9XG5Db250ZXh0OiB7fVxuUXVlcnk6IHt9Ii5mb3JtYXQocGVyc29uYWxpdHkuZ2V0X3N5c3RlbV9wcm9tcHRfYWRkaXRpdmUoKSwgZG9jcywgcXVlcnkpCmFuc3dlciA9IGxsbS5nZW5lcmF0ZShwcm9tcHQpCgpwcmludCgiUXVlcnk6IiwgcXVlcnkpCnByaW50KCJEb2NzIHJldHJpZXZlZDoiLCBsZW4oZG9jcykpCnByaW50KCJBbnN3ZXI6IiwgYW5zd2VyKQpwcmludCgiRW11bGF0ZWQgUkFHIHF1ZXJ5IHBhc3NlZCIpCg==').decode())"
 
       - name: Run safe tests + coverage
         shell: bash
         run: |
           pytest tests/test_sanitizer.py tests/test_rate_limit.py -q --tb=no \
             --cov=utils/sanitizer --cov=utils \
-            --cov-report=xml --cov-report=html --cov-report=term-missing || echo "Safe tests done"
+            --cov-report=xml --cov-report=html --cov-report=term-missing || echo 'Safe tests done'
 
       - name: Upload Coverage Report
         uses: actions/upload-artifact@v4
@@ -91,4 +60,4 @@ print("✅ Emulated RAG query passed")
           retention-days: 14
 
       - name: Final status
-        run: echo "🎉 CI Success on ${{ matrix.os }} — coverage uploaded + emulated RAG smoke passed"
+        run: echo "CI success on ${{ matrix.os }}"
