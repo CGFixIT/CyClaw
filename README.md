@@ -120,6 +120,12 @@ pip install torch==2.4.1+cpu --index-url https://download.pytorch.org/whl/cpu
 pip install -r requirements.txt -c constraints.txt
 ```
 
+<hr>
+
+[Detailed Setup Guide](https://github.com/CGFixIT/PsyClaw/blob/main/setup-guide.md)
+
+<hr>
+
 > **Upgrading from a pre-1.4.0 checkout?** ChromaDB moved from 0.4.x to 1.5.x and the
 > on-disk index format changed — delete `index/` and rebuild with `python -m retrieval.indexer`.
 >
