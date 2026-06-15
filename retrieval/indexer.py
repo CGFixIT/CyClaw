@@ -71,7 +71,7 @@ def build_index(config_path: str = "config.yaml") -> None:
     for source, content in docs:
         chunks = chunk_document(content, chunk_size, chunk_overlap)
         for i, chunk in enumerate(chunks):
-            clean_chunk = sanitize_chunk(chunk)
+            clean_chunk = sanitize_chunk(chunk, config_path)
             stem_tags = tokenize_and_stem(clean_chunk)[:20]
             all_chunks.append(clean_chunk)
             all_metadata.append({
