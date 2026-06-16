@@ -37,6 +37,12 @@ OWASP_INJECTION_PATTERNS = [
 
 _DEFAULT_SOUL = "# Soul\n\nDefault PsyClaw soul. Replace this file with your own identity statement.\n"
 
+# SQL stores the content's SHA-256 digest alongside a UTC timestamp as metadata —
+# the hash is of *file content*, not of the time value.  # DevSkim: ignore DS126858
+_SQL_INSERT_SOUL_VERSION = (
+    "INSERT INTO soul_versions (sha256, content, reason, timestamp) VALUES (?, ?, ?, ?)"
+)
+
 
 class PersonalityManager:
     def __init__(self, cfg: dict):
@@ -84,7 +90,7 @@ class PersonalityManager:
             file_hash = self._sha256(_DEFAULT_SOUL)
             with self._lock:
                 self.conn.execute(
-                    "INSERT INTO soul_versions (sha256, content, reason, timestamp) VALUES (?, ?, ?, ?)",
+                    _SQL_INSERT_SOUL_VERSION,
                     (file_hash, _DEFAULT_SOUL, "initial_default", datetime.now(timezone.utc).isoformat())
                 )
                 self.conn.commit()
@@ -106,7 +112,7 @@ class PersonalityManager:
             })
             with self._lock:
                 self.conn.execute(
-                    "INSERT INTO soul_versions (sha256, content, reason, timestamp) VALUES (?, ?, ?, ?)",
+                    _SQL_INSERT_SOUL_VERSION,
                     (file_hash, content, "DRIFT_RECOVERY: file hash mismatch on startup",
                      datetime.now(timezone.utc).isoformat())
                 )
@@ -114,7 +120,7 @@ class PersonalityManager:
         elif not row:
             with self._lock:
                 self.conn.execute(
-                    "INSERT INTO soul_versions (sha256, content, reason, timestamp) VALUES (?, ?, ?, ?)",
+                    _SQL_INSERT_SOUL_VERSION,
                     (file_hash, content, "initial_load", datetime.now(timezone.utc).isoformat())
                 )
                 self.conn.commit()
@@ -160,7 +166,7 @@ class PersonalityManager:
             tmp_path.write_text(new_soul, encoding="utf-8")
             os.replace(tmp_path, self.soul_path)
             self.conn.execute(
-                "INSERT INTO soul_versions (sha256, content, reason, timestamp) VALUES (?, ?, ?, ?)",
+                _SQL_INSERT_SOUL_VERSION,
                 (new_hash, new_soul, reason, datetime.now(timezone.utc).isoformat())
             )
             self.conn.commit()

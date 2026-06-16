@@ -33,8 +33,9 @@ chromadb==1.5.6             # PersistentClient/get_collection/query/add API unch
 sentence-transformers==5.5.1
 rank-bm25==0.2.2
 numpy==1.26.4               # PINNED to 1.x on purpose: numpy 2.x breaks chromadb's onnxruntime dep (np.float_ removed)
-nltk==3.9.4                 # REQUIRED by retrieval/stemmer.py (PorterStemmer + word_tokenize).
-                            # >=3.9.0 fixes CVE-2024-39705 (pickle RCE in punkt). 3.9.x verified on 3.12.
+nltk==3.9.4                 # REQUIRED by retrieval/stemmer.py (PorterStemmer only).
+                            # word_tokenize / punkt removed: avoids nltk.data.load() URL path-traversal CVE.
+                            # >=3.9.0 also fixes CVE-2024-39705 (pickle RCE in punkt). 3.9.x verified on 3.12.
 
 # ── Torch — install SEPARATELY (CPU-only, offline-first) ─────────────────────
 # Do NOT add a bare `torch==` line here: on Linux that pulls the ~2.5 GB CUDA build

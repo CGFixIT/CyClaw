@@ -11,15 +11,14 @@ import re
 from functools import lru_cache
 from typing import List
 from nltk.stem import PorterStemmer
-from nltk.tokenize import word_tokenize
-import nltk
-nltk.download('punkt', quiet=True)
-nltk.download('punkt_tab', quiet=True)
 
 _stemmer = PorterStemmer()
 
-# Token filter: must start with a letter, then 1+ alphanumerics/_/-.
-# Compiled once at import instead of on every tokenize_and_stem() call.
+# Tokenizer: extracts words starting with a letter (2+ chars). Avoids nltk.data.load()
+# so the NLTK URL-encoded path-traversal CVE (punkt tokenizer) is not reachable.
+_WORD_RE = re.compile(r'[a-z][a-z0-9_-]+')
+
+# Secondary filter retained for explicitness (equivalent to _WORD_RE match contract).
 _TOKEN_RE = re.compile(r'^[a-z][a-z0-9_-]{1,}$')
 
 _CUSTOM_STEMS = {
@@ -43,7 +42,7 @@ def stem_token(token: str) -> str:
     return _stemmer.stem(lower)
 
 def tokenize_and_stem(text: str) -> List[str]:
-    tokens = word_tokenize(text.lower())
+    tokens = _WORD_RE.findall(text.lower())
     return [
         stem_token(t) for t in tokens
         if _TOKEN_RE.match(t)
