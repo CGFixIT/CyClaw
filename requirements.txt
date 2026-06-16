@@ -45,6 +45,6 @@ nltk==3.9.4                 # REQUIRED by retrieval/stemmer.py (PorterStemmer + 
 # sentence-transformers only needs torch>=1.11; 2.4.1 has verified cp312 CPU wheels.
 
 # ── Testing ──────────────────────────────────────────────────────────────────
-pytest==9.0.3              # >=9.0.3 fixes CVE-2025-71176 (insecure temp dir)
+pytest==9.1.0              # >=9.0.3 fixes CVE-2025-71176 (insecure temp dir)
 # pytest-asyncio: REMOVED — the test suite has no async tests (no @pytest.mark.asyncio).
 # matplotlib:     REMOVED — not imported anywhere in the codebase (metrics.py prints to stdout).
