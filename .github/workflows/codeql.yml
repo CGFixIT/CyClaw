@@ -40,7 +40,7 @@ jobs:
 
       - name: Setup Python (used for analysis runtime / import resolution)
         if: matrix.language == 'python'
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v6
         with:
           python-version: '3.x'
 
