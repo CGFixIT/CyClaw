@@ -12,7 +12,8 @@
 #   3. GitHub Actions – bumps versions in .github/workflows/*
 #
 # Schedule: weekly on Thursday (≈03:00 UTC by default)
-# PR limits keep noise reasonable; adjust as needed.
+# Each ecosystem uses a single catch-all group so related bumps arrive as ONE
+# consolidated PR per ecosystem instead of one PR per dependency.
 
 version: 2
 
@@ -27,6 +28,10 @@ updates:
     labels:
       - dependencies
       - npm
+    groups:
+      npm-all:
+        patterns:
+          - "*"
 
   # 2) Python (pip)
   - package-ecosystem: "pip"
@@ -38,6 +43,15 @@ updates:
     labels:
       - dependencies
       - python
+    groups:
+      pip-all:
+        patterns:
+          - "*"
+    ignore:
+      # numpy is intentionally pinned to 1.x: numpy 2.x removes np.float_, which
+      # breaks chromadb's onnxruntime dependency (see requirements.txt:35).
+      - dependency-name: "numpy"
+        versions: [">=2.0.0"]
 
   # 3) GitHub Actions
   - package-ecosystem: "github-actions"
@@ -50,11 +64,7 @@ updates:
       - dependencies
       - github-actions
       - ci
-
-          # groups:
-    #   all-actions:             # Consolidate multiple action bumps into one PR
-    #     patterns:
-    #       - "*"
-    # ignore:
-    #   - dependency-name: "actions/checkout"
-    #     versions: ["<4.0.0"]   # Example: ignore v3.x → v4.x jumps
+    groups:
+      actions-all:
+        patterns:
+          - "*"
