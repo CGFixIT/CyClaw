@@ -1,6 +1,6 @@
 # PsyClaw
 
-> **Offline-first, RAG-enforced, soul-governed personal AI assistant**
+> **Offline-first, RAG-enforced, soul-governed personal AI assistant (no internet required!)**
 > Version 1.4.0 (planning) · Baseline 1.3.0 (production) · Python 3.12 · LM Studio + ChromaDB + BM25 + LangGraph
 
 [![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/)
