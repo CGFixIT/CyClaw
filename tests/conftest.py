@@ -96,6 +96,70 @@ def mock_llm():
     return llm
 
 
+# =============================================================================
+# Class-style mocks + result constants used by test_graph.py / test_gate.py.
+#
+# These mirror the dependency-injection contract of build_graph(retriever, llm,
+# grok, cfg, personality): each mock exposes the same call surface the graph
+# nodes touch (retriever.hybrid_search / llm.generate / grok.generate) and the
+# LLM/Grok mocks record their last prompt so tests can assert on prompt content.
+# =============================================================================
+
+MOCK_HIGH_SCORE_RESULTS = [
+    SearchResult(text="Veeam uses chattr +i to make backups immutable.", score=0.92,
+                 source="veeam-immutability.md", chunk_id=0, stem_tags=["veeam", "immut"],
+                 retrieval_mode="hybrid", rrf_score=0.92, semantic_score=0.92, semantic_rank=0),
+    SearchResult(text="Immutable backups cannot be modified or deleted.", score=0.81,
+                 source="veeam-immutability.md", chunk_id=1, stem_tags=["immut", "backup"],
+                 retrieval_mode="hybrid", rrf_score=0.81, semantic_score=0.81, semantic_rank=1),
+]
+
+MOCK_LOW_SCORE_RESULTS = [
+    SearchResult(text="A weakly related passage about unrelated topics.", score=0.30,
+                 source="misc.md", chunk_id=0, stem_tags=["misc"],
+                 retrieval_mode="hybrid", rrf_score=0.30, semantic_score=0.30, semantic_rank=0),
+]
+
+MOCK_EMPTY_RESULTS: List[SearchResult] = []
+
+
+class MockRetriever:
+    """Stand-in for HybridRetriever that returns a fixed result list."""
+    def __init__(self, results):
+        self.results = results
+
+    def hybrid_search(self, query):
+        return self.results
+
+    def semantic_search(self, query, k=None):
+        return self.results
+
+    def keyword_search(self, query, k=None):
+        return self.results
+
+
+class MockLocalLLM:
+    """Stand-in for LocalLLMClient; records the last prompt it was given."""
+    def __init__(self, response="This is a test answer from the local LLM."):
+        self.response = response
+        self.last_prompt = None
+
+    def generate(self, prompt):
+        self.last_prompt = prompt
+        return self.response
+
+
+class MockGrokClient:
+    """Stand-in for GrokClient; records the last prompt it was given."""
+    def __init__(self, response="This is a test answer from Grok."):
+        self.response = response
+        self.last_prompt = None
+
+    def generate(self, prompt):
+        self.last_prompt = prompt
+        return self.response
+
+
 @pytest.fixture
 def bm25_index(tmp_path):
     from rank_bm25 import BM25Okapi

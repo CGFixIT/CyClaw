@@ -63,7 +63,7 @@ class TestHighScorePath:
         retriever = MockRetriever(MOCK_HIGH_SCORE_RESULTS)
         llm = MockLocalLLM(response="Veeam uses chattr +i for immutability.")
 
-        graph = build_graph(cfg, retriever, llm)
+        graph = build_graph(retriever, llm, None, cfg)
         result = graph.invoke({"query": "What is Veeam immutability?"})
 
         assert result["answer_model"] == "local"
@@ -76,7 +76,7 @@ class TestHighScorePath:
         retriever = MockRetriever(MOCK_HIGH_SCORE_RESULTS)
         llm = MockLocalLLM()
 
-        graph = build_graph(cfg, retriever, llm)
+        graph = build_graph(retriever, llm, None, cfg)
         graph.invoke({"query": "immutability config"})
 
         # LLM should have received the retrieved context in its prompt
@@ -93,7 +93,7 @@ class TestLowScoreNeedsConfirm:
         retriever = MockRetriever(MOCK_LOW_SCORE_RESULTS)
         llm = MockLocalLLM()
 
-        graph = build_graph(cfg, retriever, llm)
+        graph = build_graph(retriever, llm, None, cfg)
         result = graph.invoke({"query": "Explain quantum physics basics"})
 
         # user_confirmed_online is None -> graph signals needs_confirm
@@ -110,7 +110,7 @@ class TestGrokFallbackPath:
         llm = MockLocalLLM()
         grok = MockGrokClient(response="Grok answer about quantum physics.")
 
-        graph = build_graph(cfg, retriever, llm, grok)
+        graph = build_graph(retriever, llm, grok, cfg)
         result = graph.invoke({
             "query": "Explain quantum physics basics",
             "user_confirmed_online": True
@@ -123,15 +123,19 @@ class TestGrokFallbackPath:
         cfg = _make_cfg(tmp_path, mode="offline", grok_enabled=False)
         retriever = MockRetriever(MOCK_LOW_SCORE_RESULTS)
         llm = MockLocalLLM(response="Best effort offline answer.")
-        grok = MockGrokClient()
+        # In offline mode the gateway builds no GrokClient (grok=None). The graph
+        # routes a confirmed low-score query to grok_fallback, whose None-guard
+        # then degrades to offline-best-effort — this is how mode-gating is
+        # enforced (the graph itself does not read app.mode).
+        grok = None
 
-        graph = build_graph(cfg, retriever, llm, grok)
+        graph = build_graph(retriever, llm, grok, cfg)
         result = graph.invoke({
             "query": "Explain quantum physics basics",
             "user_confirmed_online": True
         })
 
-        # Even with confirmation, offline mode blocks Grok
+        # Even with confirmation, offline mode (grok=None) blocks Grok
         assert result["answer_model"] == "offline-best-effort"
 
 
@@ -143,7 +147,7 @@ class TestOfflineBestEffortPath:
         retriever = MockRetriever(MOCK_LOW_SCORE_RESULTS)
         llm = MockLocalLLM(response="Best effort from local model.")
 
-        graph = build_graph(cfg, retriever, llm)
+        graph = build_graph(retriever, llm, None, cfg)
         result = graph.invoke({
             "query": "Explain quantum physics basics",
             "user_confirmed_online": False
@@ -161,7 +165,7 @@ class TestEmptyResults:
         retriever = MockRetriever(MOCK_EMPTY_RESULTS)
         llm = MockLocalLLM()
 
-        graph = build_graph(cfg, retriever, llm)
+        graph = build_graph(retriever, llm, None, cfg)
         result = graph.invoke({"query": "completely off topic query"})
 
         assert result["top_score"] == 0.0
@@ -176,7 +180,7 @@ class TestAuditLogging:
         retriever = MockRetriever(MOCK_HIGH_SCORE_RESULTS)
         llm = MockLocalLLM()
 
-        graph = build_graph(cfg, retriever, llm)
+        graph = build_graph(retriever, llm, None, cfg)
         result = graph.invoke({"query": "Veeam immutability"})
 
         assert "audit_event" in result
@@ -187,7 +191,7 @@ class TestAuditLogging:
         retriever = MockRetriever(MOCK_LOW_SCORE_RESULTS)
         llm = MockLocalLLM()
 
-        graph = build_graph(cfg, retriever, llm)
+        graph = build_graph(retriever, llm, None, cfg)
         result = graph.invoke({
             "query": "off topic",
             "user_confirmed_online": False

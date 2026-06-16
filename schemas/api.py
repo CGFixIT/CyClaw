@@ -3,11 +3,13 @@
 Covers query request/response, source info, health, and soul evolution.
 """
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Optional
 
 class QueryRequest(BaseModel):
-    query: str
+    # min_length=1 rejects empty queries at the schema boundary (HTTP 422)
+    # before any retrieval/LLM work is done.
+    query: str = Field(min_length=1)
     user_confirmed_online: Optional[bool] = None
 
 class SourceInfo(BaseModel):

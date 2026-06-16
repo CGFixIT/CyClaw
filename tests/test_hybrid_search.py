@@ -57,4 +57,6 @@ class TestTokenizationForBM25:
     def test_single_word(self):
         tokens = tokenize_and_stem("kubernetes")
         assert len(tokens) == 1
-        assert len(tokens[0]) >= 5  # Not overstemmed
+        # `kubernetes` is intentionally folded to the domain token `k8s`
+        # (retrieval/stemmer.py _CUSTOM_STEMS), not Porter-stemmed.
+        assert tokens[0] == "k8s"
