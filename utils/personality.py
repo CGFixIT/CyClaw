@@ -156,9 +156,9 @@ class PersonalityManager:
     def apply_evolution(self, new_soul: str, reason: str) -> dict:
         new_hash = self._sha256(new_soul)
         tmp_path = self.soul_path.with_suffix(self.soul_path.suffix + ".tmp")
-        tmp_path.write_text(new_soul, encoding="utf-8")
-        os.replace(tmp_path, self.soul_path)
         with self._lock:
+            tmp_path.write_text(new_soul, encoding="utf-8")
+            os.replace(tmp_path, self.soul_path)
             self.conn.execute(
                 "INSERT INTO soul_versions (sha256, content, reason, timestamp) VALUES (?, ?, ?, ?)",
                 (new_hash, new_soul, reason, datetime.now(timezone.utc).isoformat())
