@@ -1,0 +1,60 @@
+# To get started with Dependabot version updates, you'll need to specify which
+# package ecosystems to update and where the package manifests are located.
+# Please see the documentation for all configuration options:
+# https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+
+# .github/dependabot.yml
+# Dependabot configuration for PsyClaw
+#
+# Ecosystems:
+#   1. npm  – updates package.json / package-lock.json in repo root
+#   2. pip  – updates requirements*.txt / pyproject.toml in repo root
+#   3. GitHub Actions – bumps versions in .github/workflows/*
+#
+# Schedule: weekly on Thursday (≈03:00 UTC by default)
+# PR limits keep noise reasonable; adjust as needed.
+
+version: 2
+
+updates:
+  # 1) JavaScript / TypeScript (npm)
+  - package-ecosystem: "npm"
+    directory: "/"                 # package.json lives in repo root
+    schedule:
+      interval: "weekly"
+      day: "thursday"
+    open-pull-requests-limit: 3
+    labels:
+      - dependencies
+      - npm
+
+  # 2) Python (pip)
+  - package-ecosystem: "pip"
+    directory: "/"                 # requirements*.txt / pyproject.toml in repo root
+    schedule:
+      interval: "weekly"
+      day: "thursday"
+    open-pull-requests-limit: 3
+    labels:
+      - dependencies
+      - python
+
+  # 3) GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"                 # Dependabot scans .github/workflows/**
+    schedule:
+      interval: "weekly"
+      day: "thursday"
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - github-actions
+      - ci
+
+          # groups:
+    #   all-actions:             # Consolidate multiple action bumps into one PR
+    #     patterns:
+    #       - "*"
+    # ignore:
+    #   - dependency-name: "actions/checkout"
+    #     versions: ["<4.0.0"]   # Example: ignore v3.x → v4.x jumps
