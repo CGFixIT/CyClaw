@@ -21,7 +21,7 @@ def check_rate_limit(client_ip: str) -> bool:
     return True
 
 def test_rate_limit_allows_under_limit():
-    ip = "127.0.0.1"  # DevSkim: ignore DS176209 - test-only loopback IP fixture
+    ip = "127.0.0.1"  # DevSkim: ignore DS162092 - test-only loopback IP fixture
     _rate_limits.clear()
     for i in range(RATE_LIMIT_REQUESTS):
         assert check_rate_limit(ip), f"Request {i+1} should be allowed"

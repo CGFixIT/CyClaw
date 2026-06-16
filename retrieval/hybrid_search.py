@@ -71,12 +71,12 @@ class HybridRetriever:
 
         # Validate path is a regular file before deserializing. The BM25 index is
         # project-generated (retrieval/indexer.py) and read from a config-controlled
-        # path — not from user-supplied input.  # DevSkim: ignore DS161085
+        # path — not from user-supplied input.
         resolved = Path(bm25_path).resolve()
         if not resolved.is_file():
             raise IndexNotFoundError(f"BM25 index path is not a regular file: {bm25_path}")
         with open(resolved, "rb") as f:
-            bm25_data = pickle.load(f)  # nosec B301 - project-generated index only
+            bm25_data = pickle.load(f)  # DevSkim: ignore DS425000 - project-generated BM25 index
             self.bm25 = bm25_data["bm25"]
             self.bm25_chunks = bm25_data["chunks"]
             self.bm25_metadata = bm25_data["metadata"]
