@@ -8,6 +8,7 @@ Extends NLTK PorterStemmer with custom rules for:
 """
 
 import re
+from functools import lru_cache
 from typing import List
 from nltk.stem import PorterStemmer
 from nltk.tokenize import word_tokenize
@@ -16,6 +17,10 @@ nltk.download('punkt', quiet=True)
 nltk.download('punkt_tab', quiet=True)
 
 _stemmer = PorterStemmer()
+
+# Token filter: must start with a letter, then 1+ alphanumerics/_/-.
+# Compiled once at import instead of on every tokenize_and_stem() call.
+_TOKEN_RE = re.compile(r'^[a-z][a-z0-9_-]{1,}$')
 
 _CUSTOM_STEMS = {
     "embedding": "embed", "embeddings": "embed",
@@ -30,6 +35,7 @@ _CUSTOM_STEMS = {
     "personality": "person", "soul": "soul",
 }
 
+@lru_cache(maxsize=100_000)
 def stem_token(token: str) -> str:
     lower = token.lower()
     if lower in _CUSTOM_STEMS:
@@ -40,5 +46,5 @@ def tokenize_and_stem(text: str) -> List[str]:
     tokens = word_tokenize(text.lower())
     return [
         stem_token(t) for t in tokens
-        if re.match(r'^[a-z][a-z0-9_-]{1,}$', t)
+        if _TOKEN_RE.match(t)
     ]
