@@ -276,3 +276,34 @@ textual conflicts with PR #14 (which also edits `retrieval/stemmer.py`), the ste
 **Still red (intentionally, out of scope here):** `test_sanitizer` (8 — config-driven filter, **PR #14**),
 `test_personality` (8) and `test_personality_changes` (3) — pending the PersonalityManager
 contract decision tracked in the companion issue.
+
+---
+
+## 8. Follow-up PR — PersonalityManager contract resolved (2026-06-16)
+
+The PersonalityManager contract decision deferred in §3.5 / §5.2 has now been **made and
+implemented** in `utils/personality.py`. The direction chosen is **align production code to the
+tests**, because the tests encode the v1.3 behaviors the architecture PDF already promises
+(forensic audit on drift = Invariant #5, integer version, TTL maintenance, atomic soul writes).
+
+| Test expectation (was failing) | Change in `utils/personality.py` |
+|---|---|
+| `patch("utils.personality.audit_log")` | `from utils.logger import audit_log`; called (best-effort) on drift + apply |
+| `get_version() == 1` (int) | `get_version()` now returns the latest `soul_versions.id` as `int`; the old `vN_<sha8>_<date>` string moved to `get_version_label()` |
+| `propose_evolution(...) → {status, proposed_soul, current_sha, proposed_sha}` | return value is now a **superset** — adds those keys while keeping `diff / injection_flags / safe_to_apply / reason` (so `gate.py` callers don't break) |
+| `pm.conn` persistent, `row["query_hash"]` | single long-lived `self.conn` (`check_same_thread=False`, `row_factory=sqlite3.Row`, `busy_timeout=5000`) used by every method |
+| `pm.reload_soul()` | added as an alias of `reload()` |
+| `pm.maintenance(ttl_days=…)` + TTL prune on init | added `maintenance(ttl_days=None)`; called from `__init__` (v1.3 prune-on-boot) |
+| "creates default soul when missing" (`"PsyClaw"` in content) | `_load_soul` writes `DEFAULT_SOUL` when `soul.md` is absent, then version-tracks it |
+| atomic write — no `.tmp` left | `apply_evolution` stages to `soul.md.tmp` then `os.replace`; keeps a `.bak` |
+
+**Result:** `pytest tests/` → **58 passed, 8 failed, 0 collection errors** (was 47/19). The 11
+personality failures are gone; the **only** remaining red is the 8-test `test_sanitizer` suite,
+which is owned by open **PR #14** (`cc → main`) and deliberately untouched here.
+
+**Verification:** full suite re-run under Python 3.12 semantics + a runtime smoke
+(`PersonalityManager` propose/apply/reload/record + `gate.py`/`graph.py` import) — all green.
+
+**Thread-safety note for reviewers:** the shared `self.conn` is correct for PsyClaw's
+single-user local gateway and `busy_timeout` absorbs the rare overlapping write; if PsyClaw ever
+becomes multi-tenant / high-QPS, revisit with a per-request connection or a write queue.
