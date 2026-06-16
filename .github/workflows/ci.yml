@@ -2,9 +2,9 @@ name: PsyClaw CI (Simplified + Coverage)
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, cc ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, cc ]
 
 jobs:
   test:
