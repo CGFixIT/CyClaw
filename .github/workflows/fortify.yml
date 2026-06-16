@@ -66,12 +66,12 @@ jobs:
 
     steps:
       - name: Check Out Source Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Run Fortify Scan
-        # Using stable tag v1 instead of pinned commit SHA for reliability.
+        # Using stable tag v3 instead of pinned commit SHA for reliability.
         # Check https://github.com/fortify/github-action/releases for latest.
-        uses: fortify/github-action@v1
+        uses: fortify/github-action@v3
         with:
           sast-scan: true          # Run a SAST scan; if not specified or set to false, no SAST scan will be run
           debricked-sca-scan: true # For FoD, run an open-source scan as part of the SAST scan (ignored if SAST scan
