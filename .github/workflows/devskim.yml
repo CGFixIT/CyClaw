@@ -48,17 +48,23 @@ jobs:
         id: devskim
         uses: microsoft/DevSkim-Action@v1
         with:
-          # Limit scan to real source dirs; skip docs/assets for speed
-          directory: |
-            src
-            tools
-            tests
-          output: devskim-results.sarif
-          severity: high          # fail job only if HIGH findings detected
-          ignore-files: |
-            **/*.md
-            **/*.json
-            **/.*/**              # git & poetry caches
+          # Scan the whole workspace. The action's default `directory-to-scan` is
+          # GITHUB_WORKSPACE, so it is omitted here.
+          #
+          # The previous config used `directory:`, `output:`, `severity:`, and
+          # `ignore-files:` — none of which are valid DevSkim-Action@v1 inputs.
+          # The action silently ignored them (see the "Unexpected input(s)"
+          # warning in earlier run logs) and fell back to scanning the whole repo
+          # with defaults anyway. These are the correct input names; the effective
+          # behavior (whole-repo scan, inline `# DevSkim: ignore <rule>`
+          # suppressions honored) is unchanged.
+          #
+          # NOTE: DevSkim-Action@v1 has no `severity` input — severity gating was
+          # never actually applied. The job's pass/fail is driven by the SARIF
+          # upload + code-scanning alert creation below, which is the intended
+          # security behavior.
+          output-filename: devskim-results.sarif
+          ignore-globs: "**/.git/**,**/bin/**,**/*.md,**/*.json"
 
       # Upload SARIF to GitHub Security tab
       - name: Publish findings to Security tab
