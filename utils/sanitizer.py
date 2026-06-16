@@ -9,6 +9,7 @@ compiled once per config file and cached, so the hot path (every /query and
 every chunk at index time) does not recompile regexes on each call.
 """
 
+import logging
 import re
 from functools import lru_cache
 from typing import List, Pattern, Tuple
@@ -16,6 +17,8 @@ from typing import List, Pattern, Tuple
 import yaml
 
 from utils.errors import PromptInjectionError
+
+logger = logging.getLogger("psyclaw.sanitizer")
 
 # Fallback used only when config.yaml omits policy.prompt_filter entirely.
 _DEFAULT_MAX_INPUT_CHARS = 4000
@@ -30,12 +33,23 @@ def _load_filter(config_path: str) -> Tuple[bool, int, Tuple[Pattern, ...]]:
     with open(config_path) as f:
         cfg = yaml.safe_load(f) or {}
 
-    pf = cfg.get("policy", {}).get("prompt_filter", {})
+    # ``or {}`` at each level: a present-but-empty ``policy:`` or
+    # ``prompt_filter:`` key parses to None, and chaining .get() on None would
+    # raise AttributeError. Fall back to defaults instead of crashing.
+    pf = (cfg.get("policy") or {}).get("prompt_filter") or {}
     enabled = pf.get("enabled", True)
     max_chars = pf.get("max_input_chars", _DEFAULT_MAX_INPUT_CHARS)
     patterns = tuple(
         re.compile(p, re.IGNORECASE) for p in pf.get("banned_patterns", [])
     )
+    if enabled and not patterns:
+        # Enabled with zero patterns silently degrades to a length-only check —
+        # surface it rather than letting injection filtering become a no-op.
+        logger.warning(
+            "prompt_filter is enabled but no banned_patterns are configured in "
+            "%s; injection filtering is disabled (length check only).",
+            config_path,
+        )
     return enabled, max_chars, patterns
 
 
