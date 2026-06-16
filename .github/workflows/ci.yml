@@ -46,9 +46,9 @@ jobs:
       - name: Run safe tests + coverage
         shell: bash
         run: |
-          pytest tests/test_sanitizer.py tests/test_rate_limit.py -q --tb=no \
+          pytest tests/test_sanitizer.py tests/test_rate_limit.py -q --tb=short \
             --cov=utils/sanitizer --cov=utils \
-            --cov-report=xml --cov-report=html --cov-report=term-missing || echo 'Safe tests done'
+            --cov-report=xml --cov-report=html --cov-report=term-missing
 
       - name: Upload Coverage Report
         uses: actions/upload-artifact@v4
