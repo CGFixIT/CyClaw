@@ -5,6 +5,7 @@ Uses sentence-transformers directly for query embeddings (no Ollama).
 Degrades gracefully if one retrieval path fails.
 """
 
+import heapq
 import json
 import pickle
 from dataclasses import dataclass, field
@@ -103,7 +104,10 @@ class HybridRetriever:
             k = self.top_k_keyword
         query_tokens = tokenize_and_stem(query)
         scores = self.bm25.get_scores(query_tokens)
-        top_indices = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[:k]
+        # Top-k selection only: heapq.nlargest is O(n log k) and matches the
+        # ordering of sorted(..., reverse=True)[:k], avoiding a full O(n log n)
+        # sort of every chunk in the corpus on each keyword query.
+        top_indices = heapq.nlargest(k, range(len(scores)), key=scores.__getitem__)
         hits = []
         for idx in top_indices:
             if scores[idx] > 0:

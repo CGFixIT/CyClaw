@@ -76,20 +76,24 @@ policy:
     send_local_context_to_grok: false
   prompt_filter:
     enabled: true
+    # Regex patterns (single-quoted so backslashes reach the regex engine
+    # literally). \s+ tolerates arbitrary whitespace — spaces, tabs, and the
+    # newlines that corpus chunks routinely contain — and the alternations
+    # cover the previous/all/prior variants. Compiled with re.IGNORECASE.
     banned_patterns:
-      - "ignore previous instructions"
-      - "ignore all previous"
-      - "disregard previous"
-      - "forget previous instructions"
-      - "new instructions:"
-      - "system prompt:"
-      - "you are now"
-      - "pretend you are"
-      - "act as"
-      - "jailbreak"
-      - "DAN mode"
-      - "developer mode"
-      - "override instructions"
+      - 'ignore\s+(previous|all|prior)\s+instructions'
+      - 'ignore\s+all\s+previous'
+      - 'disregard\s+(previous|all|prior)'
+      - 'forget\s+(previous|all|prior)\s+instructions'
+      - 'new\s+instructions\s*:'
+      - 'system\s+prompt\s*:'
+      - 'you\s+are\s+now'
+      - 'pretend\s+(you\s+are|to\s+be)'
+      - 'act\s+as'
+      - 'jailbreak'
+      - 'DAN\s+mode'
+      - 'developer\s+mode'
+      - 'override\s+instructions'
     max_input_chars: 4000
   privacy:
     redact_emails: true
