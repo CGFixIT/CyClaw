@@ -5,7 +5,7 @@ import sys
 import time
 from collections import defaultdict
 
-sys.path.insert(0, '/home/workdir/artifacts/PsyClaw-refactored')
+sys.path.insert(0, '/home/workdir/artifacts/CyClaw-refactored')
 
 # Simulate the check_rate_limit function from gate.py
 _rate_limits = defaultdict(list)

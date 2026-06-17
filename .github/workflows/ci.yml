@@ -1,4 +1,4 @@
-name: PsyClaw CI (Simplified + Coverage)
+name: CyClaw CI (Simplified + Coverage)
 
 on:
   push:

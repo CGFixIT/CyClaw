@@ -1,4 +1,4 @@
-# PsyClaw — GitHub Setup Guide (Windows + Linux)
+# CyClaw — GitHub Setup Guide (Windows + Linux)
 
 **v1.3+ | Offline-First | LM Studio | 10–15 min**  
 Tested & verified June 14 2026 — runs cleaner than 3.11 version
@@ -21,8 +21,8 @@ Tested & verified June 14 2026 — runs cleaner than 3.11 version
 
 ```powershell
 # 1. Clone + venv
-git clone https://github.com/CGFixIT/PsyClaw.git
-cd PsyClaw
+git clone https://github.com/CGFixIT/CyClaw.git
+cd CyClaw
 python -m venv venv
 .\venv\Scripts\Activate.ps1
 
@@ -59,7 +59,7 @@ All HTTP endpoint tests should pass green.
 
 ```bash
 # 1. Clone + venv
-git clone https://github.com/CGFixIT/PsyClaw.git && cd PsyClaw
+git clone https://github.com/CGFixIT/CyClaw.git && cd CyClaw
 python3.12 -m venv venv
 source venv/bin/activate
 
@@ -98,7 +98,7 @@ The dummy key value (`offline-dummy-sk-123`) is fine for `mode: offline` in
 in offline mode. If you want full hygiene, set it to any non-empty string.
 
 ### NLTK offline after first run
-`psyclaw_telemetry_kill.env` sets `HF_HUB_OFFLINE=1` and `TRANSFORMERS_OFFLINE=1`.
+`cyclaw_telemetry_kill.env` sets `HF_HUB_OFFLINE=1` and `TRANSFORMERS_OFFLINE=1`.
 The NLTK punkt tokenizer data is cached locally after the first `nltk.download()`
 call — subsequent runs are fully offline.
 
@@ -148,9 +148,9 @@ personality:
 ```json
 {
   "mcpServers": {
-    "psyclaw": {
+    "cyclaw": {
       "command": "python",
-      "args": ["/full/path/to/PsyClaw/mcp_hybrid_server.py"]
+      "args": ["/full/path/to/CyClaw/mcp_hybrid_server.py"]
     }
   }
 }
@@ -175,5 +175,5 @@ sampling capability by design.
 
 ---
 
-*Built by [Chris Grady](https://cgfixit.com) · Repo: [github.com/CGFixIT/PsyClaw](https://github.com/CGFixIT/PsyClaw)*  
+*Built by [Chris Grady](https://cgfixit.com) · Repo: [github.com/CGFixIT/CyClaw](https://github.com/CGFixIT/CyClaw)*  
 *Guide generated June 14 2026 — v1.3+ baseline, Python 3.12 verified*

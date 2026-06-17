@@ -1,4 +1,4 @@
-"""Shared pytest fixtures for PsyClaw test suite.
+"""Shared pytest fixtures for CyClaw test suite.
 
 Mocks: LLM services, embedding model, retriever, test config.
 No live services required — all external deps are mocked.
@@ -19,7 +19,7 @@ from retrieval.hybrid_search import SearchResult
 
 
 TEST_CONFIG = {
-    "app": {"name": "psyclaw-test", "env": "test", "mode": "offline", "debug": True},
+    "app": {"name": "cyclaw-test", "env": "test", "mode": "offline", "debug": True},
     "models": {
         "local_llm": {"provider": "lmstudio", "base_url": "http://127.0.0.1:1234/v1",
                       "model": "test-model", "max_tokens": 256, "temperature": 0.1, "timeout_sec": 10},
@@ -60,7 +60,7 @@ def test_config(tmp_path):
     cfg["indexing"]["chroma_path"] = str(tmp_path / "chroma_db")
     cfg["indexing"]["bm25_path"] = str(tmp_path / "bm25.pkl")
     cfg["logging"] = cfg["logging"].copy()
-    cfg["logging"]["log_file"] = str(tmp_path / "psyclaw.log")
+    cfg["logging"]["log_file"] = str(tmp_path / "cyclaw.log")
     cfg["logging"]["audit_file"] = str(tmp_path / "audit.jsonl")
     config_file = tmp_path / "config.yaml"
     with open(config_file, "w") as f:

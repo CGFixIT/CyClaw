@@ -1,4 +1,4 @@
-"""Structured error types for the PsyClaw RAG pipeline.
+"""Structured error types for the CyClaw RAG pipeline.
 
 Typed exceptions with code + details fields that the gateway
 catches and maps to proper HTTP responses.

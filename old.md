@@ -1,4 +1,4 @@
-# PsyClaw — Archived README (prior to 2026-06-06)
+# CyClaw — Archived README (prior to 2026-06-06)
 
 > **This file is the previous README.md**, preserved for historical reference.
 > The current README is in `README.md`.
@@ -7,4 +7,4 @@ For the archived content, see the git history for the `README.md` file prior to 
 
 ---
 
-Archived: 2026-06-06 by automated push from PsyClaw v1.3.0 source release.
+Archived: 2026-06-06 by automated push from CyClaw v1.3.0 source release.

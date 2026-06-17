@@ -1,6 +1,6 @@
-"""PsyClaw LangGraph Controller – Topology = Enforcement.
+"""CyClaw LangGraph Controller – Topology = Enforcement.
 
-Graph flow (matching PsyClaw final diagram):
+Graph flow (matching CyClaw final diagram):
   retrieve -> route_by_score -> local_llm (high score)
                               -> user_gate (low score)
                                   -> grok_fallback (confirmed + hybrid)
@@ -37,7 +37,7 @@ from utils.errors import RAGError, LLMServiceError, GrokServiceError
 from utils.personality import PersonalityManager
 
 import logging
-logger = logging.getLogger("psyclaw.graph")
+logger = logging.getLogger("cyclaw.graph")
 
 # =============================================================================
 # State Definition
@@ -361,7 +361,7 @@ def build_graph(
     cfg: dict,
     personality: Optional[PersonalityManager] = None
 ):
-    """Build and compile the PsyClaw LangGraph.
+    """Build and compile the CyClaw LangGraph.
 
     All nodes are partial functions — dependencies injected at build time,
     not at query time. This makes the graph stateless and safe to reuse.

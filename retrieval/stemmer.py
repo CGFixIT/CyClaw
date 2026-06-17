@@ -4,7 +4,7 @@ Enhanced Porter-like stemmer — optimized for technical/AI vocabulary.
 Extends NLTK PorterStemmer with custom rules for:
 - AI/ML terms (embedding, transformer, attention, etc.)
 - DevOps/infra terms (kubernetes, docker, nginx, etc.)
-- PsyClaw-domain terms (retrieval, augmented, langgraph, etc.)
+- CyClaw-domain terms (retrieval, augmented, langgraph, etc.)
 """
 
 import re
@@ -26,7 +26,7 @@ _CUSTOM_STEMS = {
     "kubernetes": "k8s", "docker": "docker", "nginx": "nginx",
     "langgraph": "langgraph", "langchain": "langchain",
     "chromadb": "chroma", "chroma": "chroma",
-    "psyclaw": "psyclaw", "safeclaw": "safeclaw",
+    "cyclaw": "cyclaw", "safeclaw": "safeclaw",
     "personality": "person", "soul": "soul",
 }
 

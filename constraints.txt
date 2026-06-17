@@ -1,4 +1,4 @@
-# PsyClaw — constraints.txt  (generated 2026-06-13 from a verified Python 3.12 install)
+# CyClaw — constraints.txt  (generated 2026-06-13 from a verified Python 3.12 install)
 # Use:  pip install -r requirements.txt -c constraints.txt
 # Pins the FULL transitive dependency tree for reproducible builds, including the
 # (unused-but-transitive) langgraph-checkpoint==4.1.1 at its CVE-safe version.

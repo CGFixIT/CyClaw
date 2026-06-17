@@ -1,4 +1,4 @@
-"""Pydantic models for the PsyClaw FastAPI gateway.
+"""Pydantic models for the CyClaw FastAPI gateway.
 
 Covers query request/response, source info, health, and soul evolution.
 """

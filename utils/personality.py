@@ -1,4 +1,4 @@
-"""PersonalityManager — Lean soul layer for PsyClaw.
+"""PersonalityManager — Lean soul layer for CyClaw.
 
 Based on soul.md as file-as-truth with SQLite shadow DB for version history
 and interaction logging. SHA-256 drift detection on startup.
@@ -38,7 +38,7 @@ class PersonalityManager:
         self.cfg = cfg
         pers_cfg = cfg.get("personality", {})
         self.soul_path = Path(pers_cfg.get("soul_path", "data/personality/soul.md"))
-        self.db_path = Path(pers_cfg.get("db_path", "data/personality/psyclaw_soul.db"))
+        self.db_path = Path(pers_cfg.get("db_path", "data/personality/cyclaw_soul.db"))
         self.ttl_days = pers_cfg.get("interaction_ttl_days", 365)
         self.soul_core: str = ""
         self._init_db()

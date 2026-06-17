@@ -1,5 +1,5 @@
 # ============================================================================
-# BUILD-ALIGNMENT NOTE (2026-06-13): Some tests below target a FUTURE PsyClaw
+# BUILD-ALIGNMENT NOTE (2026-06-13): Some tests below target a FUTURE CyClaw
 # build not yet pushed to GitHub (pending Dropbox sync of the local working
 # tree). They reference APIs absent from the current pushed implementation and
 # will ERROR/FAIL against HEAD until that build lands — expected, not a bug:
@@ -38,7 +38,7 @@ TEST_CONFIG = {
 def tmp_paths(tmp_path):
     """Create temp paths for soul.md, DB, and audit log."""
     soul = tmp_path / "personality" / "soul.md"
-    db = tmp_path / "personality" / "psyclaw_soul.db"
+    db = tmp_path / "personality" / "cyclaw_soul.db"
     audit = tmp_path / "logs" / "audit.jsonl"
     audit.parent.mkdir(parents=True, exist_ok=True)
     return soul, db, audit
@@ -75,7 +75,7 @@ class TestPersonalityManager:
 
         assert soul_path.exists()
         content = soul_path.read_text()
-        assert "PsyClaw" in content
+        assert "CyClaw" in content
         assert pm.soul_core == content
 
     def test_loads_existing_soul(self, cfg, tmp_paths):

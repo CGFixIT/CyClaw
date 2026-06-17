@@ -1,13 +1,13 @@
-# Security Policy — PsyClaw
+# Security Policy — CyClaw
 
-PsyClaw is a production-grade local AI agent built on three invariants: RAG-first retrieval, LangGraph topology as security policy. Security is a top priority. This document describes how to report vulnerabilities, how we triage and respond, and what is in-scope for vulnerability reports.
+CyClaw is a production-grade local AI agent built on three invariants: RAG-first retrieval, LangGraph topology as security policy. Security is a top priority. This document describes how to report vulnerabilities, how we triage and respond, and what is in-scope for vulnerability reports.
 
 ---
 
 ## Contact — reporting a vulnerability
 
 Preferred secure channels (choose one or more):
-- GitHub Security Advisories: https://github.com/CGFixIT/PsyClaw/security/advisories (recommended)
+- GitHub Security Advisories: https://github.com/CGFixIT/CyClaw/security/advisories (recommended)
 - Email: [contact@cgfixit.com] 
   - If you send email, please encrypt with our PGP key: [PGP KEY FINGERPRINT or URL]. (Replace with actual fingerprint or remove if not used.)
 - If neither is available, open a private repository issue titled "SECURITY: <short description>" and mark it private (do not include secrets).
@@ -18,8 +18,8 @@ Do NOT post vulnerabilities publicly (e.g., regular issues, public Twitter threa
 
 ## In-scope
 
-Anything in this repository or code we distribute as part of PsyClaw including, but not limited to:
-- The PsyClaw agent core code and runtime (Python code in this repo).
+Anything in this repository or code we distribute as part of CyClaw including, but not limited to:
+- The CyClaw agent core code and runtime (Python code in this repo).
 - RAG (retrieval) integrations and retrieval pipeline code in this repo.
 - LangGraph topology definitions and enforcement code.
 - Integrations and adapter code provided in the repo (connectors, local plugins).
@@ -50,7 +50,7 @@ Include as much of the following as possible. If you must include exploits or Po
 Required/Recommended report contents:
 - A short summary of the issue and impact.
 - Step-by-step reproduction steps (commands, inputs, dataset samples).
-- Which version/commit of PsyClaw you tested (git SHA / tag).
+- Which version/commit of CyClaw you tested (git SHA / tag).
 - Environment details: OS, Python version, dependencies (pip freeze), container details if used.
 - Expected behavior vs. observed behavior.
 - PoC code or a safe minimal demo (redact any real secrets).
@@ -127,4 +127,4 @@ We appreciate security research. Please follow responsible disclosure and avoid 
 
 Maintainers will update this document as processes evolve. For urgent security contact, use the preferred method listed at the top.
 
-Thank you for helping keep PsyClaw safe.
+Thank you for helping keep CyClaw safe.

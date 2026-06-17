@@ -1,5 +1,5 @@
 # ==============================================================================
-# PsyClaw Configuration — Single source of truth
+# CyClaw Configuration — Single source of truth
 # ==============================================================================
 # NOTE: LAN IP in allowed_origins (10.0.0.112) is intentional.
 # gate.py binds to 127.0.0.1:8787 only. The CORS origin list allows
@@ -8,7 +8,7 @@
 # ==============================================================================
 
 app:
-  name: "psyclaw"
+  name: "cyclaw"
   env: "local"
   mode: "offline"  # "offline" | "hybrid"
   debug: false
@@ -41,7 +41,7 @@ corpus:
 indexing:
   chroma_path: "index/chroma_db"
   bm25_path: "index/bm25.pkl"
-  collection_name: "psyclaw_kb"
+  collection_name: "cyclaw_kb"
   chunk_size: 512
   chunk_overlap: 50
   batch_size: 50
@@ -65,7 +65,7 @@ retrieval:
 personality:
   enabled: true
   soul_path: "data/personality/soul.md"
-  db_path: "data/personality/psyclaw_soul.db"
+  db_path: "data/personality/cyclaw_soul.db"
   interaction_ttl_days: 365
   injection_patterns_path: null  # uses built-in 13 OWASP patterns
 
@@ -107,7 +107,7 @@ api:
 
 logging:
   level: "INFO"
-  log_file: "logs/psyclaw.log"
+  log_file: "logs/cyclaw.log"
   audit_file: "logs/audit.jsonl"
   audit_fields:
     include_query_hash: true

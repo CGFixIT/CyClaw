@@ -1,4 +1,4 @@
-# PsyClaw
+# CyClaw
 
 > **Offline-first, RAG-enforced, soul-governed personal AI assistant**
 > Version 1.4.0 (planning) · Baseline 1.3.0 (production) · Python 3.12 · LM Studio + ChromaDB + BM25 + LangGraph
@@ -6,15 +6,15 @@
 [![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.136-green.svg)](https://fastapi.tiangolo.com/)
 [![LangGraph](https://img.shields.io/badge/LangGraph-1.1-orange.svg)](https://github.com/langchain-ai/langgraph)
-[![CodeQL Advanced](https://github.com/CGFixIT/PsyClaw/actions/workflows/codeql.yml/badge.svg)](https://github.com/CGFixIT/PsyClaw/actions/workflows/codeql.yml)
-[![PsyClaw CI (Simplified + Coverage)](https://github.com/CGFixIT/PsyClaw/actions/workflows/ci.yml/badge.svg)](https://github.com/CGFixIT/PsyClaw/actions/workflows/ci.yml)<hr>
-[![Screenshots: local AI](https://i.imgur.com/kGZBkIj.png)](https://github.com/CGFixIT/PsyClaw/tree/main/screenshots)   <-- Screenshots of Local AI web interface
+[![CodeQL Advanced](https://github.com/CGFixIT/CyClaw/actions/workflows/codeql.yml/badge.svg)](https://github.com/CGFixIT/CyClaw/actions/workflows/codeql.yml)
+[![CyClaw CI (Simplified + Coverage)](https://github.com/CGFixIT/CyClaw/actions/workflows/ci.yml/badge.svg)](https://github.com/CGFixIT/CyClaw/actions/workflows/ci.yml)<hr>
+[![Screenshots: local AI](https://i.imgur.com/kGZBkIj.png)](https://github.com/CGFixIT/CyClaw/tree/main/screenshots)   <-- Screenshots of Local AI web interface
 
 ---
 
 ## What It Does
 
-PsyClaw is a personal RAG (Retrieval-Augmented Generation) backend that:
+CyClaw is a personal RAG (Retrieval-Augmented Generation) backend that:
 
 1. **Answers questions exclusively from your local Markdown corpus** — no internet by default
 2. **Enforces every safety invariant via LangGraph topology** — not prompts, not config flags, not discipline
@@ -108,8 +108,8 @@ User Query (HTTP POST /query or MCP tool call)
 ### Install
 
 ```bash
-git clone https://github.com/CGFixIT/PsyClaw
-cd PsyClaw
+git clone https://github.com/CGFixIT/CyClaw
+cd CyClaw
 python3.12 -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
 
@@ -123,14 +123,14 @@ pip install -r requirements.txt -c constraints.txt
 
 <hr>
 
-[Detailed Setup Guide](https://github.com/CGFixIT/PsyClaw/blob/main/setup-guide.md)
+[Detailed Setup Guide](https://github.com/CGFixIT/CyClaw/blob/main/setup-guide.md)
 
 <hr>
 
 > **Upgrading from a pre-1.4.0 checkout?** ChromaDB moved from 0.4.x to 1.5.x and the
 > on-disk index format changed — delete `index/` and rebuild with `python -m retrieval.indexer`.
 >
-> **Offline note:** embeddings use `all-MiniLM-L6-v2`. Because `psyclaw_telemetry_kill.env`
+> **Offline note:** embeddings use `all-MiniLM-L6-v2`. Because `cyclaw_telemetry_kill.env`
 > sets `HF_HUB_OFFLINE=1`, the model must be cached locally first. On a machine with network,
 > run the indexer once (it downloads + caches the model); afterwards it runs fully offline.
 
@@ -171,7 +171,7 @@ retrieval:
 export GROK_API_KEY=your_xai_api_key_here
 
 # Kill all SDK telemetry (also set automatically by gate.py on startup)
-source psyclaw_telemetry_kill.env
+source cyclaw_telemetry_kill.env
 ```
 
 ### Build the Index
@@ -195,15 +195,15 @@ Open `http://127.0.0.1:8787` — the Soul Console terminal loads automatically.
 ## Project Structure
 
 ```
-PsyClaw/
+CyClaw/
 ├── gate.py                     FastAPI gateway + soul endpoints
 ├── graph.py                    LangGraph 7-node state machine
 ├── mcp_hybrid_server.py        MCP server (retrieval-only, no LLM)
 ├── metrics.py                  Audit JSONL analyzer
 ├── config.yaml                 Single source of truth for all config
 ├── requirements.txt            Pinned Python deps
-├── psyclaw_telemetry_kill.env  Kill-switch for LangChain/Chroma/OTel telemetry
-├── psyclaw_suggestions_fix.md  Dev notes and open issues
+├── cyclaw_telemetry_kill.env  Kill-switch for LangChain/Chroma/OTel telemetry
+├── cyclaw_suggestions_fix.md  Dev notes and open issues
 ├── .gitignore
 ├── old.md                      Archived prior README
 ├── llm/
@@ -247,10 +247,10 @@ PsyClaw/
 
 ## Soul / Personality Layer
 
-PsyClaw maintains a persistent identity through `soul.md`. Key properties:
+CyClaw maintains a persistent identity through `soul.md`. Key properties:
 
 - **File-as-truth**: `data/personality/soul.md` is always the canonical version
-- **Shadow SQLite DB**: `psyclaw_soul.db` stores version history and interaction logs
+- **Shadow SQLite DB**: `cyclaw_soul.db` stores version history and interaction logs
 - **SHA-256 drift detection**: on startup, file hash vs. DB hash — mismatch triggers forensic log entry
 - **Atomic writes**: backup → DB insert → disk write → memory update (failure at any step is recoverable)
 - **OWASP injection scan**: `POST /soul/propose` runs 13 injection patterns before any write
@@ -282,9 +282,9 @@ For Claude Desktop or other MCP-compatible clients:
 ```json
 {
   "mcpServers": {
-    "psyclaw": {
+    "cyclaw": {
       "command": "python",
-      "args": ["/path/to/PsyClaw/mcp_hybrid_server.py"]
+      "args": ["/path/to/CyClaw/mcp_hybrid_server.py"]
     }
   }
 }

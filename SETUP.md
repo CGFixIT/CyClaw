@@ -1,4 +1,4 @@
-# PsyClaw Local Setup Guide (GitHub Main)
+# CyClaw Local Setup Guide (GitHub Main)
 
 Concise instructions for Windows and Linux as generated.
 

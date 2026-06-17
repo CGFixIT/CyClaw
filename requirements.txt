@@ -1,4 +1,4 @@
-# PsyClaw / SafeClaw — requirements.txt
+# CyClaw / SafeClaw — requirements.txt
 # Target runtime: Python 3.12  (also works on 3.11)
 #
 # Modernization audit: 2026-06-13. Every pin below was resolved AND installed in a

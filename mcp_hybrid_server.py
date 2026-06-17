@@ -1,4 +1,4 @@
-"""PsyClaw MCP server — retrieval-only, no sampling capability.
+"""CyClaw MCP server — retrieval-only, no sampling capability.
 
 Protocol-level guarantee: this server CANNOT invoke an LLM.
 Only exposes hybrid_search tool via JSON-RPC over stdio.
@@ -73,7 +73,7 @@ def handle_message(msg: dict, retriever: HybridRetriever) -> dict:
         return {"jsonrpc": "2.0", "id": msg_id, "result": {
             "protocolVersion": "2025-11-25",
             "capabilities": CAPABILITIES,
-            "serverInfo": {"name": "psyclaw-hybrid-rag", "version": "1.0.0"}
+            "serverInfo": {"name": "cyclaw-hybrid-rag", "version": "1.0.0"}
         }}
     elif method == "tools/list":
         return {"jsonrpc": "2.0", "id": msg_id, "result": {"tools": TOOLS}}
