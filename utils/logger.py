@@ -1,4 +1,5 @@
-"""Append-only audit logging with query hashing and privacy redaction.
+"""Append-only audit logging with query hashing and privacy redaction,
+plus standard Python logging setup for operational diagnostics.
 
 Every query, miss, escalation, and error gets a JSONL line.
 Query text is SHA256-hashed to prevent the audit log from becoming
@@ -7,12 +8,46 @@ a data exfiltration vector.
 
 import hashlib
 import json
+import logging
 import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
 import yaml
+
+_logging_initialized = False
+
+
+def setup_logging(cfg: Optional[dict] = None) -> None:
+    global _logging_initialized
+    if _logging_initialized:
+        return
+    if cfg is None:
+        cfg = _get_config()
+    log_cfg = cfg.get("logging", {})
+    level = getattr(logging, log_cfg.get("level", "INFO").upper(), logging.INFO)
+    log_file = log_cfg.get("log_file", "")
+
+    root = logging.getLogger("psyclaw")
+    root.setLevel(level)
+
+    fmt = logging.Formatter(
+        "%(asctime)s %(levelname)-8s [%(name)s] %(message)s",
+        datefmt="%Y-%m-%dT%H:%M:%S",
+    )
+
+    console = logging.StreamHandler()
+    console.setFormatter(fmt)
+    root.addHandler(console)
+
+    if log_file:
+        Path(log_file).parent.mkdir(parents=True, exist_ok=True)
+        fh = logging.FileHandler(log_file, encoding="utf-8")
+        fh.setFormatter(fmt)
+        root.addHandler(fh)
+
+    _logging_initialized = True
 
 _config_cache: Optional[dict] = None
 

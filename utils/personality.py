@@ -161,8 +161,11 @@ class PersonalityManager:
 
     def apply_evolution(self, new_soul: str, reason: str) -> dict:
         new_hash = self._sha256(new_soul)
+        bak_path = self.soul_path.with_suffix(self.soul_path.suffix + ".bak")
         tmp_path = self.soul_path.with_suffix(self.soul_path.suffix + ".tmp")
         with self._lock:
+            if self.soul_path.exists():
+                bak_path.write_text(self.soul_core, encoding="utf-8")
             tmp_path.write_text(new_soul, encoding="utf-8")
             os.replace(tmp_path, self.soul_path)
             self.conn.execute(
@@ -174,6 +177,15 @@ class PersonalityManager:
         new_version = self.get_version()
         audit_log({"event": "soul_evolution_applied", "reason": reason, "version": new_version, "sha256": new_hash})
         return {"status": "applied", "version": new_version, "sha256": new_hash}
+
+    def restore_from_backup(self) -> dict:
+        bak_path = self.soul_path.with_suffix(self.soul_path.suffix + ".bak")
+        if not bak_path.exists():
+            raise FileNotFoundError("No .bak file found to restore from")
+        backup_content = bak_path.read_text(encoding="utf-8")
+        result = self.apply_evolution(backup_content, "RESTORE: reverted to previous .bak")
+        audit_log({"event": "soul_restored_from_backup", "sha256": result["sha256"]})
+        return result
 
     def reload(self) -> None:
         self._load_soul()

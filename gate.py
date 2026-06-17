@@ -19,6 +19,7 @@ Addresses:
   - ChromaDB PostHog anonymized telemetry
   - OpenTelemetry OTLP export hooks pulled in by chromadb deps
 """
+import asyncio
 import os
 import re
 
@@ -48,15 +49,17 @@ for k, v in _verified.items():
     status = "OK" if v not in ("", "NOT SET") else "MISSING"
     print(f"  {status}  {k}={v}")
 
+import logging
 import yaml
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends
 from fastapi.responses import FileResponse
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 from graph import build_graph, GraphState
 from retrieval.hybrid_search import HybridRetriever
 from llm.client import LocalLLMClient, GrokClient
 from schemas.api import QueryRequest, QueryResponse, SourceInfo, HealthResponse, SoulEvolutionRequest
-from utils.logger import audit_log
+from utils.logger import audit_log, setup_logging
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from utils.sanitizer import check_input
@@ -65,6 +68,17 @@ from utils.errors import (
 )
 from utils.health import check_all
 from utils.personality import PersonalityManager
+
+_bearer_scheme = HTTPBearer(auto_error=False)
+
+def require_api_key(
+    credentials: HTTPAuthorizationCredentials = Depends(_bearer_scheme),
+):
+    api_key = os.environ.get("PSYCLAW_API_KEY", "")
+    if not api_key:
+        return
+    if not credentials or credentials.credentials != api_key:
+        raise HTTPException(status_code=401, detail="Invalid or missing API key")
 
 # Simple in-memory rate limiter (config-driven, per-IP for /query)
 import time
@@ -137,10 +151,13 @@ def _sanitize_error(exc: Exception) -> str:
 with open("config.yaml") as f:
     cfg = yaml.safe_load(f)
 
+setup_logging(cfg)
+logger = logging.getLogger("psyclaw.gate")
+
 app = FastAPI(
     title="PsyClaw RAG Gateway",
     description="Offline-first, RAG-first, MCP-exposed stack",
-    version="1.3.0"
+    version="1.4.0"
 )
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -155,7 +172,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=_origins,
     allow_methods=["GET", "POST"],
-    allow_headers=["Content-Type"],
+    allow_headers=["Content-Type", "Authorization"],
     allow_credentials=False,
 )
 
@@ -213,7 +230,7 @@ async def query_endpoint(request: Request, req: QueryRequest):
     }
 
     try:
-        result = compiled_graph.invoke(initial_state)
+        result = await asyncio.to_thread(compiled_graph.invoke, initial_state)
     except Exception as e:
         safe_msg = _sanitize_error(e)
         audit_log({"event": "graph_error", "query": req.query[:50], "error": safe_msg})
@@ -267,7 +284,7 @@ async def query_endpoint(request: Request, req: QueryRequest):
     )
 
 @app.get("/soul")
-def get_soul():
+async def get_soul():
     if personality is None:
         raise HTTPException(status_code=404, detail="Personality system not enabled")
     return {
@@ -276,32 +293,41 @@ def get_soul():
         "source": str(personality.soul_path)
     }
 
-@app.post("/soul/propose")
-def propose_soul_evolution(req: SoulEvolutionRequest):
+@app.post("/soul/propose", dependencies=[Depends(require_api_key)])
+async def propose_soul_evolution(req: SoulEvolutionRequest):
     if personality is None:
         raise HTTPException(status_code=404, detail="Personality system not enabled")
-    proposal = personality.propose_evolution(req.new_soul, req.reason)
+    proposal = await asyncio.to_thread(personality.propose_evolution, req.new_soul, req.reason)
     audit_log({"event": "soul_evolution_proposed", "reason": req.reason})
     return proposal
 
-@app.post("/soul/apply")
-def apply_soul_evolution(req: SoulEvolutionRequest):
+@app.post("/soul/apply", dependencies=[Depends(require_api_key)])
+async def apply_soul_evolution(req: SoulEvolutionRequest):
     if personality is None:
         raise HTTPException(status_code=404, detail="Personality system not enabled")
-    result = personality.apply_evolution(req.new_soul, req.reason)
-    audit_log({"event": "soul_evolution_applied", "reason": req.reason})
+    result = await asyncio.to_thread(personality.apply_evolution, req.new_soul, req.reason)
     return result
 
-@app.post("/soul/reload")
-def reload_soul():
+@app.post("/soul/reload", dependencies=[Depends(require_api_key)])
+async def reload_soul():
     if personality is None:
         raise HTTPException(status_code=404, detail="Personality system not enabled")
-    personality.reload()
+    await asyncio.to_thread(personality.reload)
     return {"status": "reloaded", "version": personality.get_version()}
 
+@app.post("/soul/restore", dependencies=[Depends(require_api_key)])
+async def restore_soul():
+    if personality is None:
+        raise HTTPException(status_code=404, detail="Personality system not enabled")
+    try:
+        result = await asyncio.to_thread(personality.restore_from_backup)
+        return result
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
 @app.get("/health", response_model=HealthResponse)
-def health():
-    statuses = check_all()
+async def health():
+    statuses = await asyncio.to_thread(check_all)
     return HealthResponse(
         status="ok" if all(s.healthy for s in statuses) else "degraded",
         services={s.name: {"healthy": s.healthy, "latency_ms": s.latency_ms, "error": s.error} for s in statuses},

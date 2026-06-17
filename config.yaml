@@ -40,7 +40,7 @@ corpus:
 
 indexing:
   chroma_path: "index/chroma_db"
-  bm25_path: "index/bm25.pkl"
+  bm25_path: "index/bm25.json"
   collection_name: "psyclaw_kb"
   chunk_size: 512
   chunk_overlap: 50

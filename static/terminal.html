@@ -603,6 +603,10 @@
   <div class="soul-toolbar">
     <button class="toolbar-btn" id="soulToggleBtn" onclick="toggleSoulPanel()">Soul Console</button>
     <span class="toolbar-hint">view, reload, propose, and apply the personality layer</span>
+    <input id="apiKeyInput" type="password" placeholder="API key (optional)"
+           style="margin-left:auto;background:var(--bg-input);border:1px solid var(--border);
+           border-radius:var(--radius);padding:4px 8px;font-family:var(--mono);font-size:10px;
+           color:var(--text-secondary);width:180px;outline:none;">
   </div>
 
   <div class="soul-panel" id="soulPanel">
@@ -618,6 +622,7 @@
     <div class="soul-actions">
       <button class="soul-btn" onclick="loadSoul()">Load</button>
       <button class="soul-btn" onclick="reloadSoul()">Reload Disk</button>
+      <button class="soul-btn" onclick="restoreSoul()">Restore .bak</button>
       <button class="soul-btn" onclick="proposeSoulEvolution()">Propose</button>
       <button class="soul-btn apply" onclick="applySoulEvolution()">Apply</button>
     </div>
@@ -662,6 +667,7 @@
 
 <script>
 const API = 'http://127.0.0.1:8787';
+const apiKeyInput = document.getElementById('apiKeyInput');
 const resultsEl = document.getElementById('results');
 const emptyState = document.getElementById('emptyState');
 const input = document.getElementById('queryInput');
@@ -686,6 +692,13 @@ let queryCount = 0;
 let pendingConfirmQuery = null;
 let pendingSoulProposal = null;
 let entryCounter = 0;
+
+function authHeaders() {
+  const key = apiKeyInput ? apiKeyInput.value.trim() : '';
+  const h = { 'Content-Type': 'application/json' };
+  if (key) h['Authorization'] = `Bearer ${key}`;
+  return h;
+}
 
 input.addEventListener('input', () => {
   input.style.height = 'auto';
@@ -952,7 +965,7 @@ async function reloadSoul() {
   try {
     const resp = await fetch(`${API}/soul/reload`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' }
+      headers: authHeaders()
     });
     const data = await resp.json().catch(() => ({}));
     if (!resp.ok) {
@@ -978,7 +991,7 @@ async function proposeSoulEvolution() {
   try {
     const resp = await fetch(`${API}/soul/propose`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders(),
       body: JSON.stringify({ new_soul: newSoul, reason })
     });
     const data = await resp.json().catch(() => ({}));
@@ -1011,7 +1024,7 @@ async function applySoulEvolution() {
   try {
     const resp = await fetch(`${API}/soul/apply`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders(),
       body: JSON.stringify(pendingSoulProposal)
     });
     const data = await resp.json().catch(() => ({}));
@@ -1024,6 +1037,25 @@ async function applySoulEvolution() {
     proposalBox.style.display = 'none';
     await loadSoul();
     setSoulStatus(data.message || 'Soul updated.', 'success');
+  } catch (e) {
+    setSoulStatus(e.message, 'error');
+  }
+}
+
+async function restoreSoul() {
+  setSoulStatus('Restoring from .bak...');
+  try {
+    const resp = await fetch(`${API}/soul/restore`, {
+      method: 'POST',
+      headers: authHeaders()
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) {
+      throw new Error(extractErrorMessage(data, 'Failed to restore soul'));
+    }
+    addEntry('system', '', '→ Soul restored from .bak');
+    await loadSoul();
+    setSoulStatus('Soul restored from backup.', 'success');
   } catch (e) {
     setSoulStatus(e.message, 'error');
   }

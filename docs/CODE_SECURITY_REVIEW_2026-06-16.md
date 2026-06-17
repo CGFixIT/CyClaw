@@ -42,13 +42,13 @@ Because only test/infra changes reached `main` recently, per the task this revie
 |---|---|---|---|---|
 | S1 | **Medium** | Rate-limiter memory grows unbounded (no idle-IP eviction); "thread-safe" claim has no lock | `gate.py:74–84` | Fixed by **PR #14** (`_sweep_rate_limits`); lock still absent |
 | S2 | **Medium** | Soul-governance invariant #5 partially unmet on `main`: non-atomic write, no forensic `audit_log` on drift/apply, no TTL-prune-on-init | `utils/personality.py` | **Fixed by PR #18** (this run); residual: no `threading.Lock` |
-| S3 | **Medium** | `pickle.load` of the BM25 index → RCE if `index/bm25.pkl` is tampered | `retrieval/hybrid_search.py:71–75` | Open (both `main` and #14) |
+| S3 | **Medium** | `pickle.load` of the BM25 index → RCE if `index/bm25.pkl` is tampered | `retrieval/hybrid_search.py:71–75` | **Resolved** — migrated to JSON serialization; pickle removed entirely |
 | S4 | **Medium** | Injection-filter coverage is weaker than the architecture claims (missing "do anything now / bypass safety / ignore safety") | `utils/sanitizer.py`, `config.yaml` | Open |
 | S5 | **Medium** | CI false-green: only 2 test files run, exit code swallowed (`\|\| echo`) | `.github/workflows/ci.yml:49–51` | Partially fixed by #14 (drops `\|\| echo`); still 2 files only |
 | S6 | **Low/Med** | Dead config: `policy.prompt_filter.*` is ignored by the hardcoded sanitizer on `main` | `utils/sanitizer.py` vs `config.yaml:77–93` | Fixed by **PR #14** |
 | S7 | **Low** | CORS allowlist contains an inert `null`/`None` entry + a hardcoded LAN IP beyond documented localhost defaults | `config.yaml:122–129` | Open |
 | S8 | **Low** | Injection scan on `/soul/propose` is advisory only — `apply_evolution` never enforces `safe_to_apply` | `utils/personality.py`, `gate.py:264–270` | Open (hardening, not an invariant violation) |
-| S9 | **Low** | No authentication on state-mutating `/soul/*` endpoints (by design, localhost-only) | `gate.py:246–277` | Accepted risk; document the deployment caveat |
+| S9 | **Low** | No authentication on state-mutating `/soul/*` endpoints (by design, localhost-only) | `gate.py:246–277` | **Resolved** — bearer token auth via `PSYCLAW_API_KEY` env var on mutation endpoints |
 | S10 | **Info** | Positive controls verified (XSS escaping, secret redaction, telemetry kill, no-sampling MCP, env-only key) | multiple | OK |
 
 No **Critical** issues found. No exposed secrets in the tree (§2.6).
@@ -95,20 +95,19 @@ a `audit_log({'event':'soul_evolution_applied'})` on apply, and `maintenance(ttl
   `busy_timeout` instead. For the multi-threaded gateway, add an explicit `threading.Lock` around the
   write path (tracked in PR #18's reviewer note).
 
-### S3 — Pickle deserialization of the BM25 index *(Medium)*
-`retrieval/hybrid_search.py:71–75`
-```python
-with open(bm25_path, "rb") as f:
-    bm25_data = pickle.load(f)
-```
-- `pickle.load` executes arbitrary code embedded in the file. If anything can write
-  `index/bm25.pkl` (another local process, a synced/Dropbox folder per the build notes, a restored
-  backup), loading it is RCE in the gateway process.
-- Under the single-user localhost threat model this is **acceptable but not defense-in-depth**.
-- **Fix (recommended, not urgent):** store a companion SHA-256 of `bm25.pkl` written by the indexer
-  and verify it before `pickle.load`; or migrate the BM25 payload to a non-executable format
-  (e.g. persist the tokenized corpus + rebuild `BM25Okapi` in-process, or JSON/`safetensors`-style
-  serialization). Document the index dir as a trust boundary.
+### S3 — Pickle deserialization of the BM25 index *(Medium)* — **RESOLVED**
+`retrieval/hybrid_search.py`, `retrieval/indexer.py`
+
+**Original issue:** `pickle.load` executes arbitrary code embedded in the file. If anything can write
+`index/bm25.pkl`, loading it is RCE in the gateway process.
+
+**Resolution:** Migrated BM25 index serialization from pickle to JSON. The indexer now writes the
+tokenized corpus, chunks, and metadata as a JSON file (`index/bm25.json`). The retriever reads
+the JSON and rebuilds `BM25Okapi` from the tokenized corpus on load. `import pickle` has been
+removed from both modules. A test (`test_security.py::TestBM25PickleRejection`) verifies that
+a crafted pickle payload is rejected (JSON decode raises, no code execution). Config updated:
+`indexing.bm25_path` changed from `index/bm25.pkl` to `index/bm25.json`.
+**Note:** Existing `.pkl` index files must be regenerated via `python -m retrieval.indexer`.
 
 ### S4 — Injection filter weaker than documented *(Medium)*
 `utils/sanitizer.py` `BANNED_PATTERNS` (13) / `config.yaml:79–92`

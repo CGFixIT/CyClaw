@@ -6,7 +6,6 @@ No live services required — all external deps are mocked.
 
 import json
 import os
-import pickle
 import tempfile
 from pathlib import Path
 from typing import List
@@ -59,7 +58,7 @@ def test_config(tmp_path):
     cfg = TEST_CONFIG.copy()
     cfg["indexing"] = cfg["indexing"].copy()
     cfg["indexing"]["chroma_path"] = str(tmp_path / "chroma_db")
-    cfg["indexing"]["bm25_path"] = str(tmp_path / "bm25.pkl")
+    cfg["indexing"]["bm25_path"] = str(tmp_path / "bm25.json")
     cfg["logging"] = cfg["logging"].copy()
     cfg["logging"]["log_file"] = str(tmp_path / "psyclaw.log")
     cfg["logging"]["audit_file"] = str(tmp_path / "audit.jsonl")
@@ -163,13 +162,11 @@ class MockGrokClient:
 
 @pytest.fixture
 def bm25_index(tmp_path):
-    from rank_bm25 import BM25Okapi
     chunks = ["RAG retrieval augmented generation", "ChromaDB vector database",
               "BM25 keyword search algorithm"]
     metadata = [{"source": f"doc{i}.md", "chunk_id": i, "stem_tags": "[]"}  for i in range(len(chunks))]
     tokenized = [c.lower().split() for c in chunks]
-    bm25 = BM25Okapi(tokenized)
-    bm25_path = tmp_path / "bm25.pkl"
-    with open(bm25_path, "wb") as f:
-        pickle.dump({"bm25": bm25, "chunks": chunks, "metadata": metadata}, f)
+    bm25_path = tmp_path / "bm25.json"
+    with open(bm25_path, "w", encoding="utf-8") as f:
+        json.dump({"tokenized_corpus": tokenized, "chunks": chunks, "metadata": metadata}, f)
     return str(bm25_path), chunks, metadata

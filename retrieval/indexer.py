@@ -6,7 +6,6 @@ Sanitizes chunks at ingestion time via prompt filter.
 
 import json
 import os
-import pickle
 from pathlib import Path
 from typing import List, Tuple
 
@@ -110,10 +109,13 @@ def build_index(config_path: str = "config.yaml") -> None:
 
     print("[Indexer] Building BM25 (keyword) index...")
     tokenized_corpus = [tokenize_and_stem(chunk) for chunk in all_chunks]
-    bm25 = BM25Okapi(tokenized_corpus)
     Path(bm25_path).parent.mkdir(parents=True, exist_ok=True)
-    with open(bm25_path, "wb") as f:
-        pickle.dump({"bm25": bm25, "chunks": all_chunks, "metadata": all_metadata}, f)
+    with open(bm25_path, "w", encoding="utf-8") as f:
+        json.dump({
+            "tokenized_corpus": tokenized_corpus,
+            "chunks": all_chunks,
+            "metadata": all_metadata,
+        }, f)
 
     print(f"[Indexer] Done. ChromaDB: {chroma_path}, BM25: {bm25_path}")
 

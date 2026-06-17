@@ -7,13 +7,13 @@ Degrades gracefully if one retrieval path fails.
 
 import heapq
 import json
-import pickle
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional
 
 import chromadb
 from chromadb.config import Settings
+from rank_bm25 import BM25Okapi
 import yaml
 
 from .stemmer import tokenize_and_stem
@@ -69,15 +69,12 @@ class HybridRetriever:
                 f"Collection '{collection_name}' not found in ChromaDB: {e}"
             )
 
-        # Validate path is a regular file before deserializing. The BM25 index is
-        # project-generated (retrieval/indexer.py) and read from a config-controlled
-        # path — not from user-supplied input.
         resolved = Path(bm25_path).resolve()
         if not resolved.is_file():
             raise IndexNotFoundError(f"BM25 index path is not a regular file: {bm25_path}")
-        with open(resolved, "rb") as f:
-            bm25_data = pickle.load(f)  # DevSkim: ignore DS425000 - project-generated BM25 index
-            self.bm25 = bm25_data["bm25"]
+        with open(resolved, "r", encoding="utf-8") as f:
+            bm25_data = json.load(f)
+            self.bm25 = BM25Okapi(bm25_data["tokenized_corpus"])
             self.bm25_chunks = bm25_data["chunks"]
             self.bm25_metadata = bm25_data["metadata"]
 

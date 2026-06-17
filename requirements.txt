@@ -47,5 +47,5 @@ nltk==3.9.4                 # REQUIRED by retrieval/stemmer.py (PorterStemmer on
 
 # ── Testing ──────────────────────────────────────────────────────────────────
 pytest==9.1.0              # >=9.0.3 fixes CVE-2025-71176 (insecure temp dir)
-# pytest-asyncio: REMOVED — the test suite has no async tests (no @pytest.mark.asyncio).
+pytest-asyncio==1.4.0
 # matplotlib:     REMOVED — not imported anywhere in the codebase (metrics.py prints to stdout).
