@@ -25,7 +25,7 @@ def _embeddings_cfg(config_path: str) -> tuple:
     handle is always closed -- the previous ``yaml.safe_load(open(path))`` form
     leaked a descriptor on every call.
     """
-    with open(config_path) as f:
+    with open(config_path, encoding="utf-8") as f:
         emb_cfg = yaml.safe_load(f)["models"]["embeddings"]
     return emb_cfg["model"], emb_cfg.get("cache_dir", "")
 
