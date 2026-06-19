@@ -1,5 +1,5 @@
 # ==============================================================================
-# PsyClaw .gitignore
+# CyClaw .gitignore
 # ==============================================================================
 
 # Python
@@ -27,7 +27,7 @@ env/
 *.swp
 *.swo
 
-# PsyClaw runtime artifacts (never commit these)
+# CyClaw runtime artifacts (never commit these)
 index/
 .emb_cache/
 logs/
@@ -42,7 +42,7 @@ data/personality/soul.md.bak
 
 # Secrets
 *.env
-!psyclaw_telemetry_kill.env
+!cyclaw_telemetry_kill.env
 .env.*
 !.env.example
 

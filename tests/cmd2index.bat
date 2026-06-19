@@ -1,1 +1,1 @@
-cd %PSYCLAW% && python -m retrieval.indexer
+cd %CYCLAW% && python -m retrieval.indexer
