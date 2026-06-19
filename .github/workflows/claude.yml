@@ -7,7 +7,7 @@ on:
 jobs:
   claude:
     name: Claude Code
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     if: |
       github.event.issue.pull_request != null &&
       contains(github.event.comment.body, '@claude') &&
