@@ -160,8 +160,6 @@ retrieval:
   max_context_tokens: 5000
 ```
 
-> **Note:** `vector_weight` / `bm25_weight` in `config.yaml` are documentation-only placeholders. The retriever uses equal 1.0/1.0 weighting — a deliberate design decision documented in the v1.3.0 architecture spec. To enable true weighted RRF, multiply `contrib *= weight` in `hybrid_search.py` and retune `min_score`.
-
 ---
 
 ## Project Structure
@@ -243,8 +241,6 @@ CyClaw maintains a persistent identity through `soul.md`. Key properties:
 | Soul writes | Injection scan + human reason string + atomic crash-safe write |
 | Corpus | Chunk sanitization at index time via `sanitizer.py` |
 
-> **This is a personal lab project, not a production security product.** No external audit has been performed.
-
 ---
 
 ## MCP Server
@@ -263,35 +259,6 @@ For Claude Desktop or other MCP-compatible clients:
 ```
 
 The MCP server exposes a single `hybrid_search` tool. It has **no sampling capability** — `sampling: null` is set at the protocol level, making it architecturally impossible for this server to invoke an LLM.
-
----
-
-Completed in v1.3.0
-
-    Rate limiting (60 req/min per IP, sliding window)
-    Soul SHA-256 drift detection on startup
-    Atomic soul writes (backup → DB → disk → memory)
-    Expanded to 13 OWASP injection patterns
-    interaction_ttl_days extended to 365
-    Telemetry kill block moved before any SDK import
-    route_by_score threshold corrected to 0.028 (RRF scale, not cosine)
-    Soul preamble injection hardened (labeled as untrusted context)
-
-Open Issues / v1.4.0 Targets
-
-    Dropbox corpus sync (dropbox_sync.py placeholder)
-    plan_node for multi-hop query decomposition
-    insightextractor.py for automated corpus enrichment from query patterns
-    Conversation compaction (rolling summary node)
-    BM25 index SHA-256 integrity verification on load
-    static/terminal.html API alignment (currently has endpoint mismatches)
-    Config schema validation on startup (pydantic model for config.yaml)
-    Weighted RRF option (currently equal 1.0/1.0 by design)
-
-Known Issues
-
-    static/terminal.html has API response field mismatches vs current QueryResponse schema
-    vector_weight/bm25_weight in config.yaml are documentation-only; actual weighting is equal
 
 ---
 
