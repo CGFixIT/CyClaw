@@ -69,10 +69,13 @@ class HybridRetriever:
                 f"Collection '{collection_name}' not found in ChromaDB: {e}"
             )
 
+        # Validate path is a regular file before deserializing. The BM25 index is
+        # project-generated (retrieval/indexer.py) and read from a config-controlled
+        # path — not from user-supplied input.
         resolved = Path(bm25_path).resolve()
         if not resolved.is_file():
             raise IndexNotFoundError(f"BM25 index path is not a regular file: {bm25_path}")
-        with open(resolved, "r", encoding="utf-8") as f:
+        with open(resolved, "r", encoding="utf-8") as f:  # DevSkim: ignore DS161085 - project-generated index
             bm25_data = json.load(f)
             self.bm25 = BM25Okapi(bm25_data["tokenized_corpus"])
             self.bm25_chunks = bm25_data["chunks"]
