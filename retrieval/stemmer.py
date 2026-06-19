@@ -16,9 +16,10 @@ _stemmer = PorterStemmer()
 
 # Tokenizer: extracts words starting with a letter (2+ chars). Avoids nltk.data.load()
 # so the NLTK URL-encoded path-traversal CVE (punkt tokenizer) is not reachable.
+# Both regexes compiled once at import rather than on every call.
 _WORD_RE = re.compile(r'[a-z][a-z0-9_-]+')
 
-# Secondary filter retained for explicitness (equivalent to _WORD_RE match contract).
+
 _TOKEN_RE = re.compile(r'^[a-z][a-z0-9_-]{1,}$')
 
 _CUSTOM_STEMS = {
