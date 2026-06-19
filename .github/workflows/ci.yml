@@ -30,18 +30,22 @@ jobs:
           pip install torch==2.4.1+cpu --index-url https://download.pytorch.org/whl/cpu
           pip install -r requirements.txt pytest pytest-cov
 
-      - name: Prepare minimal test env
+      - name: Prepare test env
         shell: bash
         run: |
-          mkdir -p data/corpus data/personality index logs
-          echo '# Test corpus' > data/corpus/test.md
+          # data/corpus/cyclaw_overview.md is committed in the repo and is what the
+          # RAG smoke indexes + queries — do not overwrite it with a stub.
+          mkdir -p data/personality index logs
           echo '# Soul' > data/personality/soul.md
           echo 'GROK_API_KEY=dummy' >> $GITHUB_ENV
 
-      - name: Emulated RAG Query Smoke
+      - name: Real RAG Query Smoke (ChromaDB + BM25)
         shell: bash
         run: |
-          python -c "import base64; exec(base64.b64decode('cHJpbnQoIj09PSBFbXVsYXRlZCBPZmZsaW5lIFJBRyBRdWVyeSA9PT0iKQoKY2xhc3MgTW9ja1JldHJpZXZlcjoKICAgIGRlZiBoeWJyaWRfc2VhcmNoKHNlbGYsIHEpOgogICAgICAgIHJldHVybiBbeyJ0ZXh0IjogIlBzeUNsYXcgb2ZmbGluZSBSQUcgd29ya3MuIiwgInNjb3JlIjogMC45MiwgInNvdXJjZSI6ICJzb3VsLm1kIn1dCgpjbGFzcyBNb2NrTExNOgogICAgZGVmIGdlbmVyYXRlKHNlbGYsIHByb21wdCk6CiAgICAgICAgcGxlbiA9IGxlbihwcm9tcHQpCiAgICAgICAgcmV0dXJuICJbRW11bGF0ZWQgUXdlbl0gUmV0cmlldmVkIGNvbnRleHQuIFByb21wdCBsZW46IHt9Ii5mb3JtYXQocGxlbikKCmNsYXNzIE1vY2tQZXJzb25hbGl0eToKICAgIGRlZiBnZXRfc3lzdGVtX3Byb21wdF9hZGRpdGl2ZShzZWxmKToKICAgICAgICByZXR1cm4gIllvdSBhcmUgUHN5Q2xhdyAtIHRydXRoZnVsLCBvZmZsaW5lLWZpcnN0IFJBRyBhZ2VudC4iCiAgICBkZWYgcmVjb3JkX2ludGVyYWN0aW9uKHNlbGYsICphLCAqKmspOgogICAgICAgIHJldHVybiBUcnVlCgpyZXRyaWV2ZXIgPSBNb2NrUmV0cmlldmVyKCkKbGxtID0gTW9ja0xMTSgpCnBlcnNvbmFsaXR5ID0gTW9ja1BlcnNvbmFsaXR5KCkKCnF1ZXJ5ID0gIkRvZXMgdGhlIG9mZmxpbmUgUkFHIHBhdGggd29yayBpbiBDST8iCmRvY3MgPSByZXRyaWV2ZXIuaHlicmlkX3NlYXJjaChxdWVyeSkKcHJvbXB0ID0gInt9XG5Db250ZXh0OiB7fVxuUXVlcnk6IHt9Ii5mb3JtYXQocGVyc29uYWxpdHkuZ2V0X3N5c3RlbV9wcm9tcHRfYWRkaXRpdmUoKSwgZG9jcywgcXVlcnkpCmFuc3dlciA9IGxsbS5nZW5lcmF0ZShwcm9tcHQpCgpwcmludCgiUXVlcnk6IiwgcXVlcnkpCnByaW50KCJEb2NzIHJldHJpZXZlZDoiLCBsZW4oZG9jcykpCnByaW50KCJBbnN3ZXI6IiwgYW5zd2VyKQpwcmludCgiRW11bGF0ZWQgUkFHIHF1ZXJ5IHBhc3NlZCIpCg==').decode())"
+          # Builds a real ChromaDB + BM25 index from data/corpus and runs a real
+          # HybridRetriever query that the committed corpus answers, asserting the
+          # fused score clears retrieval.min_score (a genuine vault hit, not a mock).
+          python -m tests.ci_rag_smoke
 
       - name: Run safe tests + coverage
         shell: bash
