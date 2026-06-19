@@ -4,7 +4,7 @@
 
 Invokes the LangGraph controller for every query.
 Handles user confirmation flow for Grok fallback at the HTTP layer.
-Binds to loopback only (see api.host / api.port in config.yaml).
+Binds to 127.0.0.1:8787 ONLY.  # DevSkim: ignore DS176209 - intentional loopback-only binding
 
 CHANGES FROM ORIGINAL (soul.md / persistent personality integration):
   - Initialize PersonalityManager from config if personality.enabled

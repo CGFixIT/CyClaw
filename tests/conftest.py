@@ -17,7 +17,7 @@ import yaml
 from retrieval.hybrid_search import SearchResult
 
 
-# DevSkim: ignore DS162092,DS137138 - test fixtures; loopback addresses are intentional
+# DevSkim: ignore DS176209 DS137138 - test fixtures; loopback addresses are intentional
 TEST_CONFIG = {
     "app": {"name": "cyclaw-test", "env": "test", "mode": "offline", "debug": True},
     "models": {
@@ -42,13 +42,13 @@ TEST_CONFIG = {
         "privacy": {"redact_emails": True, "redact_ips": True,
                     "redact_secrets_like": ["AKIA[0-9A-Z]{16}"]}
     },
-    "api": {"host": "127.0.0.1", "port": 8787, "request_timeout_sec": 30},  # DevSkim: ignore DS162092
+    "api": {"host": "127.0.0.1", "port": 8787, "request_timeout_sec": 30},  # DevSkim: ignore DS176209
     "logging": {"level": "DEBUG", "log_file": "", "audit_file": "",
                 "audit_fields": {"include_query_hash": True, "include_top_score": True,
                                  "include_retrieval_mode": True, "include_online_escalated": True,
                                  "include_model_used": True}},
     "security": {"require_env": ["GROK_API_KEY"],
-                 "allowed_origins": ["http://127.0.0.1", "http://localhost"]},  # DevSkim: ignore DS162092,DS137138
+                 "allowed_origins": ["http://127.0.0.1", "http://localhost"]},  # DevSkim: ignore DS176209 DS137138
     "personality": {"enabled": False, "soul_path": "", "db_path": "", "interaction_ttl_days": 90}
 }
 

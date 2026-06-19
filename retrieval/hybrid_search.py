@@ -69,6 +69,9 @@ class HybridRetriever:
                 f"Collection '{collection_name}' not found in ChromaDB: {e}"
             )
 
+        # Validate path is a regular file before deserializing. The BM25 index is
+        # project-generated (retrieval/indexer.py) and read from a config-controlled
+        # path — not from user-supplied input.  # DevSkim: ignore DS161085
         resolved = Path(bm25_path).resolve()
         if not resolved.is_file():
             raise IndexNotFoundError(f"BM25 index path is not a regular file: {bm25_path}")
