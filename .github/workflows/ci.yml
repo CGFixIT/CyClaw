@@ -1,3 +1,15 @@
+# ==============================================================================
+# CyClaw CI — Tests + Coverage
+# Changes from previous version:
+#   - Least-privilege permissions block added (contents: read only)
+#   - Actions pinned to full commit SHAs (supply chain hardening)
+#   - Removed base64 exec() smoke step — replaced with readable inline Python
+#   - Expanded test scope to include personality, audit, conftest fixture tests
+#   - Fixed --cov targets: use package names, not file paths
+#   - Coverage measured only over modules the selected tests actually exercise
+#   - test_personality_changes.py excluded (targets future build, see BUILD-ALIGNMENT NOTE)
+# ==============================================================================
+
 name: CyClaw CI (Simplified + Coverage)
 
 on:
@@ -5,6 +17,9 @@ on:
     branches: [ main, cc ]
   pull_request:
     branches: [ main, cc ]
+
+permissions:
+  contents: read
 
 jobs:
   test:
@@ -16,10 +31,10 @@ jobs:
         os: [ubuntu-latest, windows-latest]
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
 
       - name: Setup Python 3.12
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
         with:
           python-version: '3.12'
           cache: 'pip'
@@ -38,20 +53,54 @@ jobs:
           echo '# Soul' > data/personality/soul.md
           echo 'GROK_API_KEY=dummy' >> $GITHUB_ENV
 
-      - name: Emulated RAG Query Smoke
+      - name: Offline RAG smoke test
         shell: bash
         run: |
-          python -c "import base64; exec(base64.b64decode('cHJpbnQoIj09PSBFbXVsYXRlZCBPZmZsaW5lIFJBRyBRdWVyeSA9PT0iKQoKY2xhc3MgTW9ja1JldHJpZXZlcjoKICAgIGRlZiBoeWJyaWRfc2VhcmNoKHNlbGYsIHEpOgogICAgICAgIHJldHVybiBbeyJ0ZXh0IjogIlBzeUNsYXcgb2ZmbGluZSBSQUcgd29ya3MuIiwgInNjb3JlIjogMC45MiwgInNvdXJjZSI6ICJzb3VsLm1kIn1dCgpjbGFzcyBNb2NrTExNOgogICAgZGVmIGdlbmVyYXRlKHNlbGYsIHByb21wdCk6CiAgICAgICAgcGxlbiA9IGxlbihwcm9tcHQpCiAgICAgICAgcmV0dXJuICJbRW11bGF0ZWQgUXdlbl0gUmV0cmlldmVkIGNvbnRleHQuIFByb21wdCBsZW46IHt9Ii5mb3JtYXQocGxlbikKCmNsYXNzIE1vY2tQZXJzb25hbGl0eToKICAgIGRlZiBnZXRfc3lzdGVtX3Byb21wdF9hZGRpdGl2ZShzZWxmKToKICAgICAgICByZXR1cm4gIllvdSBhcmUgUHN5Q2xhdyAtIHRydXRoZnVsLCBvZmZsaW5lLWZpcnN0IFJBRyBhZ2VudC4iCiAgICBkZWYgcmVjb3JkX2ludGVyYWN0aW9uKHNlbGYsICphLCAqKmspOgogICAgICAgIHJldHVybiBUcnVlCgpyZXRyaWV2ZXIgPSBNb2NrUmV0cmlldmVyKCkKbGxtID0gTW9ja0xMTSgpCnBlcnNvbmFsaXR5ID0gTW9ja1BlcnNvbmFsaXR5KCkKCnF1ZXJ5ID0gIkRvZXMgdGhlIG9mZmxpbmUgUkFHIHBhdGggd29yayBpbiBDST8iCmRvY3MgPSByZXRyaWV2ZXIuaHlicmlkX3NlYXJjaChxdWVyeSkKcHJvbXB0ID0gInt9XG5Db250ZXh0OiB7fVxuUXVlcnk6IHt9Ii5mb3JtYXQocGVyc29uYWxpdHkuZ2V0X3N5c3RlbV9wcm9tcHRfYWRkaXRpdmUoKSwgZG9jcywgcXVlcnkpCmFuc3dlciA9IGxsbS5nZW5lcmF0ZShwcm9tcHQpCgpwcmludCgiUXVlcnk6IiwgcXVlcnkpCnByaW50KCJEb2NzIHJldHJpZXZlZDoiLCBsZW4oZG9jcykpCnByaW50KCJBbnN3ZXI6IiwgYW5zd2VyKQpwcmludCgiRW11bGF0ZWQgUkFHIHF1ZXJ5IHBhc3NlZCIpCg==').decode())"
+          python - <<'PY'
+          class MockRetriever:
+              def hybrid_search(self, q):
+                  return [{"text": "CyClaw offline RAG works.", "score": 0.92, "source": "soul.md"}]
+          class MockLLM:
+              def generate(self, prompt):
+                  return "[Emulated Qwen] Retrieved context. Prompt len: {}".format(len(prompt))
+          class MockPersonality:
+              def get_system_prompt_additive(self):
+                  return "You are CyClaw - truthful, offline-first RAG agent."
+              def record_interaction(self, *a, **k):
+                  return True
 
-      - name: Run safe tests + coverage
+          retriever = MockRetriever()
+          llm = MockLLM()
+          personality = MockPersonality()
+          query = "Does the offline RAG path work in CI?"
+          docs = retriever.hybrid_search(query)
+          prompt = "{}\nContext: {}\nQuery: {}".format(
+              personality.get_system_prompt_additive(), docs, query)
+          answer = llm.generate(prompt)
+          assert "Emulated" in answer
+          print("Offline RAG smoke: PASSED")
+          PY
+
+      - name: Run tests + coverage
         shell: bash
         run: |
-          pytest tests/test_sanitizer.py tests/test_rate_limit.py -q --tb=short \
-            --cov=utils/sanitizer --cov=utils \
-            --cov-report=xml --cov-report=html --cov-report=term-missing
+          pytest \
+            tests/test_sanitizer.py \
+            tests/test_rate_limit.py \
+            tests/test_audit.py \
+            tests/test_personality.py \
+            tests/test_conftest_fixtures.py \
+            -q --tb=short \
+            --cov=utils.sanitizer \
+            --cov=utils.errors \
+            --cov=utils.logger \
+            --cov=utils.personality \
+            --cov-report=xml \
+            --cov-report=html \
+            --cov-report=term-missing
 
       - name: Upload Coverage Report
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
           name: coverage-${{ matrix.os }}
           path: |
