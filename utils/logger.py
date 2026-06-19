@@ -54,7 +54,7 @@ _config_cache: Optional[dict] = None
 def _get_config(config_path: str = "config.yaml") -> dict:
     global _config_cache
     if _config_cache is None:
-        with open(config_path) as f:
+        with open(config_path, encoding="utf-8") as f:
             _config_cache = yaml.safe_load(f)
     return _config_cache
 
@@ -92,5 +92,5 @@ def audit_log(event: dict, config_path: str = "config.yaml") -> None:
         if isinstance(value, str) and key not in ("query_hash", "timestamp", "event"):
             event[key] = redact_sensitive(value, cfg)
     event["timestamp"] = datetime.now(timezone.utc).isoformat()
-    with open(log_path, "a") as f:
+    with open(log_path, "a", encoding="utf-8") as f:
         f.write(json.dumps(event) + "\n")

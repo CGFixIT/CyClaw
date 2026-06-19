@@ -30,7 +30,7 @@ def _load_filter(config_path: str) -> Tuple[bool, int, Tuple[Pattern, ...]]:
 
     Returns ``(enabled, max_input_chars, compiled_patterns)``.
     """
-    with open(config_path) as f:
+    with open(config_path, encoding="utf-8") as f:
         cfg = yaml.safe_load(f) or {}
 
     # ``or {}`` at each level: a present-but-empty ``policy:`` or

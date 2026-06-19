@@ -20,7 +20,7 @@ from utils.errors import CorpusEmptyError
 from utils.sanitizer import sanitize_chunk
 
 def load_config(config_path: str = "config.yaml") -> dict:
-    with open(config_path) as f:
+    with open(config_path, encoding="utf-8") as f:
         return yaml.safe_load(f)
 
 def load_corpus(corpus_path: str, extensions: List[str]) -> List[Tuple[str, str]]:

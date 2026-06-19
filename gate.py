@@ -148,7 +148,7 @@ def _sanitize_error(exc: Exception) -> str:
 # App Init
 # =============================================================================
 
-with open("config.yaml") as f:
+with open("config.yaml", encoding="utf-8") as f:
     cfg = yaml.safe_load(f)
 
 setup_logging(cfg)

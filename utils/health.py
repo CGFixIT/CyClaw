@@ -13,7 +13,7 @@ import yaml
 from .errors import HealthStatus, LLMServiceError
 
 def check_all(config_path: str = "config.yaml") -> List[HealthStatus]:
-    with open(config_path) as f:
+    with open(config_path, encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
     results = []
     llm_base = cfg["models"]["local_llm"]["base_url"]

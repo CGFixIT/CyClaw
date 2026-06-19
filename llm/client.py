@@ -11,7 +11,7 @@ from utils.errors import LLMServiceError, GrokServiceError
 
 class LocalLLMClient:
     def __init__(self, config_path: str = "config.yaml"):
-        with open(config_path) as f:
+        with open(config_path, encoding="utf-8") as f:
             cfg = yaml.safe_load(f)
         llm_cfg = cfg["models"]["local_llm"]
         self.base_url = llm_cfg["base_url"]
@@ -44,7 +44,7 @@ class LocalLLMClient:
 
 class GrokClient:
     def __init__(self, config_path: str = "config.yaml"):
-        with open(config_path) as f:
+        with open(config_path, encoding="utf-8") as f:
             cfg = yaml.safe_load(f)
         grok_cfg = cfg["models"]["grok"]
         self.base_url = grok_cfg["base_url"]
