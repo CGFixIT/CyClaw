@@ -93,6 +93,8 @@ jobs:
             tests/test_stemmer.py \
             tests/test_hybrid_search.py \
             tests/test_graph.py \
+            tests/test_gate.py \
+            tests/test_telemetry_kill.py \
             tests/test_mcp_server.py \
             tests/test_personality_changes.py \
             tests/test_sync_config.py \
