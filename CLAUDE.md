@@ -1,11 +1,22 @@
-# CLAUDE.md — CyClaw
+# CLAUDE.md
 
-This file is automatically loaded by Claude Code at session start. It is the authoritative operating contract for all agent work in this repository. Read it fully before acting.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+It is the authoritative operating contract for all agent work in this repository. Read it fully before acting.
+
+<<<<<<< HEAD
+---
+
+## Project Overview
+
+=======
+It is the authoritative operating contract for all agent work in this repository. Read it fully before acting.
 
 ---
 
 ## Project Overview
 
+>>>>>>> 3f445c2 (docs: combine CLAUDE.md — /init prefix + main's comprehensive rewrite)
 CyClaw is a Python FastAPI RAG server (`gate.py`) backed by a LangGraph security topology, ChromaDB + BM25 hybrid retrieval, and a local LLM via LM Studio. It binds exclusively to `127.0.0.1:8787`.
 
 **Quick start:** `.claude/skills/run-cyclaw/SKILL.md`
@@ -297,6 +308,9 @@ Skills live at `.claude/skills/<name>/SKILL.md`. When a skill is not present in 
 | Skill | Type | Purpose |
 |---|---|---|
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 3f445c2 (docs: combine CLAUDE.md — /init prefix + main's comprehensive rewrite)
 | `run-cyclaw` | one-shot | Smoke-test the FastAPI server |
 | `architecture-refactor` | loop | Iterative architecture cleanup |
 | `speed-refactor` | loop | Optimize all endpoints to <50 ms |
@@ -313,6 +327,7 @@ Skills live at `.claude/skills/<name>/SKILL.md`. When a skill is not present in 
 | `create-session-notes` | one-shot | Produce structured session handoff notes |
 | `memory-consolidation` | one-shot | Consolidate and compress task memory |
 | `memory-extraction` | one-shot | Extract key decisions and facts from context |
+<<<<<<< HEAD
 
 ---
 
@@ -364,6 +379,39 @@ Utility prompts live in `.claude/utility-prompts/`. Reference by path when neede
 
 Reference prompts for tools and patterns live in `.claude/tools/`, `.claude/patterns/`, and `.claude/utility-prompts/`.
 >>>>>>> 096b593 (docs: update CLAUDE.md skills table with 10 new skills)
+=======
+
+---
+
+## Patterns Reference
+
+Reusable behavioral patterns live in `.claude/patterns/`. They are modular instruction segments — reference them explicitly when needed rather than treating them as auto-loaded.
+
+| Pattern File | Purpose |
+|---|---|
+| `01-system-prompt-architecture.md` | Operating contract structure: identity, constraints, workflow, output format |
+| `02-core-behavioral-rules.md` | Day-to-day execution defaults: when to ask, when to proceed, communication style |
+| `03-safety-and-risk-assessment.md` | Risk tier classification (low/medium/high) and required safeguards per tier |
+| `04-tool-specific-instructions.md` | Per-tool ordering, constraints, and failure recovery |
+| `05-agent-delegation.md` | Delegation rules, parent responsibilities, and handoff protocol |
+| `06-verification-and-testing.md` | Verification ladder: local checks → targeted tests → integration checks |
+| `07-memory-and-context.md` | Compact memory model and context management rules |
+| `08-multi-agent-coordination.md` | Role assignments, handoff protocol, conflict resolution |
+| `09-auxiliary-prompts.md` | Modular micro-instruction library: debug, refactor, test, docs helpers |
+
+---
+
+## Utility Prompts Reference
+
+Utility prompts live in `.claude/utility-prompts/`. Reference by path when needed.
+
+| File | Purpose |
+|---|---|
+| `coordinator-prompt.md` | Full orchestrator identity and workflow for multi-agent sessions |
+| `next-action-suggestion.md` | Suggest next logical action at end of a task |
+| `session-title.md` | Generate a concise, descriptive session title |
+| `tool-summary.md` | Summarize tools used and outcomes in a session |
+>>>>>>> 3f445c2 (docs: combine CLAUDE.md — /init prefix + main's comprehensive rewrite)
 
 ---
 
