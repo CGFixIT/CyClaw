@@ -82,6 +82,9 @@ jobs:
             tests/test_audit.py \
             tests/test_personality.py \
             tests/test_conftest_fixtures.py \
+            tests/test_stemmer.py \
+            tests/test_hybrid_search.py \
+            tests/test_graph.py \
             tests/test_sync_config.py \
             tests/test_sync_filters.py \
             tests/test_sync_runner.py \
