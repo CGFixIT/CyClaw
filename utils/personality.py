@@ -100,9 +100,13 @@ class PersonalityManager:
 
         content = self.soul_path.read_text(encoding="utf-8")
         file_hash = self._sha256(content)
-        row = self.conn.execute(
-            "SELECT sha256 FROM soul_versions ORDER BY id DESC LIMIT 1"
-        ).fetchone()
+        # Read under the same lock that guards writes: the shared sqlite3
+        # connection is used across threads (check_same_thread=False), so a
+        # SELECT racing a concurrent INSERT/commit could observe a torn view.
+        with self._lock:
+            row = self.conn.execute(
+                "SELECT sha256 FROM soul_versions ORDER BY id DESC LIMIT 1"
+            ).fetchone()
 
         if row and row["sha256"] != file_hash:
             audit_log({
@@ -132,9 +136,13 @@ class PersonalityManager:
         return self.soul_core
 
     def get_version(self) -> int:
-        row = self.conn.execute(
-            "SELECT MAX(id) FROM soul_versions"
-        ).fetchone()
+        # Same rationale as _load_soul: guard the read against concurrent writes
+        # on the shared connection. Callers (apply_evolution) invoke this only
+        # AFTER releasing the write lock, so there is no re-entrant nesting.
+        with self._lock:
+            row = self.conn.execute(
+                "SELECT MAX(id) FROM soul_versions"
+            ).fetchone()
         return int(row[0]) if row and row[0] is not None else 0
 
     def _scan_injection(self, text: str) -> List[str]:

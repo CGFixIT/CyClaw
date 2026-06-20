@@ -834,14 +834,17 @@ function addEntry(type, label, text, isHtml = false, meta = null) {
 
   let html = '';
   if (label) {
-    html += `<div class="entry-label">${label}</div>`;
+    html += `<div class="entry-label">${escHtml(label)}</div>`;
   }
   html += `<div class="entry-text">${isHtml ? text : escHtml(text)}</div>`;
 
   if (meta) {
     html += '<div class="meta-row">';
     for (const m of meta) {
-      html += `<span class="meta-tag">${m.k}: <span class="val">${m.v}</span></span>`;
+      // Escape meta keys/values: they flow into innerHTML and can carry
+      // server-derived strings (model name, retrieval_mode, …). Without
+      // escaping, a value containing markup would be parsed as HTML.
+      html += `<span class="meta-tag">${escHtml(m.k)}: <span class="val">${escHtml(m.v)}</span></span>`;
     }
     html += '</div>';
   }

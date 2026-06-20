@@ -116,8 +116,11 @@ def _sanitize_error(exc: Exception) -> str:
     msg = str(exc)
     for pattern in _SECRET_PATTERNS:
         msg = pattern.sub('[REDACTED]', msg)
-    # Also redact any live env var that looks like a credential (length > 8)
-    for env_key in ("GROK_API_KEY", "LANGCHAIN_API_KEY", "LANGSMITH_API_KEY", "SSC_TOKEN"):
+    # Also redact any live env var that looks like a credential (length > 8).
+    # CYCLAW_API_KEY is the server's own bearer secret — it must be in this list
+    # so a stray exception echoing it (e.g. an auth-path error) cannot leak the
+    # key in an HTTP 500 body.
+    for env_key in ("CYCLAW_API_KEY", "GROK_API_KEY", "LANGCHAIN_API_KEY", "LANGSMITH_API_KEY", "SSC_TOKEN"):
         val = os.environ.get(env_key, "")
         if val and len(val) > 8:
             msg = msg.replace(val, '[REDACTED]')
