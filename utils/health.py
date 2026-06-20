@@ -5,6 +5,7 @@ embeddings are local sentence-transformers.
 """
 
 import time
+from functools import lru_cache
 from typing import List
 
 import httpx
@@ -12,9 +13,16 @@ import yaml
 
 from .errors import HealthStatus, LLMServiceError
 
-def check_all(config_path: str = "config.yaml") -> List[HealthStatus]:
+@lru_cache(maxsize=8)
+def _health_cfg(config_path: str) -> dict:
+    """Parse config once per path. check_all runs on every /health request, so
+    re-reading and re-parsing the YAML each time was avoidable disk + parse I/O.
+    """
     with open(config_path, encoding="utf-8") as f:
-        cfg = yaml.safe_load(f)
+        return yaml.safe_load(f)
+
+def check_all(config_path: str = "config.yaml") -> List[HealthStatus]:
+    cfg = _health_cfg(config_path)
     results = []
     llm_base = cfg["models"]["local_llm"]["base_url"]
     results.append(_ping(f"{llm_base}/models", "lm_studio"))

@@ -11,8 +11,9 @@ import json
 import logging
 import re
 from datetime import datetime, timezone
+from functools import lru_cache
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
 
 import yaml
 
@@ -65,19 +66,41 @@ def reset_config_cache() -> None:
 def hash_query(query: str) -> str:
     return hashlib.sha256(query.encode("utf-8")).hexdigest()
 
+@lru_cache(maxsize=8)
+def _compiled_redactors(
+    redact_emails: bool, redact_ips: bool, secret_patterns: Tuple[str, ...]
+) -> Tuple[Tuple[re.Pattern, str], ...]:
+    """Compile the active redaction patterns once per privacy configuration.
+
+    redact_sensitive runs on every audited field of every query; recompiling
+    these regexes each call was pure overhead. Keyed on the (hashable) privacy
+    settings so a config change still produces a fresh pattern set.
+    """
+    compiled = []
+    if redact_emails:
+        compiled.append((re.compile(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'),
+                         '[REDACTED_EMAIL]'))
+    if redact_ips:
+        compiled.append((re.compile(r'\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b'),
+                         '[REDACTED_IP]'))
+    for pattern in secret_patterns:
+        try:
+            compiled.append((re.compile(pattern), '[REDACTED_SECRET]'))
+        except re.error:
+            pass
+    return tuple(compiled)
+
 def redact_sensitive(text: str, cfg: Optional[dict] = None) -> str:
     if cfg is None:
         cfg = _get_config()
     privacy = cfg.get("policy", {}).get("privacy", {})
-    if privacy.get("redact_emails", False):
-        text = re.sub(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', '[REDACTED_EMAIL]', text)
-    if privacy.get("redact_ips", False):
-        text = re.sub(r'\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b', '[REDACTED_IP]', text)
-    for pattern in privacy.get("redact_secrets_like", []):
-        try:
-            text = re.sub(pattern, '[REDACTED_SECRET]', text)
-        except re.error:
-            pass
+    redactors = _compiled_redactors(
+        privacy.get("redact_emails", False),
+        privacy.get("redact_ips", False),
+        tuple(privacy.get("redact_secrets_like", []) or []),
+    )
+    for pattern, replacement in redactors:
+        text = pattern.sub(replacement, text)
     return text
 
 def audit_log(event: dict, config_path: str = "config.yaml") -> None:

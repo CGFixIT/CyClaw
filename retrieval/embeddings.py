@@ -42,10 +42,25 @@ def _embeddings_cfg(config_path: str) -> tuple:
         emb_cfg = yaml.safe_load(f)["models"]["embeddings"]
     return emb_cfg["model"], emb_cfg.get("cache_dir", "")
 
-def get_embedding(text: str, config_path: str = "config.yaml") -> List[float]:
+@lru_cache(maxsize=2048)
+def _cached_embedding(text: str, config_path: str) -> tuple:
+    """Memoize query embeddings keyed on (text, config_path).
+
+    Encoding a query is a full SentenceTransformer forward pass -- the most
+    expensive step on the retrieval hot path. Identical queries (common in
+    practice) previously re-ran the model every time. The cached value is an
+    immutable tuple so it can be safely shared across callers.
+    """
     model_name, cache_dir = _embeddings_cfg(config_path)
     model = _load_model(model_name, cache_dir)
-    return model.encode(text, normalize_embeddings=True).tolist()
+    return tuple(model.encode(text, normalize_embeddings=True).tolist())
+
+def get_embedding(text: str, config_path: str = "config.yaml") -> List[float]:
+    return list(_cached_embedding(text, config_path))
+
+def reset_embedding_cache() -> None:
+    """Clear the memoized query-embedding cache (e.g. after a model swap)."""
+    _cached_embedding.cache_clear()
 
 def get_embeddings_batch(texts: List[str], config_path: str = "config.yaml") -> List[List[float]]:
     model_name, cache_dir = _embeddings_cfg(config_path)
