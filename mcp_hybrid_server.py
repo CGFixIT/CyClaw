@@ -42,6 +42,13 @@ def _error(msg_id, code: int, message: str) -> dict:
     return {"jsonrpc": "2.0", "id": msg_id, "error": {"code": code, "message": message}}
 
 def _handle_search(msg_id, args: dict, retriever: HybridRetriever) -> dict:
+    # DESIGN DECISION (PR #99 #12): this path intentionally does NOT run
+    # utils.sanitizer.check_input. The MCP server is retrieval-only —
+    # CAPABILITIES["sampling"] is None, so there is no LLM to escalate a prompt
+    # injection to — and it serves a trusted local stdio caller. Prompt-injection
+    # filtering here would have no escalation target to protect. If strict policy
+    # parity with the HTTP path is ever desired, add check_input(query) below and
+    # mirror the HTTP audit-on-block; it is omitted by design today.
     query = args.get("query", "")
     top_k = args.get("top_k", 5)
     mode = args.get("mode", "hybrid")

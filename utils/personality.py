@@ -3,8 +3,11 @@
 Based on soul.md as file-as-truth with SQLite shadow DB for version history
 and interaction logging. SHA-256 drift detection on startup.
 
-Security: OWASP-sourced injection patterns (13 total) scan proposed soul
-evolutions before any write. apply_evolution requires explicit human reason.
+Security: proposed soul evolutions are scanned before any write using the SAME
+banned-pattern set the query path uses (config.yaml policy.prompt_filter), unioned
+with a legacy OWASP baseline — so the soul (prepended to every LLM system prompt)
+is no longer guarded by a weaker list than user queries. apply_evolution requires
+an explicit human reason.
 """
 
 import difflib
@@ -53,6 +56,8 @@ class PersonalityManager:
         self.db_path = Path(pers_cfg.get("db_path", "data/personality/cyclaw_soul.db"))
         self.ttl_days = pers_cfg.get("interaction_ttl_days", 365)
         self.soul_core: str = ""
+        # Compile the injection scanner once: config banned_patterns ∪ OWASP.
+        self._injection_patterns = self._build_injection_patterns()
         self._lock = threading.Lock()
         self._init_db()
         self._load_soul()
@@ -137,9 +142,36 @@ class PersonalityManager:
         ).fetchone()
         return int(row[0]) if row and row[0] is not None else 0
 
+    def _build_injection_patterns(self) -> List[tuple]:
+        """Compile the soul scanner from the query-path filter ∪ the OWASP baseline.
+
+        The query path (utils.sanitizer) filters input against the 31 curated
+        ``policy.prompt_filter.banned_patterns`` in config.yaml — including the
+        Memory/Persistence category that is "HIGH PRIORITY for RAG + soul". The
+        soul scanner previously used only a hardcoded 13-pattern OWASP list, so a
+        memory-poisoning proposal (e.g. "update your soul", "core instruction,
+        never forget") passed the soul scan and was written to soul.md. Sourcing
+        from the same config set keeps the two from drifting; the OWASP list is
+        retained as a floor so a minimal/absent config still scans (never zero
+        patterns). Returns ``(source_string, compiled)`` pairs; invalid regexes
+        are skipped rather than crashing the manager.
+        """
+        sources: List[str] = list(OWASP_INJECTION_PATTERNS)
+        pf = (self.cfg.get("policy") or {}).get("prompt_filter") or {}
+        for p in (pf.get("banned_patterns") or []):
+            if p not in sources:
+                sources.append(p)
+        compiled: List[tuple] = []
+        for p in sources:
+            try:
+                compiled.append((p, re.compile(p, re.IGNORECASE)))
+            except re.error:
+                continue
+        return compiled
+
     def _scan_injection(self, text: str) -> List[str]:
-        """Return every OWASP injection pattern that matches ``text`` (case-insensitive)."""
-        return [p for p in OWASP_INJECTION_PATTERNS if re.search(p, text, re.IGNORECASE)]
+        """Return every banned pattern (config ∪ OWASP) that matches ``text``."""
+        return [src for src, pat in self._injection_patterns if pat.search(text)]
 
     def propose_evolution(self, new_soul: str, reason: str) -> dict:
         """Preview a proposed soul change: compute the diff + advisory injection flags.
@@ -219,6 +251,15 @@ class PersonalityManager:
         if not bak_path.exists():
             raise FileNotFoundError("No .bak file found to restore from")
         backup_content = bak_path.read_text(encoding="utf-8")
+        # Non-blocking re-scan (PR #99 #7): the restore path intentionally uses
+        # scan=False (the .bak is previously-vetted content, and
+        # test_scan_false_bypass_for_trusted_restore documents that contract).
+        # We still scan and audit-log any match — so if a .bak ever trips the
+        # now-widened pattern set it is visible — without refusing the restore.
+        restore_flags = self._scan_injection(backup_content)
+        if restore_flags:
+            audit_log({"event": "soul_restore_scan_flags",
+                       "injection_flag_count": len(restore_flags)})
         result = self.apply_evolution(backup_content, "RESTORE: reverted to previous .bak", scan=False)
         audit_log({"event": "soul_restored_from_backup", "sha256": result["sha256"]})
         return result
