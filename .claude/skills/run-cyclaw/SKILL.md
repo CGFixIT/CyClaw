@@ -18,7 +18,7 @@ returns an `[LLM Error: ...]` answer), and all structural flows are testable.
 ## Prerequisites
 
 ```bash
-# Python 3.11 or 3.12 (3.12 is the CI target)
+# Python 3.12 required
 # Install torch CPU first (avoids PyPI torch pulling CUDA)
 pip install torch==2.6.0+cpu --index-url https://download.pytorch.org/whl/cpu
 pip install -r requirements.txt --ignore-installed PyYAML
@@ -31,15 +31,18 @@ reinstall with `--ignore-installed PyYAML`.
 
 ## Build (retrieval index)
 
-Must be run once before the server starts; idempotent:
+Must be run once before the server starts; idempotent. The smoke script backs up
+your real `soul.md` before building, uses a minimal temp one, and restores it
+when done:
 
 ```bash
 mkdir -p data/personality index logs
-echo '# Soul' > data/personality/soul.md   # minimal soul for gate init
 GROK_API_KEY=dummy python3 -m retrieval.indexer
 ```
 
 Expected output: `[Indexer] Done. ChromaDB: index/chroma_db, BM25: index/bm25.json`
+
+Your `data/personality/soul.md` is never modified by the smoke test.
 
 ---
 
@@ -125,6 +128,7 @@ GROK_API_KEY=dummy pytest tests/test_sanitizer.py tests/test_security.py \
 - **`GROK_API_KEY`** must be set (any non-empty value works) — gate.py checks
   `security.require_env` at startup and warns if missing. `dummy` is fine for
   offline mode.
-- **`soul.md` must exist** at `data/personality/soul.md` before the server
-  starts (PersonalityManager reads it at init). The smoke script creates a
-  minimal one if absent.
+- **`soul.md` preservation** — The smoke script backs up your real
+  `data/personality/soul.md`, uses a minimal temp one during the test, and
+  restores the original afterward. Your personality file is guaranteed to be
+  unmodified.
