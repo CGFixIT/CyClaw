@@ -40,7 +40,7 @@ Zero telemetry. Binds to `127.0.0.1:8787` only. All embeddings run locally via `
 ## Architecture
 
 ```
-User Query (HTTP POST /query or MCP tool call)
+User Query (HTTP POST /query or MCMC tool call)
          │
          ▼
     ┌─────────────────────────────────────────────────────┐
@@ -112,8 +112,8 @@ cd CyClaw
 python3.12 -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
 
-# 1) Install CPU-only torch first
-pip install torch==2.4.1+cpu --index-url https://download.pytorch.org/whl/cpu
+# 1) Install CPU-only torch first (pinned >=2.6.0 for CVE-2025-32434 safety)
+pip install torch==2.6.0+cpu --index-url https://download.pytorch.org/whl/cpu
 
 # 2) Install the rest, pinned to the verified transitive tree.
 pip install -r requirements.txt -c constraints.txt
@@ -240,6 +240,7 @@ CyClaw maintains a persistent identity through `soul.md`. Key properties:
 | Grok gating | Triple gate: `mode=hybrid` AND `grok.enabled=true` AND `user_confirmed_online=true` |
 | Soul writes | Enforced injection scan at the write boundary (`apply_evolution`, → `400 PROMPT_INJECTION_BLOCKED`) + human reason string + atomic (`os.replace`) crash-safe write |
 | Corpus | Chunk sanitization at index time via `sanitizer.py` |
+| Model Weights | Trusted/verified sources only. Safetensors strongly preferred. `torch.load(..., weights_only=True)` alone was insufficient on torch<2.6 (CVE-2025-32434). We pin torch==2.6.0+cpu and keep loading paths (embeddings.py) minimal + documented. |
 
 ---
 
