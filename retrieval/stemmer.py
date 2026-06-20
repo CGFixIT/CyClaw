@@ -16,11 +16,10 @@ _stemmer = PorterStemmer()
 
 # Tokenizer: extracts words starting with a letter (2+ chars). Avoids nltk.data.load()
 # so the NLTK URL-encoded path-traversal CVE (punkt tokenizer) is not reachable.
-# Both regexes compiled once at import rather than on every call.
+# Compiled once at import rather than on every call. findall() returns only
+# maximal runs of this exact shape, so every token is already letter-led and
+# >= 2 chars by construction — no second-pass validation is required.
 _WORD_RE = re.compile(r'[a-z][a-z0-9_-]+')
-
-
-_TOKEN_RE = re.compile(r'^[a-z][a-z0-9_-]{1,}$')
 
 _CUSTOM_STEMS = {
     "embedding": "embed", "embeddings": "embed",
@@ -43,8 +42,9 @@ def stem_token(token: str) -> str:
     return _stemmer.stem(lower)
 
 def tokenize_and_stem(text: str) -> List[str]:
-    tokens = _WORD_RE.findall(text.lower())
-    return [
-        stem_token(t) for t in tokens
-        if _TOKEN_RE.match(t)
-    ]
+    # _WORD_RE.findall() already guarantees each token matches [a-z][a-z0-9_-]+
+    # (letter-led, length >= 2). The previous `if _TOKEN_RE.match(t)` filter
+    # re-validated that exact same shape and therefore always returned True —
+    # a redundant per-token regex match on the index/query hot path. Dropping it
+    # produces byte-for-byte identical output with one fewer regex op per token.
+    return [stem_token(t) for t in _WORD_RE.findall(text.lower())]
