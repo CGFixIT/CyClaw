@@ -84,6 +84,29 @@ class TestRedactSensitive:
         result = redact_sensitive("Key: AKIAIOSFODNN7EXAMPLE", cfg)
         assert "[REDACTED_SECRET]" in result
 
+    # PR #99 #10: the audit-path secret list must also cover Bearer tokens and
+    # api_key= assignment forms (previously only gate._sanitize_error did).
+    _SECRET_CFG = {"policy": {"privacy": {"redact_emails": False, "redact_ips": False,
+        "redact_secrets_like": [
+            r"Bearer\s+[A-Za-z0-9\-_.]+",
+            r'[Aa][Pp][Ii][_-]?[Kk][Ee][Yy]["\'\s]*[:=]["\'\s]*[\w\-.]{4,}',
+        ]}}}
+
+    def test_redacts_bearer_token(self):
+        result = redact_sensitive("Authorization: Bearer abc.def-ghi_123", self._SECRET_CFG)
+        assert "[REDACTED_SECRET]" in result
+        assert "abc.def-ghi_123" not in result
+
+    def test_redacts_api_key_assignment(self):
+        for s in ("api_key=SUPERSECRETVALUE", '"api-key": "XYZ12345"', "apikey = longsecret123"):
+            result = redact_sensitive(s, self._SECRET_CFG)
+            assert "[REDACTED_SECRET]" in result, s
+
+    def test_api_key_prose_not_over_redacted(self):
+        # Anchored to a : or = separator, so plain prose must survive untouched.
+        for s in ("plain apikey word here", "see the api key documentation"):
+            assert redact_sensitive(s, self._SECRET_CFG) == s
+
 
 class TestAuditLog:
     def test_writes_jsonl(self, audit_config):
@@ -113,3 +136,28 @@ class TestAuditLog:
 
         lines = Path(audit_file).read_text().strip().split("\n")
         assert len(lines) == 2
+
+    def test_retrieval_error_secret_redacted_in_audit(self, tmp_path):
+        """PR #99 #10: a retrieval-degraded error string carrying a token must be
+        written to the audit log with the secret redacted, not in cleartext."""
+        audit_file = str(tmp_path / "audit.jsonl")
+        cfg = {
+            "logging": {"audit_file": audit_file, "audit_fields": {"include_query_hash": True}},
+            "policy": {"privacy": {"redact_emails": False, "redact_ips": False,
+                "redact_secrets_like": [
+                    r"Bearer\s+[A-Za-z0-9\-_.]+",
+                    r'[Aa][Pp][Ii][_-]?[Kk][Ee][Yy]["\'\s]*[:=]["\'\s]*[\w\-.]{4,}',
+                ]}},
+        }
+        config_path = tmp_path / "config.yaml"
+        with open(config_path, "w") as f:
+            yaml.dump(cfg, f)
+
+        audit_log({"event": "retrieval_degraded", "path": "semantic",
+                   "error": "upstream 401: Authorization: Bearer leaktoken.123 api_key=ALSOLEAKED1"},
+                  str(config_path))
+
+        event = json.loads(Path(audit_file).read_text().strip())
+        assert "leaktoken.123" not in event["error"]
+        assert "ALSOLEAKED1" not in event["error"]
+        assert "[REDACTED_SECRET]" in event["error"]

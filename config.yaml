@@ -147,6 +147,15 @@ policy:
     redact_emails: true
     redact_ips: true
     redact_secrets_like:
+      # Single source of truth for secret redaction in the audit log
+      # (utils.logger.redact_sensitive). Bearer + api_key shapes added so the
+      # audit path matches the secret patterns gate._sanitize_error already
+      # strips from HTTP bodies — closing the gap where a retrieval error string
+      # carrying a token was persisted to audit.jsonl un-redacted (PR #99 #10).
+      # api_key form is anchored to an assignment separator (: or =) so prose
+      # like "the api key docs" is not over-redacted.
+      - 'Bearer\s+[A-Za-z0-9\-_.]+'                                   # Authorization bearer tokens
+      - '[Aa][Pp][Ii][_-]?[Kk][Ee][Yy]["''\s]*[:=]["''\s]*[\w\-.]{4,}'  # api_key= / "api-key": forms
       - "AKIA[0-9A-Z]{16}"           # AWS access keys
       - "xox[baprs]-[0-9a-zA-Z-]+"  # Slack tokens
       - "ghp_[a-zA-Z0-9]{36}"        # GitHub PATs
