@@ -38,6 +38,16 @@ jobs:
         shell: bash
         run: python -m pip install --upgrade "pip>=26.1.2"
 
+      - name: Install CPU-only torch first (offline-first, avoids CUDA wheel)
+        shell: bash
+        # torch is intentionally NOT pinned in requirements.txt — see its header:
+        # a bare resolve pulls the ~2.5 GB CUDA build from PyPI on Linux. Install
+        # the lean CPU wheel from the PyTorch index FIRST (matching ci.yml and the
+        # documented CVE-2025-32434 >=2.6.0 floor) so the requirements resolve
+        # below reuses it instead of dragging in the heavy CUDA build.
+        run: |
+          pip install torch==2.6.0+cpu --index-url https://download.pytorch.org/whl/cpu
+
       - name: Install with constraints (reproducible gate)
         shell: bash
         run: |
