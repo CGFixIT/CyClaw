@@ -382,6 +382,62 @@ To keep review tractable, land in small reviewed PRs on the feature branch:
 
 ---
 
+## 16. Three-subagent implementation delegation
+
+The implementation is split across **three subagent roles** working against a **frozen interface contract** (Appendix C). Because Roles B and C both import the types Role A owns (`RcloneConfig`, the `SyncError` hierarchy), the safe ordering is **A first (solo), then B + C in parallel**. This is the only hard dependency edge; once A's contract is on disk, B and C touch **disjoint files** and never import each other's *implementations* (only the frozen signatures), so they parallelize cleanly.
+
+### 16.1 Role A — Foundation (runs first, solo)
+
+Owns the data contract everything else codes against.
+
+| Deliverable | Notes |
+|---|---|
+| `utils/errors.py` (additive edit) | Add `SyncError` + 5 subclasses (Appendix C-1). No change to existing classes. |
+| `sync/__init__.py` | Public re-exports + `__version__`. |
+| `sync/config.py` | `RcloneConfig` dataclass (Appendix C-2) + `load_sync_config()`; full validation; loads via `utils.logger._get_config()`. |
+| `sync/filters.py` | `generate_filters(cfg)` / `write_filter_file(cfg)` / `filter_summary(cfg)` — hardened denylist (§4.3), conditional soul line. |
+| `config.yaml` (additive edit) | Append the `sync:` block (§8). Touch no existing keys. |
+| `.gitignore` (additive edit) | Ignore local `rclone.conf` copies + `.rclone-state/`. |
+| `pyproject.toml` (additive edit) | Add `"sync"` to `[tool.coverage.run] source`. |
+| `tests/test_sync_config.py`, `tests/test_sync_filters.py` | Self-contained; `--noconftest`-runnable. |
+
+**Exit criterion for A:** `python3.12 -c "from sync.config import RcloneConfig, load_sync_config; from sync.filters import generate_filters; from utils.errors import SyncError"` succeeds, and A's tests pass under `pytest --noconftest`.
+
+### 16.2 Role B — Runner + CLI (after A; parallel with C)
+
+| Deliverable | Notes |
+|---|---|
+| `sync/runner.py` | `check_rclone_version()` (floor **1.68.2**), argv builders (argv list, no `shell=True`), `run_sync()`, log parse → `FileEvent`, `hashlib` SHA-256, audit emit, `reindex_exit_code_for()`. |
+| `sync/selftest.py` | `run_self_test()` pre-flight (drives `cli test`). |
+| `sync/cli.py` | argparse entry `python -m sync.cli {setup,sync,test,schedule,unschedule,status}`. **Imports `sync.scheduler.get_scheduler` lazily inside the `schedule`/`unschedule`/`setup --schedule` handlers** so B is testable with the scheduler mocked and B↔C stay decoupled. |
+| `tests/test_sync_runner.py`, `tests/test_sync_cli.py` | Patch `sync.runner.subprocess.run` + `sync.runner.shutil.which`; assert argv is a list, no `shell=True`, version gate, exit codes, audit fields (no `query` key, no secrets). |
+
+### 16.3 Role C — Scheduler + Docs (after A; parallel with B)
+
+| Deliverable | Notes |
+|---|---|
+| `sync/scheduler.py` | `ScheduleEntry` dataclass + `get_scheduler(cfg)` factory → `CronScheduler` (Linux/macOS) and `WindowsTaskScheduler`; idempotent `install`/`remove`/`status`; tagged `CYCLAW_DROPBOX_SYNC`. (systemd-timer note documented; cron is the portable baseline with overlap caveat.) |
+| `tests/test_sync_scheduler.py` | Patch `subprocess.run`/`crontab`/`schtasks`; assert tagged add/replace/remove, no touching of unrelated entries. |
+| `docs/SYNC_README.md` | Operator guide (install rclone ≥1.68.2, App-Folder OAuth, config, usage, exit codes, troubleshooting, security rationale). |
+| `README.md` (additive touch) | Mark roadmap item delivered + link to `docs/SYNC_README.md`. |
+
+### 16.4 Sequencing & "use 1 subagent until you can parallelize" rule
+
+1. **Launch Role A alone.** Wait for completion + verify the exit criterion myself.
+2. **If A's contract matches Appendix C**, launch **Role B and Role C in parallel** (single message, two agents, disjoint files).
+3. **If A deviated** from the contract (renamed a field, changed a signature), I reconcile it myself first (or re-task A) so B and C build against a stable interface — *only then* parallelize. Any ambiguity → fall back to a single sequential subagent rather than risk a parallel interface clash.
+4. **Integration verification is mine, not the subagents'** (§16.5). Subagents do **not** run `git` and do **not** commit.
+
+### 16.5 Verification protocol (orchestrator-owned, this environment)
+
+- **Import/runtime under real Python 3.12:** `/usr/bin/python3.12` (has pyyaml) must import the whole `sync` package and run `python3.12 -m sync.cli status`/`test` against a temp config — with rclone absent, the expected, *clean* outcome is `RCLONE_NOT_INSTALLED` / exit 3 (this itself verifies the not-installed path).
+- **Test suite under Python 3.12:** `/tmp/py312venv/bin/python -m pytest tests/test_sync_*.py --noconftest -q`. (`--noconftest` is required because the repo's `tests/conftest.py` imports `chromadb`, which isn't installed in this sandbox; sync tests are deliberately self-contained so they don't need it.)
+- **Lint/type gates:** `ruff check sync tests/test_sync_*.py` (must be clean on the `S`/`B`/`UP`/`I` rules; justified inline `# noqa: S603` only) and `mypy sync` (strict-compatible annotations).
+- **Invariant grep:** confirm no `import sync` / `from sync` appears in `gate.py`, `graph.py`, `mcp_hybrid_server.py`.
+- **No-auth guarantee:** confirm no Dropbox token/key/secret is written anywhere; rclone is never actually authenticated or invoked against the network during verification (all subprocess calls are mocked in tests; live CLI runs stop at the rclone-missing/version gate).
+
+---
+
 ## Appendix A — PsyClaw → CyClaw mapping (why this is low-risk)
 
 | PsyClaw | CyClaw | Same? |
@@ -398,6 +454,99 @@ To keep review tractable, land in small reviewed PRs on the feature branch:
 | offline-first / minimal-deps / no telemetry | identical | ✅ |
 
 The PsyClaw `sync/` v1.0 module (config/filters/runner/scheduler/cli/tests) ports almost verbatim; the substantive **net-new** decisions for CyClaw are: **rclone floor raised to 1.68.2** (CVE-2024-52522), **systemd `--user` oneshot timer preferred** over bare cron on Linux, **`*.db*` added** to the hardened excludes (soul DB), and **`"sync"` added to coverage source** to satisfy CI's 80% gate.
+
+## Appendix C — Frozen interface contract (so Roles B & C parallelize safely)
+
+Role A produces exactly these public surfaces; Roles B and C import only these.
+
+**C-1 — `utils/errors.py` additions** (each subclass sets its own `code`):
+
+```python
+class SyncError(RAGError):              # code="SYNC_ERROR"
+class RcloneNotInstalledError(SyncError):   # code="RCLONE_NOT_INSTALLED"
+class RcloneVersionError(SyncError):        # code="RCLONE_VERSION_TOO_OLD"
+class SyncConfigError(SyncError):           # code="SYNC_CONFIG_INVALID"
+class SchedulerError(SyncError):            # code="SYNC_SCHEDULER_ERROR"
+class SyncRuntimeError(SyncError):          # code="SYNC_RUNTIME_ERROR"
+# signature for all: __init__(self, message: str, details: Optional[dict] = None)
+```
+
+**C-2 — `sync/config.py` public surface:**
+
+```python
+@dataclass
+class RcloneConfig:
+    local_path: str                  # validated absolute, under repo data/corpus, a dir
+    remote_name: str = "dropbox_cyclaw"
+    remote_path: str = "CyClaw/corpus"
+    direction: str = "pull"          # "pull" | "bisync"
+    include_soul: bool = False
+    reindex_on_change: bool = True
+    checksum: bool = True
+    max_delete: int = 20
+    max_transfer: str = "1G"
+    conflict_resolve: str = "newer"
+    conflict_loser: str = "rename"
+    schedule_hour: int = 2
+    schedule_min: int = 0
+    workdir: Optional[str] = None    # bisync state dir (default under rclone state dir)
+    filter_file: Optional[str] = None
+    log_dir: Optional[str] = None
+    extra_excludes: List[str] = field(default_factory=list)
+    REINDEX_EXIT_CODE: int = 10
+    # properties:
+    @property
+    def remote(self) -> str          # f"{remote_name}:{remote_path}"
+    @property
+    def log_path(self) -> str        # os.path.join(log_dir, "rclone_cyclaw.log")
+    @property
+    def is_windows(self) -> bool
+
+def load_sync_config(config_path: str = "config.yaml") -> RcloneConfig: ...
+```
+
+**C-3 — `sync/filters.py` public surface:**
+
+```python
+def generate_filters(cfg: RcloneConfig) -> str: ...
+def write_filter_file(cfg: RcloneConfig) -> str: ...   # returns abs path written
+def filter_summary(cfg: RcloneConfig) -> dict: ...
+```
+
+**C-4 — `sync/scheduler.py` public surface (Role C; consumed lazily by Role B's cli):**
+
+```python
+@dataclass
+class ScheduleEntry:
+    platform_name: str
+    command: str
+    cron_or_time: str
+    raw: str
+
+def get_scheduler(cfg: RcloneConfig): ...   # -> CronScheduler | WindowsTaskScheduler
+# scheduler objects expose: install() -> ScheduleEntry
+#                           remove() -> bool
+#                           status() -> Optional[ScheduleEntry]
+TASK_TAG = "CYCLAW_DROPBOX_SYNC"
+WINDOWS_TASK_NAME = "CyClaw Dropbox Sync"
+```
+
+**C-5 — `sync/runner.py` public surface (Role B):**
+
+```python
+MIN_RCLONE_MAJOR, MIN_RCLONE_MINOR, MIN_RCLONE_PATCH = 1, 68, 2
+def check_rclone_version(rclone_bin: str = "rclone") -> Tuple[int, int, int]: ...
+@dataclass
+class FileEvent: kind: str; path: str; sha256: Optional[str] = None
+@dataclass
+class SyncResult: success: bool; direction: str; ...; corpus_changed: bool
+def run_sync(cfg, dry_run=False, resync=False, rclone_bin="rclone") -> SyncResult: ...
+def reindex_exit_code_for(result: SyncResult, cfg: RcloneConfig) -> int: ...
+```
+
+## Appendix D — Test isolation in CI vs. this sandbox
+
+The repo's `tests/conftest.py` imports `retrieval.hybrid_search` (→ `chromadb`). In CI those deps are installed, so the full suite (incl. `tests/test_sync_*.py`) collects normally. In a minimal sandbox without chromadb, run sync tests with **`pytest --noconftest tests/test_sync_*.py`**. To keep that possible, **sync tests must be self-contained**: they may import `reset_config_cache` directly and use the builtin `tmp_path` fixture, but must **not** depend on `conftest.py` fixtures. (`tests/*` are exempt from Bandit `S101/S603/S108` via `pyproject.toml` per-file-ignores, so `assert` and mocked subprocess in tests are fine.)
 
 ## Appendix B — Key source references
 
