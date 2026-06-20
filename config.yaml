@@ -195,9 +195,9 @@ security:
   # Host matching ignores port. Add any name/IP you reach CyClaw by; a request
   # whose Host header is not listed gets HTTP 400 before any handler runs.
   allowed_hosts:
-    - "127.0.0.1"
-    - "localhost"
-    - "10.0.0.112"  # home-lab LAN host (mirrors allowed_origins)
+    - "127.0.0.1"  # DevSkim: ignore DS162092,DS137138 - loopback host by design
+    - "localhost"  # DevSkim: ignore DS162092,DS137138 - loopback host by design
+    - "10.0.0.112"  # DevSkim: ignore DS137138 - home-lab LAN host (mirrors allowed_origins)
 
 # ===========================
 # sync: Dropbox corpus sync (out-of-band, rclone-based)
