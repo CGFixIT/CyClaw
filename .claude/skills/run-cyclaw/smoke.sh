@@ -4,9 +4,11 @@
 # Requires: deps installed (pip install -r requirements.txt + torch CPU),
 #           retrieval index built (python3 -m retrieval.indexer).
 # Env:      GROK_API_KEY defaults to "dummy" (offline mode).
+#           PYTHON defaults to "python3.12" (Python 3.12 required).
 set -euo pipefail
 
 GROK_API_KEY="${GROK_API_KEY:-dummy}"
+PYTHON="${PYTHON:-python3.12}"
 PORT="${PORT:-8787}"
 BASE="http://127.0.0.1:$PORT"
 LOG="/tmp/cyclaw-server.log"
@@ -15,7 +17,7 @@ SOUL_BACKUP=""
 # ── helpers ──────────────────────────────────────────────────────────────────
 pass() { echo "  PASS  $1"; }
 fail() { echo "  FAIL  $1"; FAILURES=$((FAILURES+1)); }
-jget() { python3 -c "import sys,json; d=json.load(sys.stdin); print($1)"; }
+jget() { "$PYTHON" -c "import sys,json; d=json.load(sys.stdin); print($1)"; }
 FAILURES=0
 
 # ── index (idempotent, with temp soul.md) ───────────────────────────────────
@@ -28,12 +30,12 @@ if [ ! -f index/bm25.json ]; then
     cp data/personality/soul.md "$SOUL_BACKUP"
   fi
   echo '# Soul' > data/personality/soul.md
-  GROK_API_KEY="$GROK_API_KEY" python3 -m retrieval.indexer
+  GROK_API_KEY="$GROK_API_KEY" "$PYTHON" -m retrieval.indexer
 fi
 
 # ── launch server ────────────────────────────────────────────────────────────
 echo "[smoke] Starting server on :$PORT ..."
-GROK_API_KEY="$GROK_API_KEY" python3 -m uvicorn gate:app \
+GROK_API_KEY="$GROK_API_KEY" "$PYTHON" -m uvicorn gate:app \
   --host 127.0.0.1 --port "$PORT" > "$LOG" 2>&1 &
 SERVER_PID=$!
 
