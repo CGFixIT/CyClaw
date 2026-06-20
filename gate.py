@@ -20,6 +20,7 @@ Addresses:
   - OpenTelemetry OTLP export hooks pulled in by chromadb deps
 """
 import asyncio
+import hmac
 import os
 import re
 
@@ -77,7 +78,10 @@ def require_api_key(
     api_key = os.environ.get("CYCLAW_API_KEY", "")
     if not api_key:
         return
-    if not credentials or credentials.credentials != api_key:
+    # Constant-time comparison: a plain `!=` short-circuits on the first
+    # differing byte, leaking key length/prefix via response timing. compare_digest
+    # runs in time independent of how many leading characters match.
+    if not credentials or not hmac.compare_digest(credentials.credentials, api_key):
         raise HTTPException(status_code=401, detail="Invalid or missing API key")
 
 # Simple in-memory rate limiter (config-driven, per-IP for /query)
