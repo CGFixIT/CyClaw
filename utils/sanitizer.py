@@ -74,7 +74,7 @@ def check_input(query: str, config_path: str = "config.yaml") -> str:
         if pattern.search(query):
             raise PromptInjectionError(
                 "Potential prompt injection detected",
-                details={"matched_pattern": pattern.pattern},
+                details={},
             )
     return query
 

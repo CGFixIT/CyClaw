@@ -133,6 +133,13 @@ with open("config.yaml", encoding="utf-8") as f:
 setup_logging(cfg)
 logger = logging.getLogger("cyclaw.gate")
 
+if not os.environ.get("CYCLAW_API_KEY", ""):
+    logger.warning(
+        "CYCLAW_API_KEY is not set — server running in OPEN MODE: "
+        "/soul/* endpoints accept any request without authentication. "
+        "Set CYCLAW_API_KEY to enable API key enforcement."
+    )
+
 app = FastAPI(
     title="CyClaw RAG Gateway",
     description="Offline-first, RAG-first, MCP-exposed stack",

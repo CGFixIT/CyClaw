@@ -28,8 +28,15 @@ def load_corpus(corpus_path: str, extensions: List[str]) -> List[Tuple[str, str]
     corpus_dir = Path(corpus_path)
     if not corpus_dir.exists():
         raise CorpusEmptyError(f"Corpus directory does not exist: {corpus_path}")
+    corpus_resolved = corpus_dir.resolve()
     for ext in extensions:
         for file_path in corpus_dir.rglob(f"*{ext}"):
+            # Reject symlinks that escape the corpus directory — rglob follows
+            # symlinks by default, so a link pointing outside data/corpus could
+            # pull arbitrary filesystem content into the index.
+            if not file_path.resolve().is_relative_to(corpus_resolved):
+                print(f"[WARN] Skipping {file_path}: resolves outside corpus directory")
+                continue
             try:
                 content = file_path.read_text(encoding="utf-8")
                 docs.append((str(file_path), content))

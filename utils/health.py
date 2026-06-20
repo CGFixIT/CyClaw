@@ -4,6 +4,7 @@ Only checks LM Studio (and optionally Grok). No Ollama —
 embeddings are local sentence-transformers.
 """
 
+import re
 import time
 from functools import lru_cache
 from typing import List
@@ -50,4 +51,7 @@ def _ping(url: str, name: str) -> HealthStatus:
         resp.raise_for_status()
         return HealthStatus(name=name, healthy=True, latency_ms=round(latency, 1))
     except Exception as e:
-        return HealthStatus(name=name, healthy=False, error=str(e))
+        # Redact the URL (which may contain credentials or internal hostnames)
+        # from the exception message before surfacing it in the public /health response.
+        safe_error = re.sub(r'https?://\S+', '[URL REDACTED]', str(e))
+        return HealthStatus(name=name, healthy=False, error=safe_error)
