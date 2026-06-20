@@ -365,6 +365,7 @@ def user_gate_router(state: GraphState) -> Literal["grok_fallback", "offline_bes
 # =============================================================================
 
 def build_graph(
+    *,
     retriever: HybridRetriever,
     llm: LocalLLMClient,
     grok: GrokClient,
@@ -372,6 +373,10 @@ def build_graph(
     personality: Optional[PersonalityManager] = None
 ):
     """Build and compile the CyClaw LangGraph.
+
+    Dependencies are keyword-only (``*``) so a positional mis-binding (e.g.
+    swapping ``cfg`` and ``retriever``) can never silently happen — the audit
+    found exactly that drift between callers and this signature.
 
     All nodes are partial functions — dependencies injected at build time,
     not at query time. This makes the graph stateless and safe to reuse.
