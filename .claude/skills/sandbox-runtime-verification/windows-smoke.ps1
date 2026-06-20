@@ -14,7 +14,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$Base = "http://127.0.0.1:$Port"
+$Base = "http://127.0.0.1:$Port"  # DevSkim: ignore DS162092,DS137138 — loopback-only by design (api.host in config.yaml)
 $Failures = 0
 
 function Pass([string]$msg) { Write-Host "  PASS  $msg" -ForegroundColor Green }

@@ -9,7 +9,7 @@ PYTHON="${PYTHON:-python3.12}"
 GROK_API_KEY="${GROK_API_KEY:-dummy}"
 PORT="${PORT:-8787}"
 VENV_DIR="${VENV_DIR:-/tmp/cyclaw-verify-venv}"
-BASE="http://127.0.0.1:$PORT"
+BASE="http://127.0.0.1:$PORT"  # DevSkim: ignore DS162092,DS137138 — loopback-only by design (api.host in config.yaml)
 REPORT="/tmp/cyclaw-verify-report.md"
 SERVER_LOG="/tmp/cyclaw-verify-server.log"
 SKILL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -123,7 +123,7 @@ note "Stage 4 — API smoke bomb (launching server on :$PORT)"
 if [ ! -f index/bm25.json ]; then
   "$VPY" -m retrieval.indexer > /tmp/cyclaw-verify-index.txt 2>&1 || true
 fi
-"$VPY" -m uvicorn gate:app --host 127.0.0.1 --port "$PORT" > "$SERVER_LOG" 2>&1 &
+"$VPY" -m uvicorn gate:app --host 127.0.0.1 --port "$PORT" > "$SERVER_LOG" 2>&1 &  # DevSkim: ignore DS162092 — loopback-only by design
 SERVER_PID=$!
 
 UP=0
