@@ -34,7 +34,7 @@ EXPECTED_SOURCE_SUBSTR = "cyclaw_overview"
 def main() -> int:
     print("=== Real Offline RAG Query Smoke (ChromaDB + BM25) ===")
 
-    with open("config.yaml") as f:
+    with open("config.yaml", encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
     min_score = float(cfg["retrieval"]["min_score"])
 
