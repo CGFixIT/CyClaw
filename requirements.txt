@@ -1,3 +1,15 @@
-# ... keep header
-chromadb==1.5.10.dev133             # CVE-2026-45829 (pre-auth RCE via malicious model + trust_remote_code). Mitigated in CyClaw: local-only, code-enforced no remote code trust. See SECURITY_REVIEW_STATUS.md
-# ... other lines
+# CyClaw requirements (restored + CVE hotfix)
+fastapi==0.137.2
+uvicorn[standard]==0.49.0
+pydantic==2.13.4
+pyyaml==6.0.3
+httpx==0.28.1
+langgraph==1.2.5
+langchain-core==1.4.7
+chromadb==1.5.10.dev133  # CVE-2026-45829 mitigated (localhost + code-enforced no remote code trust)
+sentence-transformers==5.6.0
+rank-bm25==0.2.2
+numpy==1.26.4
+nltk==3.9.4
+pytest==9.1.0
+pytest-asyncio==1.4.0

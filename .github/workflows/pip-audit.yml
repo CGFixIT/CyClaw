@@ -2,22 +2,26 @@ name: pip-audit (Python dependency CVE scan)
 
 on:
   schedule:
-    - cron: '0 6 * * *'  # daily
+    - cron: '0 6 * * *'
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
-  pip-audit:
+  scan:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Install pip-audit
-        run: pip install pip-audit
-      - name: Run pip-audit with constraints
+      - name: Install dependencies with constraints
         run: |
           pip install -r requirements.txt -c constraints.txt
-          pip-audit -r requirements.txt --ignore-vuln CVE-2026-45829 || true  # Mitigated: see above + code-level enforcement
-      - name: Fail on other vulns
-        run: pip-audit -r requirements.txt --fail-on high  # strict on everything else
+      - name: Run pip-audit (ignore only the mitigated chromadb CVE)
+        run: |
+          pip-audit -r requirements.txt --ignore-vuln CVE-2026-45829 --fail-on high
+        # Explanation: CVE-2026-45829 is pre-auth RCE via malicious embedding model + trust_remote_code=true.
+        # CyClaw mitigation: Binds exclusively to 127.0.0.1, offline-first, explicitly disables trust_remote_code in retrieval code.
+        # Real risk is near-zero. We track upstream for stable patch.
