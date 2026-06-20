@@ -52,12 +52,21 @@ def _handle_search(msg_id, args: dict, retriever: HybridRetriever) -> dict:
             results = retriever.keyword_search(query, k=top_k)
         else:
             results = retriever.hybrid_search(query)[:top_k]
-        audit_log({"event": "mcp_rag_query", "query": query[:100], "mode": mode,
+        # Audit privacy parity with the HTTP path: pass the FULL query to
+        # audit_log, which SHA-256-hashes the "query" field (and redacts PII)
+        # before persisting. The stored event therefore holds only query_hash —
+        # never raw text — and the hash matches what the HTTP/graph audit path
+        # writes for the same query. (Previously this passed query[:100], which
+        # both implied cleartext and produced a hash that diverged from HTTP for
+        # queries longer than 100 chars.)
+        audit_log({"event": "mcp_rag_query", "query": query, "mode": mode,
                    "hit_count": len(results), "top_score": results[0].score if results else 0.0})
         payload = {
             "chunks": [{"text": r.text, "score": r.score, "source": r.source,
                         "chunk_id": r.chunk_id, "stem_tags": r.stem_tags[:5], "mode": r.retrieval_mode}
                        for r in results],
+            # The response payload may echo the query — the caller already has it.
+            # Only the persisted audit event is privacy-constrained.
             "metadata": {"query": query, "retrieval_mode": mode, "total_results": len(results)}
         }
         return {"jsonrpc": "2.0", "id": msg_id, "result": payload}
