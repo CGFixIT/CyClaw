@@ -148,6 +148,13 @@ class PersonalityManager:
         return [p for p in OWASP_INJECTION_PATTERNS if re.search(p, text, re.IGNORECASE)]
 
     def propose_evolution(self, new_soul: str, reason: str) -> dict:
+        """Preview a proposed soul change: compute the diff + advisory injection flags.
+
+        This method NEVER writes. ``injection_flags`` / ``safe_to_apply`` are an
+        advisory signal surfaced for the human reviewing the proposal. Enforcement
+        does not live here — it lives at the write boundary in
+        :meth:`apply_evolution`, which re-runs the scan and refuses flagged content.
+        """
         flags = self._scan_injection(new_soul)
         diff = list(difflib.unified_diff(
             self.soul_core.splitlines(keepends=True),
@@ -168,6 +175,19 @@ class PersonalityManager:
         }
 
     def apply_evolution(self, new_soul: str, reason: str, *, scan: bool = True) -> dict:
+        """Atomically write a new soul, enforcing the injection gate at the boundary.
+
+        Authority to change the soul is human-gated: an explicit ``reason`` string
+        is required and there is no autonomous/graph path here. On top of that, the
+        injection scan is ENFORCED at the write boundary (``scan=True``, default):
+        a proposed soul containing OWASP injection patterns raises
+        ``PromptInjectionError`` before any file/DB write, closing the
+        soul-poisoning vector (a flagged soul would otherwise be prepended to every
+        LLM system prompt). The trusted internal restore path
+        (:meth:`restore_from_backup`, re-applying a previously vetted ``.bak``)
+        passes ``scan=False``. The write itself is atomic (``tmp`` + ``os.replace``)
+        so a crash cannot leave a half-written ``soul.md``.
+        """
         # Enforce the injection gate at the write boundary. propose_evolution()
         # only *flags* patterns and is advisory; without this check apply_evolution()
         # would persist any payload — including "ignore previous instructions" — straight

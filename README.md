@@ -223,8 +223,8 @@ CyClaw maintains a persistent identity through `soul.md`. Key properties:
 - **Shadow SQLite DB**: `cyclaw_soul.db` stores version history and interaction logs
 - **SHA-256 drift detection**: on startup, file hash vs. DB hash — mismatch triggers forensic log entry
 - **Atomic writes**: backup → atomic disk write (`tmp` file + `os.replace`) → DB version insert → in-memory update; the `os.replace` is what makes a crash unable to leave a half-written `soul.md`
-- **Advisory injection scan**: `POST /soul/propose` runs an injection scan (13 patterns) whose flags are **advisory** — surfaced for human review, not an enforcement gate
-- **Human-in-the-loop evolution**: `POST /soul/apply` is the human-gated authority (explicit reason string required); it applies the reviewed diff and does not re-block on the advisory scan
+- **Advisory injection scan on propose**: `POST /soul/propose` runs an OWASP injection scan whose flags are **advisory** — surfaced for human review alongside the diff; `propose` never writes
+- **Enforced injection scan on apply**: `POST /soul/apply` is human-gated (explicit reason string required) **and** re-runs the injection scan at the write boundary — a proposed soul containing injection patterns is rejected with `400 PROMPT_INJECTION_BLOCKED` before any file/DB write, closing the soul-poisoning vector. The trusted restore path (`restore_from_backup`, re-applying a previously vetted `.bak`) bypasses the scan via `scan=False`
 
 ---
 
@@ -238,7 +238,7 @@ CyClaw maintains a persistent identity through `soul.md`. Key properties:
 | Telemetry | Kill block runs before any SDK import in `gate.py` |
 | Audit | All paths (HTTP and MCP) log SHA-256 query hash + PII-redacted metadata |
 | Grok gating | Triple gate: `mode=hybrid` AND `grok.enabled=true` AND `user_confirmed_online=true` |
-| Soul writes | Advisory injection scan + human reason string + atomic (`os.replace`) crash-safe write |
+| Soul writes | Enforced injection scan at the write boundary (`apply_evolution`, → `400 PROMPT_INJECTION_BLOCKED`) + human reason string + atomic (`os.replace`) crash-safe write |
 | Corpus | Chunk sanitization at index time via `sanitizer.py` |
 
 ---
