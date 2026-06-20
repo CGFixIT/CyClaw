@@ -69,9 +69,12 @@ jobs:
       - name: Run pip-audit (ignore only mitigated chromadb CVE)
         run: |
           pip-audit -r requirements.txt --ignore-vuln CVE-2026-45829
-        # CVE-2026-45829 mitigation (structural per v1.4.0 invariants):
-        # - Binds to 127.0.0.1 in gate.py
-        # - trust_remote_code=False enforced in retrieval/embeddings.py, retrieval/indexer.py, mcp_hybrid_server.py
-        # - Offline-first design (no unauth external surface)
-        # Cross-ref: cyclaw-advisor PDF §K Deployment, §M Security Invariants, and hardened CI gate.
-        # Real risk near-zero under the 5 invariants. Track upstream for patch.
+        # CVE-2026-45829 (Critical pre-auth RCE) — risk accepted under v1.4.0 invariants.
+        # Actual controls:
+        #   - chromadb.PersistentClient (local embedded mode, path from config.yaml["indexing"]["chroma_path"])
+        #   - No HttpClient / no network-exposed /api/v2 server surface
+        #   - Pre-computed embeddings via sentence-transformers (no dynamic embedding functions or trust_remote_code paths)
+        #   - Offline-first design + full telemetry kill switch in gate.py
+        #   - Reproducible install gate (verify-install matrix on ubuntu/windows + Python 3.12)
+        # Cross-ref: cyclaw-advisor §K / §M, hybrid_search.py:55, indexer.py:58, gate.py:TELEMETRY_KILL
+        # Track upstream for patched 1.5.x release; re-evaluate on bump.
