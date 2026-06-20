@@ -47,13 +47,19 @@ def load_corpus(corpus_path: str, extensions: List[str]) -> List[Tuple[str, str]
     return docs
 
 def chunk_document(text: str, chunk_size: int = 512, overlap: int = 50) -> List[str]:
+    # The stride must advance by at least one word per iteration. If a
+    # misconfiguration sets overlap >= chunk_size, ``chunk_size - overlap`` is
+    # <= 0 and ``start`` never moves forward — the loop spins forever, appending
+    # identical chunks until the indexer exhausts memory. Clamp the step to a
+    # minimum of 1 so a bad config degrades to slow-but-finite instead of hanging.
+    step = max(1, chunk_size - overlap)
     words = text.split()
     chunks = []
     start = 0
     while start < len(words):
         end = min(start + chunk_size, len(words))
         chunks.append(" ".join(words[start:end]))
-        start += chunk_size - overlap
+        start += step
     return chunks
 
 def build_index(config_path: str = "config.yaml") -> None:
