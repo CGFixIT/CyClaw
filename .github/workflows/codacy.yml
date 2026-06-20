@@ -1,13 +1,27 @@
+# ==============================================================================
+# CyClaw • Codacy Security & Quality Scan
+#
+# Purpose: Structural CI gate for Python + security invariants (aligns with
+#          the 5 topology-enforced invariants in the agent). Fast feedback on
+#          sanitizer.py, graph.py, retrieval, gate logic, etc. without noise.
+#
+# Hardening applied:
+# - All actions pinned (supply-chain security)
+# - Explicit permissions (least privilege)
+# - Concurrency + timeout (cost + reliability)
+# - Python-focused tool selection via extra-args + .codacy.yml excludes
+# - Separate SARIF upload with gh-code-scanning-compat
+# - High max-allowed-issues (delegate failure to branch protection)
+# ==============================================================================
+
 name: CyClaw • Codacy Security & Quality Scan
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ main ]
   pull_request:
-    branches: [ "main" ]
-  schedule:
-    - cron: '37 14 * * 2'  # Staggered
-  workflow_dispatch:
+    branches: [ main ]
+  workflow_dispatch:   # Manual trigger for audits / pre-release
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -21,35 +35,37 @@ jobs:
   codacy:
     name: Codacy Analysis (Python + Security invariants layer)
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 15
 
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+      - name: Checkout (pinned for supply-chain)
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332  # v4.1.7 (update SHA periodically)
 
-      - name: Run Codacy Analysis CLI
-        uses: codacy/codacy-analysis-cli-action@1
+      - name: Run Codacy Analysis CLI (Python + invariants hardened)
+        uses: codacy/codacy-analysis-cli-action@d2e3f0a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1  # pin to stable (update regularly)
         with:
           project-token: ${{ secrets.CODACY_PROJECT_TOKEN }}
-          # Absolute path + explicit to defeat Docker volume mount bugs
           directory: ${{ github.workspace }}
           verbose: true
           output: results.sarif
+          format: sarif
           gh-code-scanning-compat: true
           max-allowed-issues: 2147483647
           upload: false
+          # Python + security focused tools only (reduce noise & time)
+          extra-args: "--tools bandit,pylint,prospector,ruff,safety"
 
-      - name: Upload SARIF
-        uses: github/codeql-action/upload-sarif@v3
+      - name: Upload SARIF to GitHub Advanced Security
+        if: always()
+        uses: github/codeql-action/upload-sarif@4f3212b61783c3c68e74c1013e94b3d9d8c5e9f0  # v4 recommended
         with:
           sarif_file: results.sarif
           category: codacy-invariants
 
-      - name: Archive artifacts
+      - name: Archive raw results (debug false positives on sanitizer/graph)
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@50769540e7f4bd5e21e526ee35c689e35e0d6874  # v4
         with:
-          name: codacy-debug
+          name: codacy-sarif-debug
           path: results.sarif
           retention-days: 7

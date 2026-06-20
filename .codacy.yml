@@ -1,15 +1,8 @@
+# CyClaw .codacy.yml — keep the invariants code clean
 exclude_paths:
-  - data/
-  - tests/
-  - static/
-  - docs/
-  - '**/__pycache__/**'
-  - '**/.pytest_cache/**'
-  - '**/venv/**'
-  - '**/.venv/**'
-  - '**/*.md'
-
-languages:
-  - python
-
-# Prioritize security + style invariants for CyClaw core
+  - "data/**"          # RAG corpus + soul.md noise
+  - "docs/**"          # PDFs, old guides, screenshots
+  - "static/**"        # terminal.html / frontend
+  - "**/tests/**"      # fixtures don't need static analysis
+  - "**/*.md"          # markdownlint spam on READMEs/docs
+  - "results.sarif"    # generated artifact

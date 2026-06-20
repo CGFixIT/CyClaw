@@ -57,3 +57,7 @@ desktop.ini
 # Zip archives
 *.zip
 *.tar.gz
+
+# Codacy / CI artifacts
+results.sarif
+codacy-*.sarif
