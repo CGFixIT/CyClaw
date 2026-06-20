@@ -63,6 +63,10 @@ Checks performed (all verified in this session):
 4. Prompt injection blocked → HTTP 400
 5. `GET /soul` — personality endpoint live
 6. `GET /static/terminal.html` — static UI served
+7. read terminal.html file to find other api endpoints and test the ones that can feasibly be tested in this context 
+8. check that all individual files that can be individually ran are ran without error
+9. verify all tests under tests/ folder pass or report findings in summary
+10. generate a comprehensive, thorough summary and saving it to /.claude/sandbox-test.txt
 
 ---
 
