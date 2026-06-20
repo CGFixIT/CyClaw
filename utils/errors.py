@@ -42,6 +42,53 @@ class ConfigError(RAGError):
     def __init__(self, message: str, details: Optional[dict] = None):
         super().__init__(message, code="CONFIG_ERROR", details=details)
 
+class SyncError(RAGError):
+    """Base error for out-of-band Dropbox corpus sync operations."""
+
+    def __init__(self, message: str, details: Optional[dict] = None):
+        super().__init__(message, code="SYNC_ERROR", details=details)
+
+
+class RcloneNotInstalledError(SyncError):
+    """rclone binary not found on PATH."""
+
+    def __init__(self, message: str, details: Optional[dict] = None):
+        super().__init__(message, details=details)
+        self.code = "RCLONE_NOT_INSTALLED"
+
+
+class RcloneVersionError(SyncError):
+    """rclone is installed but the version is below the required floor."""
+
+    def __init__(self, message: str, details: Optional[dict] = None):
+        super().__init__(message, details=details)
+        self.code = "RCLONE_VERSION_TOO_OLD"
+
+
+class SyncConfigError(SyncError):
+    """The sync: block in config.yaml is missing or invalid."""
+
+    def __init__(self, message: str, details: Optional[dict] = None):
+        super().__init__(message, details=details)
+        self.code = "SYNC_CONFIG_INVALID"
+
+
+class SchedulerError(SyncError):
+    """Cron / systemd / launchd / Task Scheduler registration or removal failed."""
+
+    def __init__(self, message: str, details: Optional[dict] = None):
+        super().__init__(message, details=details)
+        self.code = "SYNC_SCHEDULER_ERROR"
+
+
+class SyncRuntimeError(SyncError):
+    """rclone subprocess failed at runtime (non-zero exit, safety-fuse abort, etc.)."""
+
+    def __init__(self, message: str, details: Optional[dict] = None):
+        super().__init__(message, details=details)
+        self.code = "SYNC_RUNTIME_ERROR"
+
+
 @dataclass
 class HealthStatus:
     name: str

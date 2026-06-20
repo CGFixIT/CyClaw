@@ -61,3 +61,12 @@ desktop.ini
 # Codacy / CI artifacts
 results.sarif
 codacy-*.sarif
+
+# rclone / Dropbox sync (never commit credentials or local sync state)
+rclone.conf
+**/rclone.conf
+.rclone-state/
+
+# Coverage artifacts
+.coverage
+htmlcov/
