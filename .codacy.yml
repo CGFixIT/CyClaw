@@ -1,0 +1,6 @@
+exclude_paths:
+  - "data/"
+  - "tests/"
+  - "static/"
+languages:
+  - python
