@@ -132,10 +132,10 @@ class TestAPIKeyAuth:
         )
         assert resp.status_code == 200
 
-    def test_ephemeral_key_enforced_when_env_var_unset(self, tmp_path):
-        """PR #99 #4: with CYCLAW_API_KEY unset, /soul/* is NO LONGER open — an
-        ephemeral per-process key is enforced, so an unauthenticated request is
-        rejected (401) instead of accepted."""
+    def test_fail_closed_when_env_var_unset(self, tmp_path):
+        """PR #99 #4 (Option B, fail-closed): with CYCLAW_API_KEY unset, /soul/* is
+        NO LONGER open — the endpoint is refused (401), not accepted. No key is
+        generated, logged, or stored."""
         with patch.dict(os.environ, {}, clear=False):
             os.environ.pop("CYCLAW_API_KEY", None)
             from gate import require_api_key

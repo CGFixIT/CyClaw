@@ -23,7 +23,6 @@ import asyncio
 import hmac
 import os
 import re
-import secrets
 
 _TELEMETRY_KILL = {
     "LANGCHAIN_TRACING_V2": "false",
@@ -73,24 +72,18 @@ from utils.personality import PersonalityManager
 
 _bearer_scheme = HTTPBearer(auto_error=False)
 
-# Resolve the effective API key ONCE at import (PR #99 #4). Previously, when
-# CYCLAW_API_KEY was unset the server ran in "open mode" and require_api_key was a
-# no-op, leaving every /soul/* mutation endpoint unauthenticated. Instead, if no
-# key is configured we mint an ephemeral per-process token and log it once, so
-# soul mutations always require a Bearer token. A remote DNS-rebinding page (now
-# also blocked by TrustedHostMiddleware) never sees this token.
-_EPHEMERAL_API_KEY = "" if os.environ.get("CYCLAW_API_KEY") else secrets.token_urlsafe(32)
-
-def _effective_api_key() -> str:
-    """The key require_api_key enforces: the configured CYCLAW_API_KEY if set,
-    otherwise the ephemeral per-process token. Read at request time so tests (and
-    operators) that set the env var after import are honored."""
-    return os.environ.get("CYCLAW_API_KEY") or _EPHEMERAL_API_KEY
-
 def require_api_key(
     credentials: HTTPAuthorizationCredentials = Depends(_bearer_scheme),
 ):
-    api_key = _effective_api_key()
+    # Fail-closed (PR #99 #4). Previously, when CYCLAW_API_KEY was unset the
+    # server ran in "open mode" and require_api_key was a no-op, leaving every
+    # /soul/* mutation endpoint unauthenticated. Now, if no key is configured the
+    # endpoint is REFUSED rather than left open — no key is generated, logged, or
+    # stored. Set CYCLAW_API_KEY to enable soul mutations.
+    api_key = os.environ.get("CYCLAW_API_KEY", "")
+    if not api_key:
+        raise HTTPException(status_code=401,
+                            detail="Soul mutation disabled: CYCLAW_API_KEY not set")
     # Constant-time comparison: a plain `!=` short-circuits on the first
     # differing byte, leaking key length/prefix via response timing. compare_digest
     # runs in time independent of how many leading characters match.
@@ -148,23 +141,10 @@ with open("config.yaml", encoding="utf-8") as f:
 setup_logging(cfg)
 logger = logging.getLogger("cyclaw.gate")
 
-if not os.environ.get("CYCLAW_API_KEY", "") and _EPHEMERAL_API_KEY:
-    # Surface the ephemeral key via a 0600 file, NOT the log. Logging a secret in
-    # clear text is flagged (CodeQL py/clear-text-logging) and logs may be shipped
-    # or retained; a loopback-only key file read by the operator is the safer
-    # channel. The log line names only the path, never the key.
-    from pathlib import Path as _Path
-    _key_file = _Path(cfg.get("logging", {}).get("log_file") or "logs/cyclaw.log").parent / "cyclaw_ephemeral_key"
-    _key_file.parent.mkdir(parents=True, exist_ok=True)
-    _key_file.write_text(_EPHEMERAL_API_KEY, encoding="utf-8")
-    try:
-        os.chmod(_key_file, 0o600)
-    except OSError:
-        pass
+if not os.environ.get("CYCLAW_API_KEY", ""):
     logger.warning(
-        "CYCLAW_API_KEY is not set — generated an ephemeral API key for this run "
-        "and wrote it (mode 0600) to %s. Soul-mutation endpoints (/soul/*) require "
-        "it as a Bearer token; set CYCLAW_API_KEY for a stable key.", _key_file,
+        "CYCLAW_API_KEY is not set — soul-mutation endpoints (/soul/*) are DISABLED "
+        "(fail-closed). Set CYCLAW_API_KEY to enable them."
     )
 
 app = FastAPI(
