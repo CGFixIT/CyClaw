@@ -16,7 +16,8 @@ Response field assertions match what terminal.html's JS reads:
   - soul.version, soul.soul
 
 Usage (called from verify.sh while server is running):
-    python terminal_emulation.py http://127.0.0.1:8787
+    python terminal_emulation.py <base_url>
+    e.g. python terminal_emulation.py http://localhost:8787
 """
 
 import json
@@ -24,7 +25,7 @@ import sys
 
 
 def main() -> int:
-    base = sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:8787"
+    base = sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:8787"  # DevSkim: ignore DS162092,DS137138 — loopback-only by design (api.host in config.yaml)
 
     try:
         import httpx
