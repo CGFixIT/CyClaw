@@ -1,47 +1,64 @@
-# This workflow uses actions that are not certified by GitHub.
-# They are provided by a third-party and are governed by
-# separate terms of service, privacy policy, and support
-# documentation.
-#
-# Microsoft Security DevOps (MSDO) is a command line application which integrates static analysis tools into the development cycle.
-# MSDO installs, configures and runs the latest versions of static analysis tools
-# (including, but not limited to, SDL/security and compliance tools).
-#
-# The Microsoft Security DevOps action is currently in beta and runs on the windows-latest queue,
-# as well as Windows self hosted agents. ubuntu-latest support coming soon.
-#
-# For more information about the action , check out https://github.com/microsoft/security-devops-action
-#
-# Please note this workflow do not integrate your GitHub Org with Microsoft Defender For DevOps. You have to create an integration
-# and provide permission before this can report data back to azure.
-# Read the official documentation here : https://learn.microsoft.com/en-us/azure/defender-for-cloud/quickstart-onboard-github
+# ==============================================================================
+# CyClaw Microsoft Defender for DevOps (MSDO) Workflow — v1.4.0 hardened
+# 
+# Changes from previous version:
+#   - Switched to ubuntu-latest (Python-native runner; MSDO action now supports it fully per action docs)
+#   - Removed obsolete dotnet 5.0.x / 6.0.x setup (both EOL long before 2026; unnecessary for Python path; reduces runner attack surface + startup time)
+#   - Updated microsoft/security-devops-action to v1.12.0 (latest as of Nov 2024; supports ubuntu + explicit tools: input)
+#   - Added explicit `tools: bandit` input — focused Python SAST (detects assert, exec/eval, hardcoded passwords/tokens, dangerous imports, etc.)
+#   - Added least-privilege permissions block (contents: read; security-events: write for SARIF upload to Security tab)
+#   - Updated upload-sarif to @v4 (consistency with codeql.yml)
+#   - Replaced outdated beta-era boilerplate comments with precise, CyClaw-specific documentation referencing invariants/CI hardening
+#   - Added workflow_dispatch: for on-demand manual execution
+#   - Grammar/accuracy fixes; removed "ubuntu-latest support coming soon" note (now fully supported)
+# 
+# Value proposition: Executes Bandit via the MSDO engine for Python-specific static security analysis,
+# then uploads SARIF results to the GitHub Security tab (and optionally Microsoft Defender for DevOps
+# dashboard once org integration is configured — see https://learn.microsoft.com/en-us/azure/defender-for-cloud/quickstart-onboard-github ).
+# Complements existing scanners:
+#   - CodeQL (deep interprocedural dataflow, taint tracking)
+#   - DevSkim (secret patterns, best practices)
+#   - Fortify (heavyweight enterprise SAST)
+#   - pip-audit (dependency CVEs with CyClaw-specific ignore + mitigation comments)
+# No changes to core runtime; purely additive CI security gate.
+# 
+# Alignment: Strengthens reproducible CI and §K (Deployment & Validation) / §M (Security Invariants)
+# without touching the 5 topology-enforced invariants (RAG-first retrieve, topology=policy routing,
+# triple-gate grok_fallback, audit convergence, soul governance with human reason + atomic writes).
+# Matches the hardened style of pip-audit.yml (precise CVE/mitigation comments linking to gate.py +
+# retrieval/embeddings.py trust_remote_code=false guards) and ci.yml (pinned actions, least-priv perms).
+# Cross-reference: v1.4.0 main branch updates (ChromaDB 1.5.6, Python 3.12, CI matrix verification).
+# ==============================================================================
 
-name: "Microsoft Defender For Devops"
+name: "Microsoft Defender For DevOps (Bandit + SARIF)"
 
-on:
+'on':
   push:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
   schedule:
     - cron: '40 23 * * 0'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
 
 jobs:
   MSDO:
-    # currently only windows latest is supported
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
 
     steps:
     - uses: actions/checkout@v4
-    - uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: |
-          5.0.x
-          6.0.x
-    - name: Run Microsoft Security DevOps
-      uses: microsoft/security-devops-action@v1.6.0
+
+    - name: Run Microsoft Security DevOps (Bandit for Python)
+      uses: microsoft/security-devops-action@v1.12.0
       id: msdo
+      with:
+        tools: bandit
+
     - name: Upload results to Security tab
-      uses: github/codeql-action/upload-sarif@v3
+      uses: github/codeql-action/upload-sarif@v4
       with:
         sarif_file: ${{ steps.msdo.outputs.sarifFile }}
