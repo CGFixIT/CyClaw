@@ -14,7 +14,7 @@ def load_events(audit_file: str):
     events = []
     if not Path(audit_file).exists():
         return events
-    with open(audit_file) as f:
+    with open(audit_file, encoding="utf-8") as f:
         for line in f:
             try:
                 events.append(json.loads(line))
@@ -23,7 +23,7 @@ def load_events(audit_file: str):
     return events
 
 def print_metrics(config_path: str = "config.yaml"):
-    with open(config_path) as f:
+    with open(config_path, encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
     audit_file = cfg["logging"]["audit_file"]
     events = load_events(audit_file)
