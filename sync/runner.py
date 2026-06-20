@@ -251,10 +251,14 @@ def hash_changed_files(events: Sequence[FileEvent], local_root: str) -> list[Fil
 # ---------------------------------------------------------------------------
 
 def _common_args(cfg: RcloneConfig, log_path: str) -> list[str]:
-    """Args shared between ``copy`` and ``bisync``."""
+    """Args shared between ``copy`` and ``bisync``.
+
+    Note: ``--max-delete`` is intentionally excluded here. ``rclone copy``
+    never deletes destination files, so the flag would be a no-op for pull
+    mode. It is added only in ``build_bisync_argv`` where deletions can occur.
+    """
     args: list[str] = [
         "--filter-from", cfg.filter_file or "",
-        f"--max-delete={cfg.max_delete}",
         f"--max-transfer={cfg.max_transfer}",
         "--check-first",
         "--log-file", log_path,
@@ -296,6 +300,7 @@ def build_bisync_argv(
         f"--conflict-resolve={cfg.conflict_resolve}",
         f"--conflict-loser={cfg.conflict_loser}",
         "--workdir", cfg.workdir or "",
+        f"--max-delete={cfg.max_delete}",  # only meaningful where deletions occur
         *_common_args(cfg, log_path),
     ]
     if resync:

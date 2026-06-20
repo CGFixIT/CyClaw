@@ -127,7 +127,8 @@ def test_pull_argv_is_list_no_shell(tmp_path):
     assert cfg.local_path in argv
     assert "--filter-from" in argv
     assert cfg.filter_file in argv
-    assert f"--max-delete={cfg.max_delete}" in argv
+    # rclone copy never deletes, so --max-delete is bisync-only (not in pull argv)
+    assert f"--max-delete={cfg.max_delete}" not in argv
     assert f"--max-transfer={cfg.max_transfer}" in argv
     assert "--check-first" in argv
     assert "--log-file" in argv
@@ -157,6 +158,8 @@ def test_bisync_argv_is_list_with_conflict_flags(tmp_path):
     assert "--workdir" in argv
     assert cfg.workdir in argv
     assert "--resync" in argv
+    # --max-delete is bisync-only (rclone copy never deletes)
+    assert f"--max-delete={cfg.max_delete}" in argv
 
 
 # ---------------------------------------------------------------------------
