@@ -32,8 +32,8 @@ Zero telemetry. Binds to `127.0.0.1:8787` only. All embeddings run locally via `
 |---|---|---|
 | v1.2.0 | Superseded | 8 OWASP patterns, 90-day TTL, sanitizer baseline |
 | v1.3.0 | **Pre-Langgrinch** | Rate limiting (60/min), 13 OWASP patterns, soul SHA-256 drift detection, atomic writes, TTL→365 days |
-| v1.4.0 | **Production (current)** | Updated requirements.txt to patch vulns and modernize for Python 3.12 |
-| v1.5.0 | **Planning** | Fix Stemmer.py, sql write placeholder code sections, other cleanups,test Dropbox corpus sync integration, BM25 SHA Integrity Detection
+| v1.4.0 | **Production (current)** | Dropbox/cloud corpus sync (out-of-band rclone wrapper + full audit integration) + requirements.txt pinned for Python 3.12 + vuln patches |
+| v1.5.0 | **Planning** | Fix Stemmer.py, sql write placeholder code sections, other cleanups, BM25 SHA Integrity Detection, Dropbox sync hardening & scheduler polish
 
 ---
 
@@ -174,6 +174,7 @@ CyClaw/
 ├── requirements.txt            Pinned Python deps
 ├── cyclaw_telemetry_kill.env  Kill-switch for LangChain/Chroma/OTel telemetry
 ├── cyclaw_suggestions_fix.md  Dev notes and open issues
+├── sync/                       Out-of-band Dropbox corpus sync (rclone wrapper, v1.4+; see docs/SYNC_README.md)
 ├── .gitignore
 ├── old.md                      Archived prior README
 ├── llm/
@@ -244,6 +245,28 @@ CyClaw maintains a persistent identity through `soul.md`. Key properties:
 
 ---
 
+## Dropbox Corpus Sync (v1.4.0)
+
+CyClaw v1.4.0 introduces **optional, out-of-band corpus synchronization** from Dropbox. The `sync/` module is a thin, security-preserving wrapper around the `rclone` binary.
+
+**Core guarantees (all five invariants remain intact):**
+- **Never touches the request path**: `gate.py`, `graph.py`, and the MCP server do **not** import anything from `sync/`. Sync runs as a completely separate process (`python -m sync.cli sync`).
+- **Default one-way pull** (rclone `copy`): safest for a governed RAG corpus. Bidirectional `bisync` is opt-in and discouraged.
+- **Soul & secrets protected**: `data/personality/`, `*.db*`, venvs, indices, logs, and `.git` are excluded by default via hardened filters.
+- **Full audit integration**: Every added or modified file under `data/corpus/` receives a SHA-256 hash entry in the same `logs/audit.jsonl` used by the gateway.
+- **Zero new Python dependencies**: Only stdlib + existing PyYAML. `rclone` (≥ v1.68.2) is an external binary you install once, like LM Studio.
+- **Config-driven but secret-free**: The `sync:` block in `config.yaml` contains only paths, remote name, schedule, and safety fuses (`max_delete`, `max_transfer`). The Dropbox refresh token lives exclusively in your user-owned `rclone.conf`.
+
+**Quick start**
+1. Install rclone ≥1.68.2 and create an App-Folder-scoped Dropbox remote.
+2. Add the `sync:` block to your `config.yaml` (see example in docs/SYNC_README.md).
+3. Run `python -m sync.cli sync` manually or schedule it (cron / systemd / Task Scheduler / launchd).
+4. Optional: `reindex_on_change: true` will exit with code 10 when the corpus changes so your indexer can react.
+
+Full installation, configuration, security rationale, filter generation, and scheduler recipes live in **[docs/SYNC_README.md](docs/SYNC_README.md)**. The design deliberately keeps corpus mutation *outside* the LangGraph topology and soul governance path.
+
+---
+
 ## MCP Server
 
 For Claude Desktop or other MCP-compatible clients:
@@ -276,9 +299,9 @@ The MCP server exposes a single `hybrid_search` tool. It has **no sampling capab
 - Rate limiting (60/min per IP)
 - Browser UI via `static/terminal.html`
 
-**v1.4.0 targets:**
-- Dropbox/cloud corpus sync — **delivered** (out-of-band `rclone` wrapper; see [docs/SYNC_README.md](docs/SYNC_README.md))
-- `plan_node` for multi-step query decomposition
+**v1.4.0 (current production — delivered):**
+- Dropbox/cloud corpus sync via out-of-band rclone wrapper with full audit integration and invariant preservation (see dedicated section above and [docs/SYNC_README.md](docs/SYNC_README.md) for complete setup)
+- `plan_node` for multi-step query decomposition (in progress)
 - BM25 index SHA-256 integrity check on load
 - General-purpose agent (tool invocation from corpus context)
 
