@@ -71,8 +71,13 @@ jobs:
       - name: Run tests + coverage
         shell: bash
         run: |
+          # test_security.py guards the S3 BM25-pickle-RCE rejection (JSON-only
+          # loader) and the S9 API-key auth on /soul/* endpoints. It mocks
+          # ChromaDB and uses FastAPI's TestClient, so it needs no live service
+          # and runs in the same hermetic env as the rest of the suite.
           pytest \
             tests/test_sanitizer.py \
+            tests/test_security.py \
             tests/test_rate_limit.py \
             tests/test_audit.py \
             tests/test_personality.py \
