@@ -93,6 +93,8 @@ jobs:
             tests/test_stemmer.py \
             tests/test_hybrid_search.py \
             tests/test_graph.py \
+            tests/test_mcp_server.py \
+            tests/test_personality_changes.py \
             tests/test_sync_config.py \
             tests/test_sync_filters.py \
             tests/test_sync_runner.py \
@@ -103,6 +105,7 @@ jobs:
             --cov=utils.errors \
             --cov=utils.logger \
             --cov=utils.personality \
+            --cov=mcp_hybrid_server \
             --cov-report=xml \
             --cov-report=html \
             --cov-report=term-missing

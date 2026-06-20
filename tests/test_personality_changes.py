@@ -22,7 +22,12 @@ from utils.personality import PersonalityManager
 
 def test_personality_init_and_version():
     """Test basic init, version tracking, and soul load."""
-    with tempfile.TemporaryDirectory() as tmp:
+    # ignore_cleanup_errors: PersonalityManager keeps its sqlite connection open
+    # for its lifetime, and on Windows an open file handle blocks directory
+    # removal (WinError 32). The DB assertions all run before teardown; only the
+    # cleanup needs to tolerate the still-open handle. (POSIX unlinks open files
+    # fine, so this is a no-op there.)
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         soul_path = Path(tmp) / "soul.md"
         db_path = Path(tmp) / "test_soul.db"
 
@@ -47,7 +52,12 @@ def test_personality_init_and_version():
 
 def test_propose_apply_evolution():
     """Test propose and apply with atomic write (v1.3)."""
-    with tempfile.TemporaryDirectory() as tmp:
+    # ignore_cleanup_errors: PersonalityManager keeps its sqlite connection open
+    # for its lifetime, and on Windows an open file handle blocks directory
+    # removal (WinError 32). The DB assertions all run before teardown; only the
+    # cleanup needs to tolerate the still-open handle. (POSIX unlinks open files
+    # fine, so this is a no-op there.)
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         soul_path = Path(tmp) / "soul.md"
         db_path = Path(tmp) / "test_soul.db"
 
@@ -77,7 +87,12 @@ def test_propose_apply_evolution():
 
 def test_drift_detection():
     """Test SHA-256 drift detection and auto-recovery (v1.3)."""
-    with tempfile.TemporaryDirectory() as tmp:
+    # ignore_cleanup_errors: PersonalityManager keeps its sqlite connection open
+    # for its lifetime, and on Windows an open file handle blocks directory
+    # removal (WinError 32). The DB assertions all run before teardown; only the
+    # cleanup needs to tolerate the still-open handle. (POSIX unlinks open files
+    # fine, so this is a no-op there.)
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         soul_path = Path(tmp) / "soul.md"
         db_path = Path(tmp) / "test_soul.db"
 
@@ -103,7 +118,12 @@ def test_drift_detection():
 
 def test_ttl_maintenance():
     """Test interaction TTL prune on init (v1.3)."""
-    with tempfile.TemporaryDirectory() as tmp:
+    # ignore_cleanup_errors: PersonalityManager keeps its sqlite connection open
+    # for its lifetime, and on Windows an open file handle blocks directory
+    # removal (WinError 32). The DB assertions all run before teardown; only the
+    # cleanup needs to tolerate the still-open handle. (POSIX unlinks open files
+    # fine, so this is a no-op there.)
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         soul_path = Path(tmp) / "soul.md"
         db_path = Path(tmp) / "test_soul.db"
 
