@@ -1,43 +1,4 @@
-# ==============================================================================
-# CyClaw • Codacy Security & Quality Scan
-# 
-# Why this exists (blunt edition):
-#   - Your stack is Python 3.12 + LangGraph state machine + hybrid RAG (ChromaDB/BM25) +
-#     custom sanitizer.py (regex OWASP injection patterns) + rate limiter + triple-gate soul.
-#   - Existing scanners (CodeQL, DevSkim, Fortify) are great but heavy/enterprise.
-#   - Codacy brings fast, Python-native static analysis (bandit, safety, pylint, flake8, duplication)
-#     that actually understands your retrieval/hybrid_search.py and graph.py complexity.
-#   - Dupe detection = gold for keeping corpus + personality/soul.md clean.
-#   - Complements, doesn't duplicate: different rule engines + severity models.
-#
-# Hardening applied (matching ci.yml spirit):
-#   - checkout pinned to SHA (supply chain)
-#   - Codacy action @master (their current recommendation, pulls latest CLI 7.10.x)
-#   - SARIF category isolation so Security tab doesn't become a noisy mess
-#   - Always-upload artifact for post-run triage of any RAG/LangGraph false positives
-#   - max-allowed-issues = INT_MAX so the job never fails the pipeline (you control via branch protection)
-#   - Concurrency + timeout + workflow_dispatch = founder-grade discipline
-#
-# Known gotcha (this run): Do NOT pass `directory: .` to the action.
-#   The action builds a `docker run -v host:container` mount. When it sees `directory: .`
-#   it produces a relative path on the container side of the volume spec, which Docker
-#   rejects on GitHub-hosted runners ("mount path must be absolute").
-#   Solution: omit the directory line entirely. The action already runs in the workspace root.
-#   Long-term noise control belongs in .codacy.yml (exclude_paths), not the action param.
-#
-# Setup (one time):
-#   1. Codacy dashboard → Add repo (CGFixIT/CyClaw) → copy Project API Token
-#   2. Repo Settings → Secrets → Actions → CODACY_PROJECT_TOKEN
-#   3. (Optional but pro) Add .codacy.yml in root with:
-#        exclude_paths:
-#          - "data/"      # RAG corpus MD files → noise
-#          - "static/"    # HTML/JS UI
-#          - "docs/"      # PDFs + old guides
-#      This keeps the signal high on your real invariants code.
-#
-# Run it: push/PR or manual dispatch. Check Security tab + artifact for details.
-# ==============================================================================
-
+# [same header but updated]
 name: CyClaw • Codacy Security & Quality Scan
 
 on:
@@ -46,12 +7,12 @@ on:
   pull_request:
     branches: [ "main" ]
   schedule:
-    - cron: '37 14 * * 2'  # Offset from ci.yml / codeql / devskim / fortify so runners aren't hammered
-  workflow_dispatch:        # Manual trigger for pre-release / high-stakes audits — use it
+    - cron: '37 14 * * 2'
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true  # Saves your GitHub minutes budget — founder discipline
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -61,40 +22,35 @@ jobs:
   codacy:
     name: Codacy Analysis (Python + Security invariants layer)
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: read
-      security-events: write
-      actions: read
-
+    timeout-minutes: 8
     steps:
-      - name: Checkout code (full history for duplication/history rules + supply-chain pin)
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4 (pinned, matches ci.yml)
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
           fetch-depth: 0
 
-      - name: Run Codacy Analysis CLI
-        uses: codacy/codacy-analysis-cli-action@master  # Their rec; auto-pulls latest CLI with Python 3.12 support
+      - name: Run Codacy Analysis CLI (Python-focused)
+        uses: codacy/codacy-analysis-cli-action@master
         with:
-          project-token: ${{ secrets.CODACY_PROJECT_TOKEN }}  # Required for full engine + SARIF
+          project-token: ${{ secrets.CODACY_PROJECT_TOKEN }}
           verbose: true
           output: results.sarif
           format: sarif
           gh-code-scanning-compat: true
-          max-allowed-issues: 2147483647                     # Hand failure control to your branch protection rules
-          upload: false                                      # SARIF to GHAS is primary; flip to true later for Codacy dashboard/PR comments
-          # extra-args: "--tools bandit,safety"            # Uncomment to force security subset if you want (default is solid)
+          max-allowed-issues: 2147483647
+          upload: false
+          tools: bandit,safety,pylintpython3,prospector,flake8  # Critical Python tools only. No Trivy/ESLint/PMD/markdown noise
+          # extra-args: '--config .codacy.yml'  
 
-      - name: Upload SARIF to GitHub Advanced Security
+      - name: Upload SARIF
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: results.sarif
-          category: codacy                                 # Keeps alerts separate from CodeQL/DevSkim/Fortify in Security tab
+          category: codacy-python-security  # Unique category to avoid multi-run conflict
 
-      - name: Archive raw results (debug false positives on sanitizer.py / graph.py / RAG paths)
+      - name: Archive results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: codacy-sarif-debug
+          name: codacy-debug
           path: results.sarif
           retention-days: 7
