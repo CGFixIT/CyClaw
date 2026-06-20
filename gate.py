@@ -148,12 +148,23 @@ with open("config.yaml", encoding="utf-8") as f:
 setup_logging(cfg)
 logger = logging.getLogger("cyclaw.gate")
 
-if not os.environ.get("CYCLAW_API_KEY", ""):
+if not os.environ.get("CYCLAW_API_KEY", "") and _EPHEMERAL_API_KEY:
+    # Surface the ephemeral key via a 0600 file, NOT the log. Logging a secret in
+    # clear text is flagged (CodeQL py/clear-text-logging) and logs may be shipped
+    # or retained; a loopback-only key file read by the operator is the safer
+    # channel. The log line names only the path, never the key.
+    from pathlib import Path as _Path
+    _key_file = _Path(cfg.get("logging", {}).get("log_file") or "logs/cyclaw.log").parent / "cyclaw_ephemeral_key"
+    _key_file.parent.mkdir(parents=True, exist_ok=True)
+    _key_file.write_text(_EPHEMERAL_API_KEY, encoding="utf-8")
+    try:
+        os.chmod(_key_file, 0o600)
+    except OSError:
+        pass
     logger.warning(
-        "CYCLAW_API_KEY is not set — generated an EPHEMERAL API key for this run. "
-        "Soul-mutation endpoints (/soul/*) require it as a Bearer token. Set "
-        "CYCLAW_API_KEY for a stable key. Ephemeral key:\n    %s",
-        _EPHEMERAL_API_KEY,
+        "CYCLAW_API_KEY is not set — generated an ephemeral API key for this run "
+        "and wrote it (mode 0600) to %s. Soul-mutation endpoints (/soul/*) require "
+        "it as a Bearer token; set CYCLAW_API_KEY for a stable key.", _key_file,
     )
 
 app = FastAPI(
@@ -185,7 +196,7 @@ app.add_middleware(
 # on each request). Host matching ignores port; the list is config-driven so an
 # operator can add any name/IP they reach CyClaw by (e.g. the home-lab LAN IP).
 from starlette.middleware.trustedhost import TrustedHostMiddleware
-_allowed_hosts = cfg.get("security", {}).get("allowed_hosts", ["127.0.0.1", "localhost"])
+_allowed_hosts = cfg.get("security", {}).get("allowed_hosts", ["127.0.0.1", "localhost"])  # DevSkim: ignore DS162092,DS137138 - loopback host allow-list by design
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=_allowed_hosts)
 
 try:

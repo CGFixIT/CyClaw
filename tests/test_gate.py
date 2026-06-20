@@ -75,7 +75,7 @@ def client(tmp_path):
         # base_url uses an allowed Host (localhost) so TrustedHostMiddleware
         # (added at import from the real config.yaml allowed_hosts) admits the
         # request; the default "testserver" host would otherwise 400.
-        client = TestClient(gate.app, base_url="http://localhost")
+        client = TestClient(gate.app, base_url="http://localhost")  # DevSkim: ignore DS162092,DS137138 - test loopback host
         yield client, mock_graph
 
     reset_config_cache()
@@ -162,7 +162,7 @@ class TestTrustedHost:
     def test_allowed_host_ok(self, client):
         test_client, _ = client
         with patch("gate.check_all", return_value=[]):
-            resp = test_client.get("/health", headers={"host": "localhost"})
+            resp = test_client.get("/health", headers={"host": "localhost"})  # DevSkim: ignore DS162092,DS137138 - test loopback host
         assert resp.status_code == 200
 
 
