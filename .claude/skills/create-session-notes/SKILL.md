@@ -33,4 +33,4 @@ The notes file contains these fixed sections:
 
 ## Usage
 
-When invoked, update the session notes file at `SESSION_NOTES.md` in the repository root. If the file does not exist, create it with all section headings and italic descriptions intact. Then apply updates to the relevant sections using parallel Edit tool calls.
+When invoked, update the session notes file at `SESSION_NOTES.md` in the repository docs/memories/ folder. If the file does not exist, create it with all section headings and italic descriptions intact. Then apply updates to the relevant sections using parallel Edit tool calls.
