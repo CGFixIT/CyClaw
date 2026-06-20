@@ -5,7 +5,6 @@ Usage:
 """
 
 import json
-import os
 from collections import Counter
 from pathlib import Path
 import yaml
@@ -40,7 +39,7 @@ def print_metrics(config_path: str = "config.yaml"):
         scores = [e["top_score"] for e in rag_queries if "top_score" in e]
         if scores:
             print(f"\nRAG scores — avg: {sum(scores)/len(scores):.3f}, min: {min(scores):.3f}, max: {max(scores):.3f}")
-        mode_counts = Counter(e.get("retrieval_mode") for e in rag_queries)
+        mode_counts = Counter(e.get("retrieval_mode") or "unknown" for e in rag_queries)
         print("\nRetrieval modes:")
         for mode, count in mode_counts.most_common():
             print(f"  {mode}: {count}")
