@@ -199,7 +199,11 @@ async def query_endpoint(request: Request, req: QueryRequest):
     try:
         check_input(req.query)
     except PromptInjectionError as e:
-        audit_log({"event": "prompt_injection_blocked", "query": req.query[:50]})
+        # Pass the full query: audit_log() SHA-256-hashes the "query" field, so
+        # truncating here yields a hash of only the first 50 chars that diverges
+        # from the canonical full-query hash written by the graph audit node and
+        # the MCP path. No raw text is persisted either way.
+        audit_log({"event": "prompt_injection_blocked", "query": req.query})
         raise HTTPException(
             status_code=400,
             detail={"error": e.message, "code": e.code, "details": e.details}
@@ -214,7 +218,7 @@ async def query_endpoint(request: Request, req: QueryRequest):
         result = await asyncio.to_thread(compiled_graph.invoke, initial_state)
     except Exception as e:
         safe_msg = _sanitize_error(e)
-        audit_log({"event": "graph_error", "query": req.query[:50], "error": safe_msg})
+        audit_log({"event": "graph_error", "query": req.query, "error": safe_msg})
         raise HTTPException(status_code=500, detail={"error": safe_msg, "code": "GRAPH_ERROR"})
 
     needs_confirm = result.get("needs_user_confirm", False)
