@@ -841,7 +841,11 @@ function addEntry(type, label, text, isHtml = false, meta = null) {
   if (meta) {
     html += '<div class="meta-row">';
     for (const m of meta) {
-      html += `<span class="meta-tag">${m.k}: <span class="val">${m.v}</span></span>`;
+      // Escape both key and value: although m.v is currently fed from
+      // server-side enums (model_used / retrieval_mode), this sink writes via
+      // innerHTML, so escape defensively to keep it XSS-safe if the API ever
+      // surfaces attacker-influenced metadata.
+      html += `<span class="meta-tag">${escHtml(String(m.k))}: <span class="val">${escHtml(String(m.v))}</span></span>`;
     }
     html += '</div>';
   }
