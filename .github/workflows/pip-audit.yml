@@ -3,6 +3,16 @@ name: pip-audit (Python dependency CVE scan)
 on:
   schedule:
     - cron: '0 6 * * *'
+  push:
+    paths:
+      - 'requirements.txt'
+      - 'constraints.txt'
+      - '.github/workflows/pip-audit.yml'
+  pull_request:
+    paths:
+      - 'requirements.txt'
+      - 'constraints.txt'
+      - '.github/workflows/pip-audit.yml'
   workflow_dispatch:
 
 permissions:
@@ -19,9 +29,18 @@ jobs:
       - name: Install dependencies with constraints
         run: |
           pip install -r requirements.txt -c constraints.txt
+      - name: Install pip-audit (CI security scanner, not a prod dep)
+        run: |
+          pip install pip-audit
+        # pip-audit is deliberately excluded from requirements.txt / constraints.txt
+        # (keeps prod install lean + reproducible). This explicit step ensures the
+        # scanner binary is present on the GitHub runner before the audit gate runs.
       - name: Run pip-audit (ignore only the mitigated chromadb CVE)
         run: |
           pip-audit -r requirements.txt --ignore-vuln CVE-2026-45829 --fail-on high
         # Explanation: CVE-2026-45829 is pre-auth RCE via malicious embedding model + trust_remote_code=true.
-        # CyClaw mitigation: Binds exclusively to 127.0.0.1, offline-first, explicitly disables trust_remote_code in retrieval code.
-        # Real risk is near-zero. We track upstream for stable patch.
+        # CyClaw mitigation (structural, not advisory): Binds exclusively to 127.0.0.1 in gate.py;
+        # offline-first design; explicitly disables trust_remote_code in retrieval/embeddings.py,
+        # retrieval/indexer.py, and mcp_hybrid_server.py. Real risk is near-zero under the 5 invariants.
+        # We track upstream for stable patch. Cross-ref: PDF §K (Deployment & Validation), §M (Security Invariants),
+        # gate.py rate-limiter-first + telemetry kill, and the hardened CI gate added in v1.4.0 main.
