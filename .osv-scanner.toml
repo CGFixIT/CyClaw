@@ -1,8 +1,21 @@
 # OSV-Scanner configuration for CyClaw
 #
-# Targeted ignores only for vulnerabilities with no upstream patch available.
+# Targeted ignores ONLY for vulnerabilities with no upstream patch available.
 # All other findings will still fail the job (fail-on-vuln behavior preserved).
+
+# === Vulnerability Tracking Metadata ===
+# ID: GHSA-f4j7-r4q5-qw2c (CVE-2026-45829)
+# Package: chromadb
+# Version: 1.5.6
+# Date added: 2026-06-20
+# Last reviewed: 2026-06-20
+# Owner: CGFixIT
+# Next scheduled review: 2026-09-20 (quarterly)
+# Status: Accepted (no upstream patch available)
+# Mitigation: Local PersistentClient (embedded mode) + offline-first + no HttpClient surface
+# References: .github/workflows/pip-audit.yml, cyclaw-advisor §K / §M
+# Notes: Track https://github.com/chroma-core/chroma for upstream fix. Re-evaluate on any 1.5.x or 1.6+ release.
 
 [[IgnoredVulns]]
 id = "GHSA-f4j7-r4q5-qw2c"
-reason = "CVE-2026-45829 (Critical pre-auth RCE) — no upstream patch released yet. Risk accepted under v1.4.0 for local/offline use: chromadb.PersistentClient (embedded mode, path from config.yaml), no HttpClient exposed, pre-computed embeddings only, offline-first + telemetry kill switch. See .github/workflows/pip-audit.yml and cyclaw-advisor §K / §M for full justification. Track upstream for fix."
+reason = "CVE-2026-45829 (Critical pre-auth RCE) — no upstream patch released as of 2026-06-20. Risk accepted under v1.4.0 for local/offline CyClaw: chromadb.PersistentClient (embedded mode, path from config.yaml), no HttpClient, pre-computed embeddings only, offline-first design + full telemetry kill switch in gate.py. See pip-audit workflow for detailed justification. Quarterly review scheduled."
