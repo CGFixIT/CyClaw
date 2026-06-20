@@ -7,7 +7,7 @@
 # home-lab tool — not internet-exposed.
 #
 # PROMPT FILTER UPDATE (2026-06):
-# Expanded banned_patterns from 13 → 30 curated high-signal regex.
+# Expanded banned_patterns from 13 → 31 curated high-signal regex.
 # Categories: Core Override, Role Reassignment, System/New Instructions,
 # Memory/Persistence Manipulation (critical for RAG + soul poisoning defense),
 # Authority/Urgency, Tool/Action Hijacking, Light Obfuscation/Jailbreak.
@@ -88,7 +88,7 @@ policy:
     # newlines that corpus chunks routinely contain — and the alternations
     # cover the previous/all/prior variants. Compiled with re.IGNORECASE.
     #
-    # Expanded set (30 patterns total) for stronger defense against:
+    # Expanded set (31 patterns total) for stronger defense against:
     # - Direct override / jailbreak
     # - Role reassignment & impersonation
     # - Memory/persistence poisoning (zombie agent risk in RAG/soul)
@@ -96,9 +96,10 @@ policy:
     # - Tool/MCP action hijacking
     # - Light obfuscation
     banned_patterns:
-      # === Core Override (7) ===
+      # === Core Override (8) ===
       - 'ignore\s+(previous|all|prior)\s+instructions'
       - 'ignore\s+all\s+previous'
+      - 'ignore\s+safety'
       - 'disregard\s+(previous|all|prior)'
       - 'forget\s+(previous|all|prior)\s+instructions'
       - 'override\s+instructions'
@@ -138,7 +139,7 @@ policy:
       - 'execute\s+command|run\s+this\s+code'
       - 'call\s+function|use\s+tool\s+to|invoke\s+tool'
 
-      # === Light Obfuscation / Jailbreak Variants (remaining to reach 30) ===
+      # === Light Obfuscation / Jailbreak Variants (remaining to reach 31) ===
       - 'jailbreak|dan\s+mode|developer\s+mode'
       - 'base64|decode\s+and\s+execute'
     max_input_chars: 4000
