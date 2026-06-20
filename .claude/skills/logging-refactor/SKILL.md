@@ -266,7 +266,7 @@ Completed: <timestamp>
 | Pass rate            | 70%      | 100%  |
 | Log coverage paths   | 4/18     | 18/18 |
 | Log assertion tests  | 2        | 21    |
-| Failures             | 0        | 0     |
+| Failures             | 5        | 0     |
 ```
 
 Paths covered:
