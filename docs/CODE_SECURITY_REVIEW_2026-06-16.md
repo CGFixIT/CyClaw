@@ -1,5 +1,11 @@
 # CyClaw — Code & Security Review
 
+> **Historical record (2026-06-16).** For the CURRENT status of every finding below, see
+> [`SECURITY_REVIEW_STATUS.md`](./SECURITY_REVIEW_STATUS.md) — the single consolidated
+> Resolved/Open tracker. The per-finding "Status / owner" notes in this document reflect the
+> state and open-PR plan *as of this review run* and may be stale; where they disagree with the
+> consolidated tracker, the tracker wins.
+
 **Date:** 2026-06-16
 **Reviewer:** Scheduled review routine (Claude Code)
 **Base reviewed:** `main` @ `4f6adc5` ("Delete old.md")
