@@ -328,10 +328,13 @@ def test_windows_missing_schtasks_raises() -> None:
 
 def test_scheduler_from_loaded_config(tmp_path: Path) -> None:
     cfg_yaml = tmp_path / "config.yaml"
+    # Use forward slashes: YAML double-quoted strings interpret backslashes as
+    # escape sequences, which breaks Windows paths like C:\Users\... in CI.
+    corpus_fwd = _CORPUS.replace("\\", "/")
     cfg_yaml.write_text(
         "sync:\n"
         "  enabled: true\n"
-        f'  local_path: "{_CORPUS}"\n'
+        f'  local_path: "{corpus_fwd}"\n'
         "  remote_name: dropbox_cyclaw\n"
         "  remote_path: CyClaw/corpus\n"
         "  schedule_hour: 6\n"

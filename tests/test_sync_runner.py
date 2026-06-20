@@ -8,6 +8,7 @@ resolution via ``sync.runner.shutil.which``.
 
 from __future__ import annotations
 
+import sys
 import textwrap
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -32,7 +33,8 @@ from sync.runner import (
 from utils.errors import RcloneNotInstalledError, RcloneVersionError
 from utils.logger import reset_config_cache
 
-FAKE_RCLONE = "/usr/bin/rclone"
+# shutil.which returns a drive-letter absolute path on Windows; POSIX path on Linux.
+FAKE_RCLONE = r"C:\Windows\rclone.exe" if sys.platform == "win32" else "/usr/bin/rclone"
 
 
 @pytest.fixture(autouse=True)
