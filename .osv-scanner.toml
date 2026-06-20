@@ -1,0 +1,8 @@
+# OSV-Scanner configuration for CyClaw
+#
+# Targeted ignores only for vulnerabilities with no upstream patch available.
+# All other findings will still fail the job (fail-on-vuln behavior preserved).
+
+[[IgnoredVulns]]
+id = "GHSA-f4j7-r4q5-qw2c"
+reason = "CVE-2026-45829 (Critical pre-auth RCE) — no upstream patch released yet. Risk accepted under v1.4.0 for local/offline use: chromadb.PersistentClient (embedded mode, path from config.yaml), no HttpClient exposed, pre-computed embeddings only, offline-first + telemetry kill switch. See .github/workflows/pip-audit.yml and cyclaw-advisor §K / §M for full justification. Track upstream for fix."
