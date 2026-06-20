@@ -71,3 +71,44 @@ CI target is Python 3.12. `GROK_API_KEY` must be set (any non-empty value works 
 - `status: degraded` in `/health` is normal without LM Studio running
 - `TELEMETRY KILL` messages on startup are intentional
 - Soul file must exist at `data/personality/soul.md` before server start
+
+---
+
+## Sandbox Runtime Verification
+
+Skill files (`verify.sh`, `gate_runtime_check.py`) live on `main` at
+`.claude/skills/sandbox-runtime-verification/` but are **not cloned into the
+local sandbox** unless that commit is checked out. When the skill is invoked,
+fetch the files from GitHub MCP before running:
+
+```python
+mcp__github__get_file_contents(owner="cgfixit", repo="cyclaw",
+    path=".claude/skills/sandbox-runtime-verification/verify.sh", ref="refs/heads/main")
+```
+
+Write to the local path, then run. Last verified: 2026-06-20, Python 3.12.3,
+**98 tests passed**.
+
+---
+
+## Known P0 Security Issues (open — not yet fixed in code)
+
+Documented in `docs/CODE_SECURITY_REVIEW_2026-06-20.md`. Claude Code should
+address these before next release:
+
+1. Rate limiter race condition + missing `threading.Lock` — `gate.py`
+2. ReDoS in config-driven sanitizer patterns — `utils/sanitizer.py`
+3. Audit log write unprotected (crashes queries on `OSError`) — `utils/logger.py`
+4. Config cache TOCTOU (no lock) — `utils/logger.py`
+5. Soul preamble injected into LLM prompt without sanitization — `graph.py`
+
+Run `/tests-refactor` after fixing to bring coverage to ≥115 tests.
+
+---
+
+## Test Suite Baseline (2026-06-20)
+
+- **98 tests passing** on Python 3.12.3
+- Known flaws documented in `docs/TEST_SUITE_ANALYSIS_2026-06-20.md`
+- Key gap: `test_rate_limit.py` tests a private reimplementation, not `gate.py`
+- Target: ≥115 tests after P0/P1 fixes from the audit doc
