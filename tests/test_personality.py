@@ -1,13 +1,7 @@
 # ============================================================================
-# BUILD-ALIGNMENT NOTE (2026-06-13): Some tests below target a FUTURE CyClaw
-# build not yet pushed to GitHub (pending Dropbox sync of the local working
-# tree). They reference APIs absent from the current pushed implementation and
-# will ERROR/FAIL against HEAD until that build lands — expected, not a bug:
-#   * pm.conn                         (no persistent conn attr at HEAD)
-#   * pm.reload_soul()                (HEAD exposes reload())
-#   * pm.maintenance(...)             (no maintenance() method at HEAD yet)
-#   * patch('utils.personality.audit_log')  (personality.py doesn't import audit_log at HEAD)
-# Do NOT 'fix' by downgrading these tests to the older pushed API.
+# TEST STATUS (verified 2026-06-19 against HEAD f5934db):
+# All 8 tests pass. pm.conn, reload_soul(), maintenance(ttl_days=), and
+# patch('utils.personality.audit_log') are all present in utils/personality.py.
 # ============================================================================
 """Tests for PersonalityManager — soul.md persistent personality layer.
 
@@ -68,7 +62,6 @@ class TestPersonalityManager:
         """If no soul.md exists, PM creates a minimal fallback."""
         soul_path, _, _ = tmp_paths
 
-        # Mock audit_log to avoid config issues
         with patch("utils.personality.audit_log"):
             from utils.personality import PersonalityManager
             pm = PersonalityManager(cfg)
@@ -116,7 +109,6 @@ class TestPersonalityManager:
         proposal = pm.propose_evolution("# New Soul", "testing")
         assert proposal["status"] == "proposed"
         assert proposal["proposed_soul"] == "# New Soul"
-        # Original should be unchanged
         assert pm.soul_core == "# Original"
 
     def test_apply_evolution_writes_file_and_db(self, cfg, tmp_paths):
@@ -150,7 +142,6 @@ class TestPersonalityManager:
 
         assert pm.soul_core == "# Before Edit"
 
-        # Simulate manual edit
         soul_path.write_text("# After Edit", encoding="utf-8")
         pm.reload_soul()
         assert pm.soul_core == "# After Edit"
@@ -182,7 +173,6 @@ class TestPersonalityManager:
             from utils.personality import PersonalityManager
             pm = PersonalityManager(cfg)
 
-        # Insert an old interaction
         pm.conn.execute(
             "INSERT INTO interactions (timestamp, query_hash, outcome) "
             "VALUES (datetime('now', '-100 days'), 'old', 'local')"

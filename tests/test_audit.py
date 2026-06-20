@@ -1,8 +1,7 @@
 # ============================================================================
-# BUILD-ALIGNMENT NOTE (2026-06-13): Some tests target a FUTURE build (pending
-# Dropbox sync) whose audit_log() usage/signature differs from HEAD. Expected
-# to fail against the current pushed implementation until that build lands.
-# Do not 'fix' to match the older pushed API.
+# TEST STATUS (verified 2026-06-19 against HEAD f5934db):
+# All 7 tests pass. audit_log(), hash_query(), redact_sensitive(), and
+# reset_config_cache() signatures match utils/logger.py at HEAD exactly.
 # ============================================================================
 """Unit tests for audit logging — hashing, redaction, JSONL format."""
 
