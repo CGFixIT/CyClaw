@@ -17,6 +17,14 @@ on:
   pull_request:
     branches: [ main, cc ]
 
+# Cancel superseded runs: when new commits are pushed to the same PR/branch,
+# in-progress runs for that ref are cancelled instead of running to completion
+# on stale code. Pushes to main are exempt (cancel-in-progress is false there)
+# so every commit landed on main keeps full, uninterrupted CI history.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 permissions:
   contents: read
 
