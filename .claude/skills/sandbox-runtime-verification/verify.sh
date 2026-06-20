@@ -120,6 +120,12 @@ fi
 
 # ── stage 4: Windows smoke-bomb API test (bash equivalent) ────────────────────
 note "Stage 4 — API smoke bomb (launching server on :$PORT)"
+# Restore the real soul.md now (before the server starts) so /soul returns real
+# content during the smoke + terminal-emulation stages. The EXIT trap still
+# restores it as a safety net, but the server must see the real file.
+if [ -n "$SOUL_BACKUP" ] && [ -f "$SOUL_BACKUP" ]; then
+  cp "$SOUL_BACKUP" data/personality/soul.md
+fi
 if [ ! -f index/bm25.json ]; then
   "$VPY" -m retrieval.indexer > /tmp/cyclaw-verify-index.txt 2>&1 || true
 fi
@@ -143,13 +149,18 @@ else
   GRP=$(echo "$R" | jget "str(d.get('graph_ready'))" 2>/dev/null || echo "?")
   { [ "$IDX" = "True" ] && [ "$GRP" = "True" ]; } || SMOKE_FAILS=$((SMOKE_FAILS+1))
 
+  # Vault-hit path: corpus query should score above min_score gate → needs_confirm=false,
+  # model_used=local (LLM attempted; will error without LM Studio — that is expected).
   R=$(curl -sf -X POST "$BASE/query" -H "Content-Type: application/json" \
       -d '{"query":"What is RRF fusion in CyClaw?"}' || true)
   NC=$(echo "$R" | jget "str(d.get('needs_confirm','?'))" 2>/dev/null || echo "?")
-  [ "$NC" = "True" ] || SMOKE_FAILS=$((SMOKE_FAILS+1))
+  HIT=$(echo "$R" | jget "str(d.get('hit_count',0))" 2>/dev/null || echo "0")
+  { [ "$NC" = "False" ] && [ "$HIT" != "0" ]; } || SMOKE_FAILS=$((SMOKE_FAILS+1))
 
+  # Vault-miss + offline path: use an off-topic query (score near 0) with
+  # user_confirmed_online=false so the graph routes to offline_best_effort.
   R=$(curl -sf -X POST "$BASE/query" -H "Content-Type: application/json" \
-      -d '{"query":"What is CyClaw?","user_confirmed_online":false}' || true)
+      -d '{"query":"What is the boiling point of water at high altitude?","user_confirmed_online":false}' || true)
   MODEL=$(echo "$R" | jget "d.get('model_used','?')" 2>/dev/null || echo "?")
   [ "$MODEL" = "offline-best-effort" ] || SMOKE_FAILS=$((SMOKE_FAILS+1))
 
@@ -166,9 +177,18 @@ else
   [ "$HTTP" = "200" ] || SMOKE_FAILS=$((SMOKE_FAILS+1))
 
   if [ "$SMOKE_FAILS" -eq 0 ]; then
-    pass "API smoke bomb" "6/6 endpoint checks passed (health, query x2, injection, soul, static)"
+    pass "API smoke bomb" "6/6 endpoint checks passed (health, vault-hit query, offline-best-effort, injection, soul, static)"
   else
     fail "API smoke bomb" "$SMOKE_FAILS/6 endpoint checks failed — see $SERVER_LOG"
+  fi
+
+  # ── stage 7: terminal.html API emulation ────────────────────────────────────
+  note "Stage 7 — terminal.html API emulation (exact JS fetch lifecycle)"
+  if "$VPY" "$SKILL_DIR/terminal_emulation.py" "$BASE" > /tmp/cyclaw-verify-terminal.txt 2>&1; then
+    pass "terminal.html API emulation" "all endpoint flows matched (health, vault-hit, vault-miss→offline, soul)"
+  else
+    fail "terminal.html API emulation" "see /tmp/cyclaw-verify-terminal.txt"
+    cat /tmp/cyclaw-verify-terminal.txt
   fi
 fi
 
