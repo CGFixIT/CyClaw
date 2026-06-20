@@ -4,6 +4,7 @@
 # All other findings will still fail the job (fail-on-vuln behavior preserved).
 
 # === Vulnerability Tracking Metadata ===
+# --- GHSA-f4j7-r4q5-qw2c (chromadb) ---
 # ID: GHSA-f4j7-r4q5-qw2c (CVE-2026-45829)
 # Package: chromadb
 # Version: 1.5.6
@@ -14,8 +15,25 @@
 # Status: Accepted (no upstream patch available)
 # Mitigation: Local PersistentClient (embedded mode) + offline-first + no HttpClient surface
 # References: .github/workflows/pip-audit.yml, cyclaw-advisor §K / §M
-# Notes: Track https://github.com/chroma-core/chroma for upstream fix. Re-evaluate on any 1.5.x or 1.6+ release.
+# Notes: Track https://github.com/chroma-core/chroma for upstream fix.
+#
+# --- GHSA-p4gq-832x-fm9v (nltk) ---
+# ID: GHSA-p4gq-832x-fm9v (CVE-2026-54293)
+# Package: nltk
+# Version: 3.9.4
+# Date added: 2026-06-20
+# Last reviewed: 2026-06-20
+# Owner: CGFixIT
+# Next scheduled review: 2026-09-20 (quarterly)
+# Status: Accepted (no upstream patch available yet)
+# Mitigation: Custom regex tokenizer + PorterStemmer in retrieval/stemmer.py deliberately avoids nltk.data.load() (the vulnerable function). Standard NLTK tokenization pipeline is not used.
+# References: retrieval/stemmer.py (explicit comment about avoiding the CVE)
+# Notes: Extremely low practical exploitability in CyClaw. Monitor for 3.9.5+ release.
 
 [[IgnoredVulns]]
 id = "GHSA-f4j7-r4q5-qw2c"
 reason = "CVE-2026-45829 (Critical pre-auth RCE) — no upstream patch released as of 2026-06-20. Risk accepted under v1.4.0 for local/offline CyClaw: chromadb.PersistentClient (embedded mode, path from config.yaml), no HttpClient, pre-computed embeddings only, offline-first design + full telemetry kill switch in gate.py. See pip-audit workflow for detailed justification. Quarterly review scheduled."
+
+[[IgnoredVulns]]
+id = "GHSA-p4gq-832x-fm9v"
+reason = "CVE-2026-54293 (High path traversal in nltk.data.load()) — no upstream patch released yet. Risk accepted because CyClaw deliberately avoids the vulnerable code path: custom regex-based tokenize_and_stem() in retrieval/stemmer.py bypasses nltk.data.load() entirely (see explicit comment in the file). Standard NLTK tokenization that would trigger the vuln is not used. Quarterly review scheduled."
