@@ -1,52 +1,153 @@
-#!/usr/bin/env python
-"""Unit test for rate limiting added to gate.py (v1.3)"""
+"""Unit tests for the production rate limiter (utils/ratelimit.RateLimiter).
 
-import sys
+These tests import the REAL limiter used by gate.py — not a re-implemented
+copy — so a regression in the production limiter makes them fail. Timing is
+driven by an injected fake clock; there is no time.sleep and no wall-clock
+dependence.
+"""
+
+import threading
 import time
 from collections import defaultdict
 
-sys.path.insert(0, '/home/workdir/artifacts/CyClaw-refactored')
+import pytest
 
-# Simulate the check_rate_limit function from gate.py
-_rate_limits = defaultdict(list)
-RATE_LIMIT_REQUESTS = 5  # lower for test
-RATE_LIMIT_WINDOW = 2    # seconds
+from utils.ratelimit import RateLimiter
+import gate
 
-def check_rate_limit(client_ip: str) -> bool:
-    now = time.time()
-    _rate_limits[client_ip] = [t for t in _rate_limits[client_ip] if now - t < RATE_LIMIT_WINDOW]
-    if len(_rate_limits[client_ip]) >= RATE_LIMIT_REQUESTS:
-        return False
-    _rate_limits[client_ip].append(now)
-    return True
 
-def test_rate_limit_allows_under_limit():
-    ip = "127.0.0.1"  # DevSkim: ignore DS162092 - test-only loopback IP fixture
-    _rate_limits.clear()
-    for i in range(RATE_LIMIT_REQUESTS):
-        assert check_rate_limit(ip), f"Request {i+1} should be allowed"
-    print("✓ test_rate_limit_allows_under_limit passed")
+class _SlowHits(defaultdict):
+    """A timestamp map whose reads yield the GIL.
 
-def test_rate_limit_blocks_over_limit():
-    ip = "192.168.1.1"
-    _rate_limits.clear()
-    for i in range(RATE_LIMIT_REQUESTS):
-        check_rate_limit(ip)
-    assert not check_rate_limit(ip), "6th request should be blocked"
-    print("✓ test_rate_limit_blocks_over_limit passed")
+    Replacing ``RateLimiter._hits`` with this forces a context switch in the
+    middle of the read-modify-write, so concurrent threads deterministically
+    interleave there *unless* a real lock serializes the region. It turns the
+    "missing lock" race from probabilistic into reliably observable.
+    """
 
-def test_rate_limit_window_expiry():
-    ip = "10.0.0.1"
-    _rate_limits.clear()
-    for i in range(RATE_LIMIT_REQUESTS):
-        check_rate_limit(ip)
-    time.sleep(RATE_LIMIT_WINDOW + 0.1)
-    assert check_rate_limit(ip), "Request after window should be allowed again"
-    print("✓ test_rate_limit_window_expiry passed")
+    def __init__(self, target_ip):
+        super().__init__(list)
+        self._target_ip = target_ip
 
-if __name__ == "__main__":
-    print("Running rate limit unit tests (v1.3 gate.py logic)...")
-    test_rate_limit_allows_under_limit()
-    test_rate_limit_blocks_over_limit()
-    test_rate_limit_window_expiry()
-    print("\n✅ Rate limiting changes verified!")
+    def __getitem__(self, key):
+        value = super().__getitem__(key)
+        if key == self._target_ip:
+            # Yield AFTER snapshotting the value: concurrent threads then hold a
+            # stale view across the switch, so an unguarded region overcounts.
+            time.sleep(0.001)
+        return value
+
+
+class FakeClock:
+    """Deterministic, advanceable clock for window/eviction tests."""
+
+    def __init__(self, t: float = 1000.0):
+        self.t = t
+
+    def __call__(self) -> float:
+        return self.t
+
+    def advance(self, dt: float) -> None:
+        self.t += dt
+
+
+def test_allows_under_limit():
+    clock = FakeClock()
+    rl = RateLimiter(max_requests=5, window_seconds=2, clock=clock)
+    for i in range(5):
+        assert rl.allow("10.0.0.1") is True, f"request {i + 1} should be allowed"
+
+
+def test_blocks_over_limit():
+    clock = FakeClock()
+    rl = RateLimiter(max_requests=5, window_seconds=2, clock=clock)
+    for _ in range(5):
+        rl.allow("10.0.0.1")
+    assert rl.allow("10.0.0.1") is False, "6th request should be blocked"
+
+
+def test_window_expiry_via_clock():
+    """After the window elapses, the IP is allowed again (no time.sleep)."""
+    clock = FakeClock()
+    rl = RateLimiter(max_requests=5, window_seconds=2, clock=clock)
+    for _ in range(5):
+        rl.allow("10.0.0.1")
+    assert rl.allow("10.0.0.1") is False
+    clock.advance(2.1)  # past the window
+    assert rl.allow("10.0.0.1") is True
+
+
+def test_idle_ip_eviction():
+    """Idle IPs are swept so the map cannot grow without bound."""
+    clock = FakeClock()
+    rl = RateLimiter(max_requests=5, window_seconds=2, clock=clock)
+
+    # Seen 50 distinct IPs in the first window.
+    for n in range(50):
+        rl.allow(f"10.0.0.{n}")
+    assert rl.tracked_ips() == 50
+
+    # Advance well past the window and touch one new IP; the sweep (runs at most
+    # once per window) must evict all 50 now-idle IPs, leaving only the new one.
+    clock.advance(3.0)
+    rl.allow("192.168.1.1")
+    assert rl.tracked_ips() == 1
+
+
+def test_per_ip_isolation():
+    clock = FakeClock()
+    rl = RateLimiter(max_requests=5, window_seconds=2, clock=clock)
+    for _ in range(5):
+        rl.allow("10.0.0.1")
+    assert rl.allow("10.0.0.1") is False
+    # A different IP is unaffected by the first IP's exhausted budget.
+    assert rl.allow("10.0.0.2") is True
+
+
+def test_concurrent_requests_never_overcount():
+    """N threads hammer one IP with a frozen clock; exactly max_requests pass.
+
+    With a real lock the read-modify-write cannot interleave, so the number of
+    allowed requests is exactly the limit — never more. Without the lock this
+    test would intermittently allow > max_requests.
+    """
+    clock = FakeClock()  # frozen — window never advances during the test
+    limit = 50
+    target_ip = "10.0.0.1"
+    rl = RateLimiter(max_requests=limit, window_seconds=60, clock=clock)
+    # Force a yield inside the read-modify-write so a missing lock overcounts.
+    rl._hits = _SlowHits(target_ip)
+
+    threads_count = 16
+    per_thread = 25  # 16 * 25 = 400 attempts, far above the limit of 50
+    allowed = []
+    allowed_lock = threading.Lock()
+    barrier = threading.Barrier(threads_count)
+
+    def worker():
+        barrier.wait()  # maximize contention by starting together
+        local = 0
+        for _ in range(per_thread):
+            if rl.allow("10.0.0.1"):
+                local += 1
+        with allowed_lock:
+            allowed.append(local)
+
+    threads = [threading.Thread(target=worker) for _ in range(threads_count)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    total_allowed = sum(allowed)
+    assert total_allowed == limit, (
+        f"expected exactly {limit} allowed, got {total_allowed} "
+        "(overcount indicates the lock is missing/broken)"
+    )
+
+
+def test_gate_uses_production_limiter():
+    """gate.check_rate_limit delegates to the shared RateLimiter instance."""
+    assert isinstance(gate._rate_limiter, RateLimiter)
+    # The wrapper must call through to the instance (not a private copy).
+    assert gate.check_rate_limit("203.0.113.7") is True
