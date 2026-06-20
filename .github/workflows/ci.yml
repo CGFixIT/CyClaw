@@ -1,16 +1,15 @@
 # ==============================================================================
-# CyClaw CI — Tests + Coverage
-# Changes from previous version:
-#   - Least-privilege permissions block added (contents: read only)
-#   - Actions pinned to full commit SHAs (supply chain hardening)
-#   - Removed base64 exec() smoke step — replaced with readable inline Python
-#   - Expanded test scope to include personality, audit, conftest fixture tests
-#   - Fixed --cov targets: use package names, not file paths
-#   - Coverage measured only over modules the selected tests actually exercise
-#   - test_personality_changes.py excluded (targets future build, see BUILD-ALIGNMENT NOTE)
+# CyClaw CI — Tests + Coverage + Reproducible Install Gate
+# v2 hardening (June 2026):
+#   - Early pip upgrade to >=26.1.2 (eliminates 4 pip CVEs in CI env per #71 analysis)
+#   - Explicit hermetic prepare (mkdirs, minimal soul.md, env var) cross-platform
+#   - Real RAG smoke validates ChromaDB 1.5.6 + BM25 + RRF on committed corpus
+#   - Coverage scoped to exercised modules only
+#   - Aligns with v1.4.0 invariants (reproducible CI security gate, Python 3.12, stable Chroma pin)
+#   - Cross-ref: cyclaw-advisor + python-development best practices for observable, testable CI
 # ==============================================================================
 
-name: CyClaw CI (Simplified + Coverage)
+name: CyClaw CI (Tests + Reproducible Gate)
 
 on:
   push:
@@ -39,27 +38,31 @@ jobs:
           python-version: '3.12'
           cache: 'pip'
 
-      - name: Install deps
+      - name: Upgrade pip (CVE mitigation for CI env only)
+        shell: bash
+        run: |
+          python -m pip install --upgrade "pip>=26.1.2"
+
+      - name: Install deps (torch CPU + project + test tools)
         shell: bash
         run: |
           pip install torch==2.4.1+cpu --index-url https://download.pytorch.org/whl/cpu
           pip install -r requirements.txt pytest pytest-cov
 
-      - name: Prepare test env
+      - name: Prepare hermetic test env (cross-platform)
         shell: bash
         run: |
-          # data/corpus/cyclaw_overview.md is committed in the repo and is what the
-          # RAG smoke indexes + queries — do not overwrite it with a stub.
+          # data/corpus/cyclaw_overview.md is committed — real RAG smoke indexes it.
+          # Minimal soul.md + env var for gate tests. No prod secrets.
           mkdir -p data/personality index logs
           echo '# Soul' > data/personality/soul.md
           echo 'GROK_API_KEY=dummy' >> $GITHUB_ENV
 
-      - name: Real RAG Query Smoke (ChromaDB + BM25)
+      - name: Real RAG Query Smoke (ChromaDB 1.5.6 + BM25 + RRF)
         shell: bash
         run: |
-          # Builds a real ChromaDB + BM25 index from data/corpus and runs a real
-          # HybridRetriever query that the committed corpus answers, asserting the
-          # fused score clears retrieval.min_score (a genuine vault hit, not a mock).
+          # Validates full retrieval path against committed corpus.
+          # Fails CI if min_score gate or hybrid fusion broken.
           python -m tests.ci_rag_smoke
 
       - name: Run tests + coverage
@@ -90,4 +93,4 @@ jobs:
           retention-days: 14
 
       - name: Final status
-        run: echo "CI success on ${{ matrix.os }}"
+        run: echo "CI success on ${{ matrix.os }} (reproducible gate passed)"
