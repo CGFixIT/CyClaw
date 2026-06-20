@@ -109,7 +109,18 @@ def build_index(config_path: str = "config.yaml") -> None:
         client.delete_collection(collection_name)
     except Exception:
         pass
-    collection = client.create_collection(collection_name)
+    # Embeddings are L2-normalized (retrieval/embeddings.py), so the collection
+    # must use the cosine space: with unit vectors ChromaDB's default `l2` returns
+    # squared-Euclidean distance in [0,4], and hybrid_search does `score = 1 -
+    # distance`, yielding a non-cosine, partly-negative scale. With `cosine`,
+    # distance = 1 - cos in [0,2] and `1 - distance` is genuine cosine similarity
+    # (PR #99 #1). Ranking is unchanged for unit vectors (L2 is monotonic in cos),
+    # so RRF order and the fused-path gate are unaffected; only the surfaced
+    # semantic scores and the single-path gate (PR #99 #6) become correct.
+    collection = client.create_collection(
+        collection_name,
+        metadata={"hnsw:space": "cosine"},
+    )
 
     print("[Indexer] Building ChromaDB (semantic) index...")
     for batch_start in range(0, len(all_chunks), batch_size):
