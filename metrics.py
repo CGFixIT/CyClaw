@@ -45,5 +45,15 @@ def print_metrics(config_path: str = "config.yaml"):
         for mode, count in mode_counts.most_common():
             print(f"  {mode}: {count}")
 
-if __name__ == "__main__":
+def main() -> None:
+    """Console entry point for ``cyclaw-metrics`` (see pyproject [project.scripts]).
+
+    Thin wrapper over :func:`print_metrics`. The declared
+    ``cyclaw-metrics = "metrics:main"`` script previously raised AttributeError
+    because this module only defined ``print_metrics``, not ``main``.
+    """
     print_metrics()
+
+
+if __name__ == "__main__":
+    main()

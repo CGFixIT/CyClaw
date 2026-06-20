@@ -333,3 +333,24 @@ async def health():
         index_ready=retriever is not None,
         graph_ready=compiled_graph is not None
     )
+
+
+def main() -> None:
+    """Console entry point for ``cyclaw-server`` (see pyproject [project.scripts]).
+
+    Serves the FastAPI app on the loopback host/port from config.yaml. Without
+    this, the declared ``cyclaw-server = "gate:main"`` script raised
+    AttributeError because no ``main`` symbol existed in this module.
+    """
+    import uvicorn
+
+    api_cfg = cfg.get("api", {})
+    uvicorn.run(
+        app,
+        host=api_cfg.get("host", "127.0.0.1"),  # DevSkim: ignore DS162092 - loopback-only binding by design
+        port=api_cfg.get("port", 8787),
+    )
+
+
+if __name__ == "__main__":
+    main()

@@ -132,5 +132,15 @@ def build_index(config_path: str = "config.yaml") -> None:
 
     print(f"[Indexer] Done. ChromaDB: {chroma_path}, BM25: {bm25_path}")
 
-if __name__ == "__main__":
+def main() -> None:
+    """Console entry point for ``cyclaw-index`` (see pyproject [project.scripts]).
+
+    Thin wrapper over :func:`build_index`. The declared
+    ``cyclaw-index = "retrieval.indexer:main"`` script previously raised
+    AttributeError because this module only defined ``build_index``.
+    """
     build_index()
+
+
+if __name__ == "__main__":
+    main()
