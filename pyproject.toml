@@ -27,7 +27,7 @@ dependencies = [
     "httpx==0.28.1",
     "langgraph==1.2.5",
     "langchain-core==1.4.7",
-    "chromadb==1.5.6",  # Stable release; CVE-2026-45829 mitigated via localhost bind + code-enforced no trust_remote_code (see retrieval/embeddings.py). Dev build removed (no published py3.12 wheels).
+    "chromadb==1.5.6",  # CVE-2026-45829 (Critical pre-auth RCE, no upstream patch). Risk accepted for local/offline use via PersistentClient (embedded mode, path from config.yaml). No HttpClient or dynamic trust_remote_code paths. See pip-audit workflow + cyclaw-advisor §K/§M.
     "sentence-transformers==5.6.0",
     "rank-bm25==0.2.2",
     "numpy==1.26.4",
