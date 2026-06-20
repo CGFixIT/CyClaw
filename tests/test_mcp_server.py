@@ -18,13 +18,17 @@ Run with:
     pytest tests/test_mcp_server.py -v
 """
 
+import json
 from unittest.mock import MagicMock
 
 import pytest
+import yaml
 
+import mcp_hybrid_server
 from mcp_hybrid_server import CAPABILITIES, TOOLS, handle_message
 from retrieval.hybrid_search import SearchResult
 from utils.errors import RAGError
+from utils.logger import audit_log as _real_audit_log, hash_query, reset_config_cache
 
 
 # ---------------------------------------------------------------------------
@@ -240,3 +244,50 @@ def test_rag_error_returns_error_32000(retriever):
     assert result is not None
     assert "error" in result
     assert result["error"]["code"] == -32000
+
+
+# ---------------------------------------------------------------------------
+# 10. Audit privacy parity (T1.3): persisted MCP audit event hashes the query
+# ---------------------------------------------------------------------------
+
+def test_mcp_audit_event_hashes_full_query(retriever, tmp_path, monkeypatch):
+    """The persisted MCP audit event must store a hashed query, not raw text,
+    with parity to the HTTP path (full-query SHA-256, no [:100] truncation).
+    """
+    audit_file = tmp_path / "audit.jsonl"
+    cfg = {
+        "logging": {
+            "audit_file": str(audit_file),
+            "audit_fields": {"include_query_hash": True},
+        },
+        "policy": {"privacy": {"redact_emails": True, "redact_ips": True,
+                               "redact_secrets_like": []}},
+    }
+    config_path = tmp_path / "config.yaml"
+    with open(config_path, "w") as f:
+        yaml.dump(cfg, f)
+
+    reset_config_cache()
+    # Route the server's audit_log through the temp config so the test is
+    # hermetic, while still exercising the REAL audit_log hashing/redaction.
+    monkeypatch.setattr(
+        mcp_hybrid_server, "audit_log",
+        lambda event: _real_audit_log(event, config_path=str(config_path)),
+    )
+
+    long_query = "veeam immutability backup repository " * 5  # > 100 chars
+    msg = {
+        "jsonrpc": "2.0", "id": 99, "method": "tools/call",
+        "params": {"name": "hybrid_search", "arguments": {"query": long_query}},
+    }
+    result = handle_message(msg, retriever)
+
+    # The response payload returned to the caller may still echo the query.
+    assert result["result"]["metadata"]["query"] == long_query
+
+    event = json.loads(audit_file.read_text().strip())
+    assert "query" not in event, "raw query must not be persisted"
+    assert "query_hash" in event
+    # Parity: identical to what the HTTP/graph audit path writes for this query.
+    assert event["query_hash"] == hash_query(long_query)
+    reset_config_cache()
