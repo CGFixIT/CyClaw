@@ -66,17 +66,23 @@ def build_index(config_path: str = "config.yaml") -> None:
 
     all_chunks = []
     all_metadata = []
+    # Tokenize each chunk exactly once. The full token list feeds the BM25
+    # index; the first 20 tokens become the stem_tags metadata. Re-tokenizing
+    # the whole corpus a second time for BM25 (the previous behaviour) doubled
+    # the regex/stemming work at index time for no benefit.
+    tokenized_corpus = []
 
     for source, content in docs:
         chunks = chunk_document(content, chunk_size, chunk_overlap)
         for i, chunk in enumerate(chunks):
             clean_chunk = sanitize_chunk(chunk, config_path)
-            stem_tags = tokenize_and_stem(clean_chunk)[:20]
+            tokens = tokenize_and_stem(clean_chunk)
             all_chunks.append(clean_chunk)
+            tokenized_corpus.append(tokens)
             all_metadata.append({
                 "source": source,
                 "chunk_id": i,
-                "stem_tags": json.dumps(stem_tags)
+                "stem_tags": json.dumps(tokens[:20])
             })
 
     print(f"[Indexer] Total chunks: {len(all_chunks)}")
@@ -108,7 +114,7 @@ def build_index(config_path: str = "config.yaml") -> None:
         print(f"[Indexer] Indexed {batch_end}/{len(all_chunks)} chunks")
 
     print("[Indexer] Building BM25 (keyword) index...")
-    tokenized_corpus = [tokenize_and_stem(chunk) for chunk in all_chunks]
+    # tokenized_corpus was built alongside all_chunks above (single tokenization pass).
     Path(bm25_path).parent.mkdir(parents=True, exist_ok=True)
     with open(bm25_path, "w", encoding="utf-8") as f:
         json.dump({
