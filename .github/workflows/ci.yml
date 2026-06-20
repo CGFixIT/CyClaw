@@ -92,7 +92,6 @@ jobs:
             --cov=utils.errors \
             --cov=utils.logger \
             --cov=utils.personality \
-            --cov=retrieval.hybrid_search \
             --cov-report=xml \
             --cov-report=html \
             --cov-report=term-missing
