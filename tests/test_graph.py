@@ -13,7 +13,9 @@ import pytest
 import yaml
 from pathlib import Path
 
-from graph import build_graph, GraphState, offline_best_effort_node
+from graph import (
+    build_graph, GraphState, offline_best_effort_node, grok_fallback_node
+)
 from tests.conftest import (
     MockRetriever, MockLocalLLM, MockGrokClient,
     MOCK_HIGH_SCORE_RESULTS, MOCK_LOW_SCORE_RESULTS, MOCK_EMPTY_RESULTS,
@@ -266,3 +268,48 @@ class TestBuildGraphSignature:
         # now raise instead of silently mis-binding dependencies.
         with pytest.raises(TypeError):
             build_graph(retriever, llm, None, cfg)
+
+
+class TestGrokFallbackPrompt:
+    """grok_fallback_node prompt structure when forwarding local context."""
+
+    def _cfg(self, send_ctx):
+        return {"policy": {"fallback": {"send_local_context_to_grok": send_ctx}}}
+
+    def test_forwarded_context_includes_source_and_score_headers(self, tmp_path):
+        grok = MockGrokClient()
+        state = {
+            "query": "what is RRF?",
+            "retrieved_docs": [
+                {"text": "reciprocal rank fusion blends rankings",
+                 "score": 0.81, "source": "rrf.md", "chunk_id": 0},
+                {"text": "it is used in hybrid retrieval",
+                 "score": 0.55, "source": "hybrid.md", "chunk_id": 1},
+            ],
+        }
+        result = grok_fallback_node(state, grok=grok, cfg=self._cfg(send_ctx=True))
+
+        # The forwarded prompt must carry the canonical [Source: ..., Score: ...]
+        # headers produced by _format_context_chunks, the untrusted-data framing,
+        # and the user query.
+        assert "[Source: rrf.md, Score: 0.810]" in grok.last_prompt
+        assert "Score:" in grok.last_prompt
+        assert "untrusted data" in grok.last_prompt
+        assert "what is RRF?" in grok.last_prompt
+        assert result["answer_model"] == "grok"
+        assert result["answer"] == grok.response
+
+    def test_no_context_forwarded_sends_query_only(self, tmp_path):
+        grok = MockGrokClient()
+        state = {"query": "ping", "retrieved_docs": [
+            {"text": "secret local context", "score": 0.9, "source": "s.md", "chunk_id": 0}
+        ]}
+        grok_fallback_node(state, grok=grok, cfg=self._cfg(send_ctx=False))
+
+        # Privacy default: no local context headers leak into the off-box prompt.
+        assert grok.last_prompt == "USER QUERY: ping"
+        assert "[Source:" not in grok.last_prompt
+
+    def test_grok_none_degrades_without_crash(self, tmp_path):
+        result = grok_fallback_node({"query": "x"}, grok=None, cfg=self._cfg(False))
+        assert result["answer_model"] == "offline-best-effort"

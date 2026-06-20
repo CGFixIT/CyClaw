@@ -73,6 +73,19 @@ def build_index(config_path: str = "config.yaml") -> None:
     chunk_overlap = cfg["indexing"]["chunk_overlap"]
     batch_size = cfg["indexing"]["batch_size"]
 
+    # Fail fast on chunking misconfiguration rather than building a corrupt index.
+    # chunk_size < 1 makes every window empty (end == start), so collection.add()
+    # ingests blank documents. chunk_overlap >= chunk_size forces the stride down
+    # to a single word, exploding a modest corpus into one chunk per word and
+    # exhausting memory. The chunk_document() max(1, ...) clamp keeps direct
+    # callers finite, but the config boundary is where a human-set value belongs.
+    if chunk_size < 1:
+        raise ValueError(f"chunk_size must be >= 1, got {chunk_size}")
+    if chunk_overlap >= chunk_size:
+        raise ValueError(
+            f"chunk_overlap ({chunk_overlap}) must be < chunk_size ({chunk_size})"
+        )
+
     print(f"[Indexer] Loading corpus from {corpus_path}")
     docs = load_corpus(corpus_path, extensions)
     print(f"[Indexer] Loaded {len(docs)} documents")
