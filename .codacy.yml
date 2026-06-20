@@ -1,8 +1,23 @@
-# CyClaw .codacy.yml — keep the invariants code clean
+# CyClaw .codacy.yml v2 — high-signal, low-noise for invariants enforcement
 exclude_paths:
-  - "data/**"          # RAG corpus + soul.md noise
-  - "docs/**"          # PDFs, old guides, screenshots
-  - "static/**"        # terminal.html / frontend
-  - "**/tests/**"      # fixtures don't need static analysis
-  - "**/*.md"          # markdownlint spam on READMEs/docs
-  - "results.sarif"    # generated artifact
+  - "data/**"
+  - "docs/**"
+  - "static/**"
+  - "**/tests/**"
+  - "**/__pycache__/**"
+  - "**/*.md"
+  - "results.sarif"
+  - "*.env*"
+
+# Explicit engines for Python security & quality (Codacy dashboard sync)
+engines:
+  duplication:
+    enabled: false  # Small personal RAG proj - false positives high
+  metrics:
+    enabled: true
+  pylint:
+    enabled: false  # Ruff supersedes
+python-security:
+  enabled: true
+  config:
+    ignore: ["B101"]
