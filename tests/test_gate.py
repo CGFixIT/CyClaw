@@ -72,7 +72,10 @@ def client(tmp_path):
         gate.grok = None
         gate.compiled_graph = mock_graph
 
-        client = TestClient(gate.app)
+        # base_url uses an allowed Host (localhost) so TrustedHostMiddleware
+        # (added at import from the real config.yaml allowed_hosts) admits the
+        # request; the default "testserver" host would otherwise 400.
+        client = TestClient(gate.app, base_url="http://localhost")
         yield client, mock_graph
 
     reset_config_cache()
@@ -145,6 +148,22 @@ class TestHealthEndpoint:
             assert resp.status_code == 200
             data = resp.json()
             assert "status" in data
+
+
+class TestTrustedHost:
+    """PR #99 #3: TrustedHostMiddleware rejects requests with a Host not in the
+    config allow-list (DNS-rebinding defense)."""
+
+    def test_disallowed_host_rejected(self, client):
+        test_client, _ = client
+        resp = test_client.get("/health", headers={"host": "evil.example.com"})
+        assert resp.status_code == 400
+
+    def test_allowed_host_ok(self, client):
+        test_client, _ = client
+        with patch("gate.check_all", return_value=[]):
+            resp = test_client.get("/health", headers={"host": "localhost"})
+        assert resp.status_code == 200
 
 
 class TestPromptInjection:

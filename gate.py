@@ -23,6 +23,7 @@ import asyncio
 import hmac
 import os
 import re
+import secrets
 
 _TELEMETRY_KILL = {
     "LANGCHAIN_TRACING_V2": "false",
@@ -72,12 +73,24 @@ from utils.personality import PersonalityManager
 
 _bearer_scheme = HTTPBearer(auto_error=False)
 
+# Resolve the effective API key ONCE at import (PR #99 #4). Previously, when
+# CYCLAW_API_KEY was unset the server ran in "open mode" and require_api_key was a
+# no-op, leaving every /soul/* mutation endpoint unauthenticated. Instead, if no
+# key is configured we mint an ephemeral per-process token and log it once, so
+# soul mutations always require a Bearer token. A remote DNS-rebinding page (now
+# also blocked by TrustedHostMiddleware) never sees this token.
+_EPHEMERAL_API_KEY = "" if os.environ.get("CYCLAW_API_KEY") else secrets.token_urlsafe(32)
+
+def _effective_api_key() -> str:
+    """The key require_api_key enforces: the configured CYCLAW_API_KEY if set,
+    otherwise the ephemeral per-process token. Read at request time so tests (and
+    operators) that set the env var after import are honored."""
+    return os.environ.get("CYCLAW_API_KEY") or _EPHEMERAL_API_KEY
+
 def require_api_key(
     credentials: HTTPAuthorizationCredentials = Depends(_bearer_scheme),
 ):
-    api_key = os.environ.get("CYCLAW_API_KEY", "")
-    if not api_key:
-        return
+    api_key = _effective_api_key()
     # Constant-time comparison: a plain `!=` short-circuits on the first
     # differing byte, leaking key length/prefix via response timing. compare_digest
     # runs in time independent of how many leading characters match.
@@ -137,9 +150,10 @@ logger = logging.getLogger("cyclaw.gate")
 
 if not os.environ.get("CYCLAW_API_KEY", ""):
     logger.warning(
-        "CYCLAW_API_KEY is not set — server running in OPEN MODE: "
-        "/soul/* endpoints accept any request without authentication. "
-        "Set CYCLAW_API_KEY to enable API key enforcement."
+        "CYCLAW_API_KEY is not set — generated an EPHEMERAL API key for this run. "
+        "Soul-mutation endpoints (/soul/*) require it as a Bearer token. Set "
+        "CYCLAW_API_KEY for a stable key. Ephemeral key:\n    %s",
+        _EPHEMERAL_API_KEY,
     )
 
 app = FastAPI(
@@ -163,6 +177,16 @@ app.add_middleware(
     allow_headers=["Content-Type", "Authorization"],
     allow_credentials=False,
 )
+
+# TrustedHostMiddleware (PR #99 #3): reject requests whose Host header is not in
+# the allow-list. CORS governs response *readability*; it does not stop a
+# DNS-rebinding page from executing state-changing POST /soul/* server-side. The
+# Host check does. Added after CORS so it is the OUTERMOST middleware (runs first
+# on each request). Host matching ignores port; the list is config-driven so an
+# operator can add any name/IP they reach CyClaw by (e.g. the home-lab LAN IP).
+from starlette.middleware.trustedhost import TrustedHostMiddleware
+_allowed_hosts = cfg.get("security", {}).get("allowed_hosts", ["127.0.0.1", "localhost"])
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=_allowed_hosts)
 
 try:
     retriever = HybridRetriever()
