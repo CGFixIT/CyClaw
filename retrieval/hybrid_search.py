@@ -129,6 +129,38 @@ class HybridRetriever:
                 ))
         return hits
 
+    def _normalize_single_path(self, hits: List[SearchResult]) -> List[SearchResult]:
+        """Re-score a BM25-only fallback result list into the RRF range.
+
+        Raw BM25 scores are unbounded positive floats (a hit can score 2.7) and
+        are not comparable to the fused ``rrf_score`` the downstream
+        ``min_score`` gate is calibrated against. Returning them made
+        ``min_score`` misfire: a high raw BM25 score trivially cleared the gate
+        (false high-confidence, skipping escalation), while a low one escalated
+        even on a relevant hit.
+
+        Reusing the same ``1 / (rrf_k + rank)`` weight the fused path uses keeps
+        these scores on one scale. Because a single path contributes only one
+        term (vs. two when both paths agree), even the top BM25-only hit stays
+        below the fusion-agreement threshold — a degraded retrieval is correctly
+        treated as lower confidence rather than silently trusted.
+
+        The semantic-only fallback is intentionally NOT routed here: its raw
+        ``1 - distance`` score is already bounded and is the value the gate is
+        tuned to admit, so it is returned unchanged by ``hybrid_search``.
+        """
+        normalized: List[SearchResult] = []
+        for rank, hit in enumerate(hits):
+            contrib = 1 / (self.rrf_k + rank)
+            hit.score = contrib
+            hit.rrf_score = contrib
+            if hit.retrieval_mode == "semantic":
+                hit.rrf_semantic_contrib = contrib
+            elif hit.retrieval_mode == "keyword":
+                hit.rrf_keyword_contrib = contrib
+            normalized.append(hit)
+        return normalized
+
     def hybrid_search(self, query: str) -> List[SearchResult]:
         semantic_hits: List[SearchResult] = []
         keyword_hits: List[SearchResult] = []
@@ -144,8 +176,19 @@ class HybridRetriever:
         if not semantic_hits and not keyword_hits:
             return []
         if not semantic_hits:
-            return keyword_hits
+            # BM25-only fallback: raw BM25 scores are unbounded positive floats
+            # and are NOT comparable to the fused rrf_score the min_score gate is
+            # calibrated against (a raw 2.7 would trivially clear 0.028 as false
+            # high-confidence). Rebase them into the RRF range.
+            return self._normalize_single_path(keyword_hits)
         if not keyword_hits:
+            # Semantic-only fallback: raw `1 - distance` already lies in a
+            # bounded, comparable range and is what the min_score gate is tuned
+            # to admit (a strong cosine hit clears 0.028 — this is the path the
+            # CI RAG smoke exercises on the single-chunk corpus, where BM25 IDF
+            # degenerates to <=0 and the keyword path is empty). Leave it as-is:
+            # re-basing to 1/(k+rank) would discard the similarity magnitude and
+            # sink genuine hits below the gate.
             return semantic_hits
 
         scores = {}

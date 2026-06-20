@@ -5,7 +5,10 @@ without requiring live sentence-transformers or ChromaDB indices.
 """
 
 import pytest
+from types import SimpleNamespace
+
 from retrieval.stemmer import tokenize_and_stem
+from retrieval.hybrid_search import HybridRetriever, SearchResult
 
 
 class TestRRFFusion:
@@ -34,6 +37,42 @@ class TestRRFFusion:
         score_rank_2_2 = 1 / (k + 2) + 1 / (k + 2)  # 3rd in both
         assert score_rank_0_0 > score_rank_0_3
         assert score_rank_0_3 > score_rank_2_2
+
+
+class TestSinglePathNormalization:
+    """Single-path fallback scores must be re-based into the RRF range so the
+    min_score gate (calibrated for fused 1/(k+rank) output) stays meaningful."""
+
+    @staticmethod
+    def _kw_hit(score, chunk_id):
+        return SearchResult(
+            text="t", score=score, source="s.md", chunk_id=chunk_id,
+            stem_tags=[], retrieval_mode="keyword",
+            keyword_score=score, keyword_rank=chunk_id,
+        )
+
+    def test_raw_bm25_scores_rebased_to_rrf(self):
+        fake = SimpleNamespace(rrf_k=60)
+        # Raw BM25 scores (unbounded) — 2.7 would trivially clear min_score=0.028
+        hits = [self._kw_hit(2.7, 0), self._kw_hit(0.01, 1)]
+        out = HybridRetriever._normalize_single_path(fake, hits)
+
+        assert out[0].score == pytest.approx(1 / 60)
+        assert out[1].score == pytest.approx(1 / 61)
+        # rrf_score mirrors score; keyword contrib is populated for a keyword path
+        assert out[0].rrf_score == pytest.approx(1 / 60)
+        assert out[0].rrf_keyword_contrib == pytest.approx(1 / 60)
+        # Ordering preserved (rank 0 outranks rank 1)
+        assert out[0].score > out[1].score
+
+    def test_single_path_top_below_fusion_agreement(self):
+        """A single-path top hit (one RRF term) must score below two agreeing
+        paths (two terms) — degraded retrieval is lower confidence."""
+        fake = SimpleNamespace(rrf_k=60)
+        out = HybridRetriever._normalize_single_path(fake, [self._kw_hit(9.9, 0)])
+        single = out[0].score
+        both_paths_agree = 1 / 60 + 1 / 60
+        assert single < both_paths_agree
 
 
 class TestTokenizationForBM25:
