@@ -1,0 +1,53 @@
+# OSV-Scanner — scheduled & PR dependency vulnerability scanning.
+#
+# Scans the dependency manifests/lockfiles in this repo against the OSV.dev
+# database and uploads native SARIF to the GitHub Security > Code scanning tab.
+# Uses Google's pinned reusable workflows; every third-party ref is pinned to a
+# full commit SHA (see the trailing "# vX.Y.Z" comments) for supply-chain safety.
+name: OSV-Scanner
+
+on:
+  # Weekly full scan — Mondays 06:00 UTC (staggered one hour before pip-audit).
+  # NOTE: scheduled triggers only fire from the repository's default branch.
+  schedule:
+    - cron: "0 6 * * 1"
+  # Manual run from the Actions tab.
+  workflow_dispatch:
+  # Full scan on every push to the default branch.
+  push:
+    branches: [main]
+  # Differential scan on PRs targeting main (gates new vulnerabilities).
+  pull_request:
+    branches: [main]
+
+# Deny-all by default; each job grants only what it needs.
+permissions: {}
+
+jobs:
+  # PR events: differential scan that flags vulnerabilities introduced by the PR.
+  scan-pr:
+    if: ${{ github.event_name == 'pull_request' }}
+    permissions:
+      security-events: write # upload SARIF to code scanning
+      contents: read # checkout
+      actions: read # required by the codeql/upload-sarif step
+    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable-pr.yml@9a498708959aeaef5ef730655706c5a1df1edbc2 # v2.3.8
+    with:
+      # Recurse from the repository root so every manifest/lockfile is scanned.
+      scan-args: |-
+        -r
+        ./
+
+  # schedule / push / manual: full-tree scan, results published to the Security tab.
+  scan-scheduled:
+    if: ${{ github.event_name == 'schedule' || github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
+    permissions:
+      security-events: write # upload SARIF to code scanning
+      contents: read # checkout
+      actions: read # required by the codeql/upload-sarif step
+    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@9a498708959aeaef5ef730655706c5a1df1edbc2 # v2.3.8
+    with:
+      # Recurse from the repository root so every manifest/lockfile is scanned.
+      scan-args: |-
+        -r
+        ./
