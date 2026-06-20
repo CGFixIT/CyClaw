@@ -88,7 +88,7 @@ def require_api_key(
 # in utils/ratelimit.py as a lock-synchronized class so the gateway and its
 # tests share one implementation (no duplicated logic) and concurrent requests
 # under FastAPI's threadpool cannot interleave and overcount.
-from fastapi import Request, HTTPException as FastAPIHTTPException
+from fastapi import Request
 from utils.ratelimit import RateLimiter
 
 RATE_LIMIT_REQUESTS = 60
