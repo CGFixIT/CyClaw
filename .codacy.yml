@@ -1,7 +1,15 @@
 exclude_paths:
-  - "data/"
-  - "tests/"
-  - "static/"
-  - "docs/"
+  - data/
+  - tests/
+  - static/
+  - docs/
+  - '**/__pycache__/**'
+  - '**/.pytest_cache/**'
+  - '**/venv/**'
+  - '**/.venv/**'
+  - '**/*.md'
+
 languages:
   - python
+
+# Prioritize security + style invariants for CyClaw core

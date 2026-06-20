@@ -6,7 +6,7 @@ on:
   pull_request:
     branches: [ "main" ]
   schedule:
-    - cron: '37 14 * * 2'
+    - cron: '37 14 * * 2'  # Staggered
   workflow_dispatch:
 
 concurrency:
@@ -22,43 +22,34 @@ jobs:
     name: Codacy Analysis (Python + Security invariants layer)
     runs-on: ubuntu-latest
     timeout-minutes: 12
-    permissions:
-      contents: read
-      security-events: write
-      actions: read
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Run Codacy Analysis CLI - Hardened
+      - name: Run Codacy Analysis CLI
         uses: codacy/codacy-analysis-cli-action@1
         with:
           project-token: ${{ secrets.CODACY_PROJECT_TOKEN }}
-          # Removed directory entirely - this was the Docker volume culprit
-          # Let the action use default GITHUB_WORKSPACE behavior
+          # Absolute path + explicit to defeat Docker volume mount bugs
+          directory: ${{ github.workspace }}
           verbose: true
+          output: results.sarif
           gh-code-scanning-compat: true
-          max-allowed-issues: 999999
+          max-allowed-issues: 2147483647
           upload: false
-          # Force Python focus + common security tools
-          # extra-args: "--languages python --tools bandit,semgrep,safety,pylint"
 
-      - name: Upload SARIF to GitHub Security
-        if: always()
+      - name: Upload SARIF
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: results.sarif
-          category: codacy
+          category: codacy-invariants
 
-      - name: Archive results for debug
+      - name: Archive artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: codacy-results
-          path: |
-            results.sarif
-            codacy.log
-          retention-days: 5
+          name: codacy-debug
+          path: results.sarif
+          retention-days: 7
