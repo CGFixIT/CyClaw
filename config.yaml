@@ -182,3 +182,27 @@ security:
     # NOTE: null removed — curl/MCP clients send no Origin header and are not
     # subject to CORS filtering. null in allow_origins is invalid for starlette
     # CORSMiddleware and would cause a runtime error or silent rejection.
+
+# ===========================
+# sync: Dropbox corpus sync (out-of-band, rclone-based)
+# ===========================
+# Absence of this block disables sync entirely. Sync runs strictly via
+# `python -m sync.cli` — never imported by gate.py, graph.py, or the MCP server.
+# The Dropbox refresh token lives ONLY in rclone.conf, never here.
+sync:
+  enabled: false                 # off by default; out-of-band only
+  local_path: "data/corpus"      # validated: absolute, under repo data/corpus, a dir
+  remote_name: "dropbox_cyclaw"  # must match `rclone listremotes`
+  remote_path: "CyClaw/corpus"   # folder inside the Dropbox App Folder
+  direction: "pull"              # "pull" (safe default) | "bisync" (opt-in, discouraged)
+  include_soul: false            # leave false — data/personality/ is NOT sync-safe
+  reindex_on_change: true        # exit 10 when data/corpus/** changed
+  checksum: true                 # rclone --checksum (hash compare, not mtime)
+  max_delete: 20                 # safety fuse: abort if > N deletions
+  max_transfer: "1G"             # safety fuse: abort if run would move > this
+  schedule_hour: 2               # 24h local time (cron/timer/Task Scheduler)
+  schedule_min: 0
+  conflict_resolve: "newer"      # bisync-only: newer modtime wins
+  conflict_loser: "rename"       # bisync-only: loser saved as .conflict1 (never deleted)
+  # extra_excludes:              # optional, appended AFTER hardened block
+  #   - "scratch/**"

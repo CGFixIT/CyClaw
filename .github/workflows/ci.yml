@@ -77,6 +77,11 @@ jobs:
             tests/test_audit.py \
             tests/test_personality.py \
             tests/test_conftest_fixtures.py \
+            tests/test_sync_config.py \
+            tests/test_sync_filters.py \
+            tests/test_sync_runner.py \
+            tests/test_sync_cli.py \
+            tests/test_sync_scheduler.py \
             -q --tb=short \
             --cov=utils.sanitizer \
             --cov=utils.errors \

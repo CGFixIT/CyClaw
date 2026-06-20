@@ -277,7 +277,7 @@ The MCP server exposes a single `hybrid_search` tool. It has **no sampling capab
 - Browser UI via `static/terminal.html`
 
 **v1.4.0 targets:**
-- Dropbox/cloud corpus sync
+- Dropbox/cloud corpus sync — **delivered** (out-of-band `rclone` wrapper; see [docs/SYNC_README.md](docs/SYNC_README.md))
 - `plan_node` for multi-step query decomposition
 - BM25 index SHA-256 integrity check on load
 - General-purpose agent (tool invocation from corpus context)
