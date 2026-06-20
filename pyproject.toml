@@ -1,12 +1,12 @@
 [project]
 name = "cyclaw"
 version = "1.4.0"
-description = "Offline-first, RAG-enforced, soul-governed personal AI assistant. Secure local CyClaw with LangGraph invariants."
+description = "Offline-first, RAG-enforced, soul-governed personal AI assistant. Secure local CyClaw with LangGraph invariants and zero telemetry."
 readme = "README.md"
-requires-python = ">=3.11,<3.13"
+requires-python = ">=3.12"
 license = {text = "MIT"}
 authors = [{name = "Chris Grady (CGFixIT)", email = "chris@cgfixit.com"}]
-keywords = ["rag", "ai-agent", "offline", "security", "fastapi", "langgraph"]
+keywords = ["rag", "ai-agent", "offline", "security", "fastapi", "langgraph", "chromadb", "soul-governance"]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
@@ -14,6 +14,10 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "License :: OSI Approved :: MIT License",
     "Topic :: Security",
+    "Framework :: FastAPI",
+    "Operating System :: OS Independent",
+    "Typing :: Typed",
+    "Environment :: Console",
 ]
 
 dependencies = [
@@ -40,9 +44,9 @@ dev = [
     "ruff",
     "mypy",
     "bandit",
-    "uv",
 ]
 torch-cpu = ["torch==2.4.1+cpu"]
+full = ["cyclaw[torch-cpu,dev,test]"]
 
 [project.scripts]
 cyclaw-server = "gate:main"
@@ -58,9 +62,6 @@ Repository = "https://github.com/CGFixIT/CyClaw"
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
-[tool.hatch.envs.default]
-dependencies = ["pytest", "ruff"]
-
 [tool.uv]
 index-strategy = "unsafe-best-match"
 
@@ -68,21 +69,30 @@ index-strategy = "unsafe-best-match"
 name = "torch"
 url = "https://download.pytorch.org/whl/cpu"
 
-# Tool configs as per analysis
+# Tool configs — consolidated, security-first, aligned with CI and project invariants
 [tool.ruff]
 target-version = "py312"
-select = ["E", "F", "I", "B", "C4", "UP", "S"]  # S for security
+line-length = 120
+select = ["E", "F", "I", "B", "C4", "UP", "S"]  # S = security (flake8-bandit rules)
 ignore = ["E501"]
 
 [tool.pytest.ini_options]
 minversion = "9.0"
-addopts = "-ra -q --cov=."
+addopts = "-ra -q --cov=gate --cov=graph --cov=llm --cov=retrieval --cov=utils --cov=mcp_hybrid_server --cov=metrics"
 testpaths = ["tests"]
 
 [tool.mypy]
 python_version = "3.12"
 strict = true
 
-[[tool.uv.pip]]
-extra-index-url = ["https://download.pytorch.org/whl/cpu"]
+[tool.bandit]
+exclude_dirs = ["tests"]
+skips = ["B101"]  # intentional asserts in security tests and validation
 
+[tool.coverage.run]
+source = ["gate", "graph", "llm", "retrieval", "utils", "mcp_hybrid_server", "metrics"]
+omit = ["tests/*", "*/test_*", "*/__pycache__/*"]
+
+[tool.coverage.report]
+fail_under = 65
+show_missing = true
