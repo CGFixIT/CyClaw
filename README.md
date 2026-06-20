@@ -46,7 +46,7 @@ User Query (HTTP POST /query or MCP tool call)
     ┌─────────────────────────────────────────────────────┐
     │  gate.py  (FastAPI, 127.0.0.1:8787)                 │
     │  • Rate limit (60 req/min per IP — RUNS FIRST)      │
-    │  • Prompt injection filter (sanitizer.py, 13 pat.)  │
+    │  • Injection filter (sanitizer.py, config-driven)   │
     │  • Soul init (PersonalityManager closure)           │
     │  • Telemetry kill block (before any SDK import)     │
     └──────────────────┬──────────────────────────────────┘
@@ -222,9 +222,9 @@ CyClaw maintains a persistent identity through `soul.md`. Key properties:
 - **File-as-truth**: `data/personality/soul.md` is always the canonical version
 - **Shadow SQLite DB**: `cyclaw_soul.db` stores version history and interaction logs
 - **SHA-256 drift detection**: on startup, file hash vs. DB hash — mismatch triggers forensic log entry
-- **Atomic writes**: backup → DB insert → disk write → memory update (failure at any step is recoverable)
-- **OWASP injection scan**: `POST /soul/propose` runs 13 injection patterns before any write
-- **Human-in-the-loop evolution**: apply only via `POST /soul/apply` after reviewing the diff
+- **Atomic writes**: backup → atomic disk write (`tmp` file + `os.replace`) → DB version insert → in-memory update; the `os.replace` is what makes a crash unable to leave a half-written `soul.md`
+- **Advisory injection scan**: `POST /soul/propose` runs an injection scan (13 patterns) whose flags are **advisory** — surfaced for human review, not an enforcement gate
+- **Human-in-the-loop evolution**: `POST /soul/apply` is the human-gated authority (explicit reason string required); it applies the reviewed diff and does not re-block on the advisory scan
 
 ---
 
@@ -233,12 +233,12 @@ CyClaw maintains a persistent identity through `soul.md`. Key properties:
 | Layer | Mechanism |
 |---|---|
 | Network | Binds `127.0.0.1:8787` — no external exposure by design |
-| Input | 13-pattern OWASP injection filter, 4000 char max |
-| Rate limit | 60 req/min per IP (in-memory sliding window) |
+| Input | Config-driven injection filter (`policy.prompt_filter`, 31 patterns), 4000 char max |
+| Rate limit | 60 req/min per IP — thread-safe in-memory sliding window (`utils/ratelimit.py`, lock-guarded) |
 | Telemetry | Kill block runs before any SDK import in `gate.py` |
-| Audit | All paths log SHA-256 query hash + PII-redacted metadata |
-| Grok gating | Triple gate: config flag + env var + per-query confirmation |
-| Soul writes | Injection scan + human reason string + atomic crash-safe write |
+| Audit | All paths (HTTP and MCP) log SHA-256 query hash + PII-redacted metadata |
+| Grok gating | Triple gate: `mode=hybrid` AND `grok.enabled=true` AND `user_confirmed_online=true` |
+| Soul writes | Advisory injection scan + human reason string + atomic (`os.replace`) crash-safe write |
 | Corpus | Chunk sanitization at index time via `sanitizer.py` |
 
 ---
