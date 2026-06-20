@@ -4,8 +4,14 @@ Tests RRF fusion logic, graceful degradation, and score calculation
 without requiring live sentence-transformers or ChromaDB indices.
 """
 
+import json
+
 import pytest
+import yaml
+from unittest.mock import MagicMock, patch
+
 from retrieval.stemmer import tokenize_and_stem
+from tests.conftest import TEST_CONFIG
 
 
 class TestRRFFusion:
@@ -60,3 +66,46 @@ class TestTokenizationForBM25:
         # `kubernetes` is intentionally folded to the domain token `k8s`
         # (retrieval/stemmer.py _CUSTOM_STEMS), not Porter-stemmed.
         assert tokens[0] == "k8s"
+
+
+class TestSinglePathRRFScaling:
+    """PR #99 #6: when only one retrieval path returns, the gating score must be
+    on the RRF scale (1/(rrf_k+rank)) — not the raw BM25/semantic score — so the
+    min_score gate (tuned for RRF) behaves correctly under degraded retrieval."""
+
+    def _build_retriever(self, tmp_path):
+        chunks = ["veeam immutability backup", "chromadb vector store", "bm25 keyword search"]
+        tokenized = [c.split() for c in chunks]
+        metadata = [{"source": f"d{i}.md", "chunk_id": i, "stem_tags": "[]"} for i in range(len(chunks))]
+        bm25_path = tmp_path / "bm25.json"
+        with open(bm25_path, "w") as f:
+            json.dump({"tokenized_corpus": tokenized, "chunks": chunks, "metadata": metadata}, f)
+
+        cfg = TEST_CONFIG.copy()
+        cfg["indexing"] = {**cfg["indexing"], "bm25_path": str(bm25_path),
+                           "chroma_path": str(tmp_path / "chroma_db")}
+        (tmp_path / "chroma_db").mkdir()
+        config_file = tmp_path / "config.yaml"
+        with open(config_file, "w") as f:
+            yaml.dump(cfg, f)
+
+        with patch("retrieval.hybrid_search.chromadb.PersistentClient") as mock_client:
+            mock_client.return_value.get_collection.return_value = MagicMock()
+            from retrieval.hybrid_search import HybridRetriever
+            return HybridRetriever(config_path=str(config_file))
+
+    def test_keyword_only_uses_rrf_scale(self, tmp_path):
+        r = self._build_retriever(tmp_path)
+        with patch.object(r, "semantic_search", return_value=[]):  # force keyword-only
+            results = r.hybrid_search("veeam immutability")
+
+        assert results, "keyword path should return hits"
+        top = results[0]
+        # gating score is RRF-scaled (rank 0 => 1/(rrf_k+0)), NOT the raw BM25 score
+        assert abs(top.score - 1 / (r.rrf_k + 0)) < 1e-9
+        assert abs(top.rrf_score - 1 / (r.rrf_k + 0)) < 1e-9
+        # raw BM25 score preserved for provenance
+        assert top.keyword_score is not None and top.keyword_score > 0
+        assert top.score != top.keyword_score
+        # degraded single-path result gates below the shipped min_score (0.028)
+        assert top.score < 0.028

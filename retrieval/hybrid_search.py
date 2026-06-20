@@ -129,6 +129,34 @@ class HybridRetriever:
                 ))
         return hits
 
+    def _as_rrf_scaled(self, hits: List[SearchResult]) -> List[SearchResult]:
+        """Re-score a single surviving retrieval path onto the RRF scale.
+
+        When only one path returns, its raw scores (semantic ``1 - cos`` ∈ [-1,1],
+        or unbounded BM25) are NOT comparable to ``min_score``, which is tuned for
+        RRF magnitudes (~``1/rrf_k``). The gating ``score`` is therefore replaced
+        with the rank-based RRF term ``1/(rrf_k + rank)`` so the confidence gate
+        behaves consistently under degraded retrieval (PR #99 #6). The raw value is
+        preserved in ``semantic_score`` / ``keyword_score`` for provenance.
+
+        Consequence (intended): a single-path top hit maxes at ``1/rrf_k`` — below
+        a doc that ranks in BOTH paths — so degraded retrieval reads as
+        lower-confidence rather than spuriously high-confidence. With the shipped
+        ``rrf_k=60`` / ``min_score=0.028`` that puts single-path results under the
+        gate (→ user-confirm / offline path), which is the desired "don't trust
+        half-broken retrieval as authoritative" behavior. If single-path results
+        should remain answerable at high confidence, switch to per-mode thresholds.
+        """
+        for rank, hit in enumerate(hits):
+            contrib = 1 / (self.rrf_k + rank)
+            hit.score = contrib
+            hit.rrf_score = contrib
+            if hit.retrieval_mode == "semantic":
+                hit.rrf_semantic_contrib = contrib
+            elif hit.retrieval_mode == "keyword":
+                hit.rrf_keyword_contrib = contrib
+        return hits
+
     def hybrid_search(self, query: str) -> List[SearchResult]:
         semantic_hits: List[SearchResult] = []
         keyword_hits: List[SearchResult] = []
@@ -144,9 +172,9 @@ class HybridRetriever:
         if not semantic_hits and not keyword_hits:
             return []
         if not semantic_hits:
-            return keyword_hits
+            return self._as_rrf_scaled(keyword_hits)
         if not keyword_hits:
-            return semantic_hits
+            return self._as_rrf_scaled(semantic_hits)
 
         scores = {}
         semantic_meta = {}
