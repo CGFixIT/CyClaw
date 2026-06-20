@@ -1,7 +1,7 @@
 # CyClaw
 
 > **Offline-first, RAG-enforced, soul-governed personal AI assistant (no internet required!)**
-> Version 1.4.0 (Just added Dropbox Sync for Data Corpus) · Baseline 1.3.0 (production) · Python 3.12 · LM Studio + ChromaDB + BM25 + LangGraph
+> Version 1.4 (Just added Dropbox Sync for Data Corpus)
 
 [![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.136-green.svg)](https://fastapi.tiangolo.com/)
