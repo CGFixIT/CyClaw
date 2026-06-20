@@ -46,7 +46,10 @@ jobs:
       - name: Install deps (torch CPU + project + test tools)
         shell: bash
         run: |
-          pip install torch==2.4.1+cpu --index-url https://download.pytorch.org/whl/cpu
+          # Pin matches pyproject.toml [torch-cpu]: torch>=2.6.0 is the minimum
+          # safe version after CVE-2025-32434 (weights_only=True RCE bypass in
+          # torch<2.6.0). CI must not install a version below the documented gate.
+          pip install torch==2.6.0+cpu --index-url https://download.pytorch.org/whl/cpu
           pip install -r requirements.txt pytest pytest-cov
 
       - name: Prepare hermetic test env (cross-platform)
