@@ -39,11 +39,11 @@ class LocalLLMClient:
             return resp.json()["choices"][0]["message"]["content"]
         except httpx.HTTPStatusError as e:
             raise LLMServiceError(f"LM Studio HTTP error: {e.response.status_code}",
-                                   details={"status": e.response.status_code})
-        except httpx.TimeoutException:
-            raise LLMServiceError("LM Studio timeout", details={"timeout_sec": self.timeout})
+                                   details={"status": e.response.status_code}) from e
+        except httpx.TimeoutException as e:
+            raise LLMServiceError("LM Studio timeout", details={"timeout_sec": self.timeout}) from e
         except Exception as e:
-            raise LLMServiceError(f"LM Studio error: {str(e)}")
+            raise LLMServiceError(f"LM Studio error: {str(e)}") from e
 
 class GrokClient:
     def __init__(self, config_path: str = "config.yaml"):
@@ -83,8 +83,8 @@ class GrokClient:
             return resp.json()["choices"][0]["message"]["content"]
         except httpx.HTTPStatusError as e:
             raise GrokServiceError(f"Grok HTTP {e.response.status_code}",
-                                    details={"status": e.response.status_code})
-        except httpx.TimeoutException:
-            raise GrokServiceError("Grok timeout", details={"timeout_sec": self.timeout})
+                                    details={"status": e.response.status_code}) from e
+        except httpx.TimeoutException as e:
+            raise GrokServiceError("Grok timeout", details={"timeout_sec": self.timeout}) from e
         except Exception as e:
-            raise GrokServiceError(f"Grok error: {str(e)}")
+            raise GrokServiceError(f"Grok error: {str(e)}") from e
