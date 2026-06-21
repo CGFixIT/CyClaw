@@ -25,7 +25,6 @@ import json
 import re
 import shutil
 import subprocess  # noqa: S404 -- argv-list gh invocation only; never shell=True
-from typing import Optional
 
 from utils.errors import AgenticError, GhNotInstalledError, GhVersionError
 from utils.logger import audit_log
@@ -119,7 +118,7 @@ def build_read_argv(
     op: str,
     repo: str,
     *,
-    number: Optional[int] = None,
+    number: int | None = None,
     limit: int = 30,
     gh_bin: str = "gh",
 ) -> list[str]:
@@ -165,7 +164,7 @@ def run_read(
     op: str,
     repo: str,
     *,
-    number: Optional[int] = None,
+    number: int | None = None,
     limit: int = 30,
     gh_bin: str = "gh",
     min_version: tuple[int, int, int] = DEFAULT_MIN_GH,

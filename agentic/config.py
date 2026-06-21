@@ -122,9 +122,9 @@ class AgenticConfig:
 
     @property
     def gh_min_tuple(self) -> tuple[int, int, int]:
-        m = _GH_MIN_VERSION_RE.match(self.gh_min_version)
-        assert m is not None  # guaranteed by validation
-        return (int(m.group(1)), int(m.group(2)), int(m.group(3)))
+        # gh_min_version is validated as X.Y.Z at construction, so split is safe.
+        major, minor, patch = self.gh_min_version.split(".")
+        return (int(major), int(minor), int(patch))
 
     @property
     def is_write_mode(self) -> bool:

@@ -25,25 +25,25 @@ import json
 import os
 import re
 import threading
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import List, Optional
 
 from agentic.config import AgenticConfig
 from utils.errors import PromptInjectionError, SkillRegistryError
 from utils.logger import audit_log
+
 # Reuse the soul scanner's OWASP baseline so the two never drift.
 from utils.personality import OWASP_INJECTION_PATTERNS
 
 
 def _utcnow() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 class SkillRegistry:
     """File-as-truth skills catalog with propose/apply governance."""
 
-    def __init__(self, cfg: dict, agentic_cfg: Optional[AgenticConfig] = None):
+    def __init__(self, cfg: dict, agentic_cfg: AgenticConfig | None = None):
         self.cfg = cfg
         ac = agentic_cfg or AgenticConfig()
         self.registry_path = Path(ac.registry_path)
@@ -81,13 +81,13 @@ class SkillRegistry:
 
     # --- scanning (mirrors PersonalityManager) ----------------------------
 
-    def _build_injection_patterns(self) -> List[tuple]:
-        sources: List[str] = list(OWASP_INJECTION_PATTERNS)
+    def _build_injection_patterns(self) -> list[tuple]:
+        sources: list[str] = list(OWASP_INJECTION_PATTERNS)
         pf = (self.cfg.get("policy") or {}).get("prompt_filter") or {}
         for p in (pf.get("banned_patterns") or []):
             if p not in sources:
                 sources.append(p)
-        compiled: List[tuple] = []
+        compiled: list[tuple] = []
         for p in sources:
             try:
                 compiled.append((p, re.compile(p, re.IGNORECASE)))
@@ -95,7 +95,7 @@ class SkillRegistry:
                 continue
         return compiled
 
-    def _scan_injection(self, text: str) -> List[str]:
+    def _scan_injection(self, text: str) -> list[str]:
         return [src for src, pat in self._injection_patterns if pat.search(text)]
 
     @staticmethod
@@ -123,10 +123,10 @@ class SkillRegistry:
 
     # --- read -------------------------------------------------------------
 
-    def list_skills(self) -> List[str]:
+    def list_skills(self) -> list[str]:
         return sorted(self._data.get("skills", {}).keys())
 
-    def get_skill(self, name: str) -> Optional[dict]:
+    def get_skill(self, name: str) -> dict | None:
         return self._data.get("skills", {}).get(name)
 
     def version(self) -> int:
