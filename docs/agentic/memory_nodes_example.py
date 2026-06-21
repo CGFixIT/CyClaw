@@ -9,25 +9,26 @@ Run with: python -m docs.agentic.memory_nodes_example
 
 from __future__ import annotations
 
-from typing import TypedDict, Any
+from typing import TypedDict
 
-from langgraph.graph import StateGraph, END
+from langgraph.graph import END, StateGraph
 
 # Import the nodes we just extracted
 try:
     from cyclaw.memory_orchestrator.memory_nodes import (
-        extract_node,
         consolidate_node,
+        extract_node,
         next_action_node,
     )
 except ImportError:
     # Fallback for running directly from repo root
     import sys
     from pathlib import Path
+
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
     from .memory_orchestrator.memory_nodes import (
-        extract_node,
         consolidate_node,
+        extract_node,
         next_action_node,
     )
 

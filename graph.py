@@ -43,8 +43,8 @@ CHANGES FROM ORIGINAL (soul.md / persistent personality integration):
 import logging
 from typing import List, Literal, Optional, TypedDict
 
-from langgraph.graph import END, StateGraph
 from langgraph.checkpoint.sqlite import SqliteSaver
+from langgraph.graph import END, StateGraph
 
 from llm.client import GrokClient, LocalLLMClient
 from retrieval.hybrid_search import HybridRetriever
