@@ -47,7 +47,10 @@ _EXPECTED = list(_TELEMETRY_KILL.keys())
 _verified = {k: os.environ.get(k, "NOT SET") for k in _EXPECTED}
 print("[TELEMETRY KILL] Verified env state:")
 for k, v in _verified.items():
-    status = "OK" if v not in ("", "NOT SET") else "MISSING"
+    # Compare against the expected kill value, not a generic "non-empty" check.
+    # CHROMA_OTEL_* are intentionally set to "" to disable them; the old
+    # `v not in ("", "NOT SET")` check marked them MISSING on every startup.
+    status = "OK" if v == _TELEMETRY_KILL[k] else "MISSING"
     print(f"  {status}  {k}={v}")
 
 import logging
