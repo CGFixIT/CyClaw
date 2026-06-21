@@ -103,6 +103,7 @@ jobs:
             tests/test_graph.py \
             tests/test_gate.py \
             tests/test_telemetry_kill.py \
+            tests/test_health.py \
             tests/test_mcp_server.py \
             tests/test_metrics.py \
             tests/test_personality_changes.py \
@@ -111,16 +112,19 @@ jobs:
             tests/test_sync_runner.py \
             tests/test_sync_cli.py \
             tests/test_sync_scheduler.py \
+            tests/test_sync_selftest.py \
             -q --tb=short \
             --cov=utils.sanitizer \
             --cov=utils.errors \
             --cov=utils.logger \
             --cov=utils.personality \
             --cov=utils.ratelimit \
+            --cov=utils.health \
             --cov=llm.client \
             --cov=graph \
             --cov=mcp_hybrid_server \
             --cov=metrics \
+            --cov=sync.selftest \
             --cov-report=xml \
             --cov-report=html \
             --cov-report=term-missing

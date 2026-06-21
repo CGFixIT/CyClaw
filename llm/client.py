@@ -5,14 +5,16 @@ Grok is only instantiated in hybrid mode when explicitly enabled.
 """
 
 import os
+from typing import Optional
 import httpx
 import yaml
 from utils.errors import LLMServiceError, GrokServiceError
 
 class LocalLLMClient:
-    def __init__(self, config_path: str = "config.yaml"):
-        with open(config_path, encoding="utf-8") as f:
-            cfg = yaml.safe_load(f)
+    def __init__(self, config_path: str = "config.yaml", cfg: Optional[dict] = None):
+        if cfg is None:
+            with open(config_path, encoding="utf-8") as f:
+                cfg = yaml.safe_load(f)
         llm_cfg = cfg["models"]["local_llm"]
         self.base_url = llm_cfg["base_url"]
         self.model = llm_cfg["model"]
@@ -46,9 +48,10 @@ class LocalLLMClient:
             raise LLMServiceError(f"LM Studio error: {str(e)}") from e
 
 class GrokClient:
-    def __init__(self, config_path: str = "config.yaml"):
-        with open(config_path, encoding="utf-8") as f:
-            cfg = yaml.safe_load(f)
+    def __init__(self, config_path: str = "config.yaml", cfg: Optional[dict] = None):
+        if cfg is None:
+            with open(config_path, encoding="utf-8") as f:
+                cfg = yaml.safe_load(f)
         grok_cfg = cfg["models"]["grok"]
         self.base_url = grok_cfg["base_url"]
         self.model = grok_cfg["model"]
