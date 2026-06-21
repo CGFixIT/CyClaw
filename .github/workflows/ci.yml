@@ -103,6 +103,7 @@ jobs:
             tests/test_graph.py \
             tests/test_gate.py \
             tests/test_telemetry_kill.py \
+            tests/test_health.py \
             tests/test_mcp_server.py \
             tests/test_metrics.py \
             tests/test_personality_changes.py \
@@ -117,6 +118,7 @@ jobs:
             --cov=utils.logger \
             --cov=utils.personality \
             --cov=utils.ratelimit \
+            --cov=utils.health \
             --cov=llm.client \
             --cov=graph \
             --cov=mcp_hybrid_server \
