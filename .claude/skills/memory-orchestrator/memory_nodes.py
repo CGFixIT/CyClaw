@@ -19,6 +19,9 @@ Usage in a LangGraph:
 
 The original orchestrate.py CLI remains the source of truth for hooks and
 manual /memory commands.
+
+Small polish (June 2026): optional registry wiring for governance_score
+so nodes can surface how well-governed suggested memory actions/skills are.
 """
 
 from __future__ import annotations
@@ -27,7 +30,7 @@ import json
 import re
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 # Paths resolved relative to this file (same as original orchestrate.py)
 SKILL_DIR = Path(__file__).resolve().parent
@@ -118,12 +121,11 @@ def _refresh_index() -> None:
 # LangGraph Node Functions
 # =============================================================================
 
-def extract_node(state: Dict[str, Any], cfg: dict | None = None) -> Dict[str, Any]:
+def extract_node(state: Dict[str, Any], cfg: dict | None = None, registry=None) -> Dict[str, Any]:
     """LangGraph node: persist a memory snapshot.
 
-    Expects optional 'content' or 'content_file' in state.
-    Writes timestamped .md, updates state file, refreshes index.
-    Returns updates for downstream nodes.
+    Optional `registry` (SkillRegistry) can be passed to include governance_score
+    for memory-related skills in the returned state.
     """
     content = state.get("content", "").strip()
     content_file = state.get("content_file")
@@ -151,18 +153,24 @@ def extract_node(state: Dict[str, Any], cfg: dict | None = None) -> Dict[str, An
     _save_state(last_extraction=_now().isoformat())
     _refresh_index()
 
-    return {
+    result = {
         "memory_extracted_path": str(target.relative_to(REPO_ROOT)),
         "last_extraction": _now().isoformat(),
         "memory_action": "extract",
     }
 
+    if registry is not None:
+        try:
+            result["governance_score_memory_extract"] = registry.governance_score("memory-extraction")
+        except Exception:
+            pass
+    return result
 
-def consolidate_node(state: Dict[str, Any], cfg: dict | None = None) -> Dict[str, Any]:
+
+def consolidate_node(state: Dict[str, Any], cfg: dict | None = None, registry=None) -> Dict[str, Any]:
     """LangGraph node: deterministic merge/dedupe of memory snapshots.
 
-    Produces CONSOLIDATED.md, refreshes INDEX.md, stamps state.
-    Returns summary for downstream nodes / audit.
+    Optional `registry` for governance_score on consolidation-related skills.
     """
     MEM_DIR.mkdir(parents=True, exist_ok=True)
     snaps = _snapshots()
@@ -199,7 +207,7 @@ def consolidate_node(state: Dict[str, Any], cfg: dict | None = None) -> Dict[str
     _save_state(last_consolidation=_now().isoformat())
     _refresh_index()
 
-    return {
+    result = {
         "consolidated_path": str(CONSOLIDATED_FILE.relative_to(REPO_ROOT)),
         "last_consolidation": _now().isoformat(),
         "memory_action": "consolidate",
@@ -207,26 +215,41 @@ def consolidate_node(state: Dict[str, Any], cfg: dict | None = None) -> Dict[str
         "unique_lines": total_lines,
     }
 
+    if registry is not None:
+        try:
+            result["governance_score_memory_consolidate"] = registry.governance_score("memory-consolidation")
+        except Exception:
+            pass
+    return result
 
-def title_node(state: Dict[str, Any], cfg: dict | None = None) -> Dict[str, Any]:
+
+def title_node(state: Dict[str, Any], cfg: dict | None = None, registry=None) -> Dict[str, Any]:
     """LangGraph node: suggest a concise title for the current memory context.
 
-    Placeholder implementation — can be upgraded to call a small local LLM
-    or verification-specialist. For now returns a deterministic timestamped title.
+    Placeholder implementation. If registry is provided, includes governance_score
+    for title-related memory skills.
     """
     ts = _stamp()
     suggested_title = f"Memory Session — {ts}"
-    return {
+
+    result = {
         "suggested_title": suggested_title,
         "memory_action": "title",
     }
 
+    if registry is not None:
+        try:
+            result["governance_score_memory_title"] = registry.governance_score("memory-title")
+        except Exception:
+            pass
+    return result
 
-def next_action_node(state: Dict[str, Any], cfg: dict | None = None) -> Dict[str, Any]:
+
+def next_action_node(state: Dict[str, Any], cfg: dict | None = None, registry=None) -> Dict[str, Any]:
     """LangGraph node: suggest the next memory-related action.
 
     Looks at last_consolidation / last_extraction and timer-check logic.
-    Returns a structured suggestion the agent can act on (or present to user).
+    If `registry` is provided, includes governance_score for the suggested action.
     """
     state_data = _load_state()
     last = state_data.get("last_consolidation")
@@ -241,16 +264,27 @@ def next_action_node(state: Dict[str, Any], cfg: dict | None = None) -> Dict[str
     if due:
         suggestion = "Run consolidate then extract (12h interval reached)"
         action = "consolidate+extract"
+        suggested_skill = "memory-consolidation"
     else:
         suggestion = "No consolidation due. Consider targeted extraction if important context appeared."
         action = "extract"
+        suggested_skill = "memory-extraction"
 
-    return {
+    result = {
         "next_memory_action": action,
         "suggestion": suggestion,
         "consolidation_due": due,
         "memory_action": "next_action",
     }
+
+    if registry is not None:
+        try:
+            result["governance_score_suggested_skill"] = registry.governance_score(suggested_skill)
+            result["suggested_skill"] = suggested_skill
+        except Exception:
+            pass
+
+    return result
 
 
 __all__ = [
