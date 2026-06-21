@@ -229,7 +229,7 @@ def user_gate_node(state: GraphState, cfg: dict) -> dict:
     # User has responded – routing handled by conditional edge
     return {}
 
-def grok_fallback_node(state: GraphState, grok: GrokClient, cfg: dict) -> dict:
+def grok_fallback_node(state: GraphState, grok: Optional[GrokClient], cfg: dict) -> dict:
     """Node 5: Call Grok API. Only reachable when hybrid + confirmed.
 
     5.2.26: Prompt formatting brought in line with local_llm_node — consistent
@@ -247,7 +247,7 @@ def grok_fallback_node(state: GraphState, grok: GrokClient, cfg: dict) -> dict:
         # path degrades gracefully instead of crashing on None.generate().
         logger.warning("grok_fallback_node reached with grok=None; returning offline response")
         return {
-            "answer": "[Grok unavailable: offline mode or Grok disabled \u2014 no external fallback executed]",
+            "answer": "[Grok unavailable: offline mode or Grok disabled — no external fallback executed]",
             "answer_model": "offline-best-effort",
             "answer_sources": []
         }
@@ -423,7 +423,7 @@ def build_graph(
     *,
     retriever: HybridRetriever,
     llm: LocalLLMClient,
-    grok: GrokClient,
+    grok: Optional[GrokClient],
     cfg: dict,
     personality: Optional[PersonalityManager] = None
 ):
@@ -439,7 +439,7 @@ def build_graph(
     Args:
         retriever: HybridRetriever instance (ChromaDB + BM25)
         llm: LocalLLMClient instance (LM Studio)
-        grok: GrokClient instance (xAI Grok API)
+        grok: GrokClient instance (xAI Grok API), or None in offline mode
         cfg: parsed config.yaml dict
         personality: optional PersonalityManager — if provided, soul content
                      is injected into prompts and interactions are recorded.
@@ -451,7 +451,7 @@ def build_graph(
 
     graph = StateGraph(GraphState)
 
-    # ── Node registration ────────────────────────────────────────────────────
+    # ── Node registration ────────────────────────────────────────────
     graph.add_node("retrieve",        partial(retrieve_node,           retriever=retriever, cfg=cfg))
     graph.add_node("route_by_score",  partial(route_by_score_node,     cfg=cfg))
     graph.add_node("local_llm",       partial(local_llm_node,          llm=llm, cfg=cfg, personality=personality))
@@ -460,10 +460,10 @@ def build_graph(
     graph.add_node("offline_best_effort", partial(offline_best_effort_node, llm=llm, cfg=cfg, personality=personality))
     graph.add_node("audit_logger",    partial(audit_logger_node,       cfg=cfg, personality=personality))
 
-    # ── Entry point ──────────────────────────────────────────────────────────
+    # ── Entry point ──────────────────────────────────────────────
     graph.set_entry_point("retrieve")
 
-    # ── Edges ────────────────────────────────────────────────────────────────
+    # ── Edges ────────────────────────────────────────────────
     # retrieve → route_by_score (always)
     graph.add_edge("retrieve", "route_by_score")
 

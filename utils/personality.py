@@ -53,6 +53,10 @@ class PersonalityManager:
         self.soul_path = Path(pers_cfg.get("soul_path", "data/personality/soul.md"))
         self.db_path = Path(pers_cfg.get("db_path", "data/personality/cyclaw_soul.db"))
         self.ttl_days = pers_cfg.get("interaction_ttl_days", 365)
+        # Amortize TTL pruning: sweep once per this many inserts instead of on
+        # every record_interaction() call (see record_interaction for rationale).
+        self._prune_every = pers_cfg.get("interaction_prune_every", 100)
+        self._inserts_since_prune = 0
         self.soul_core: str = ""
         # Compile the injection scanner once: config banned_patterns ∪ OWASP.
         self._injection_patterns = self._build_injection_patterns()
@@ -265,13 +269,27 @@ class PersonalityManager:
     reload_soul = reload
 
     def record_interaction(self, query_hash: str, outcome: str) -> None:
-        cutoff = (datetime.now(timezone.utc) - timedelta(days=self.ttl_days)).isoformat()
         with self._lock:
-            self.conn.execute(self._sql_delete_old_interactions, (cutoff,))
             self.conn.execute(
                 self._sql_insert_interaction,
                 (query_hash, outcome, datetime.now(timezone.utc).isoformat())
             )
+            # Amortize the TTL prune. The previous code ran a full
+            # `DELETE FROM interactions WHERE timestamp < cutoff` on *every*
+            # insert -- and this runs on the hot audit path
+            # (audit_logger_node -> record_interaction per query). With the
+            # default 365-day TTL that DELETE scans the table and matches
+            # nothing on virtually every call, so it was pure write
+            # amplification under the lock. maintenance() already prunes on
+            # __init__, and now we also sweep once per `_prune_every` inserts
+            # (mirroring utils/ratelimit.py's periodic _sweep) so a
+            # long-running server still bounds the table without paying the
+            # DELETE cost on each request.
+            self._inserts_since_prune += 1
+            if self._inserts_since_prune >= self._prune_every:
+                cutoff = (datetime.now(timezone.utc) - timedelta(days=self.ttl_days)).isoformat()
+                self.conn.execute(self._sql_delete_old_interactions, (cutoff,))
+                self._inserts_since_prune = 0
             self.conn.commit()
 
     def maintenance(self, ttl_days: int | None = None) -> int:

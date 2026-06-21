@@ -189,6 +189,53 @@ class TestPersonalityManager:
         assert len(rows) == 1
         assert rows[0]["query_hash"] == "new"
 
+    def test_record_interaction_prunes_every_prune_every_inserts(self, tmp_paths):
+        """record_interaction no longer runs a DELETE on every insert; it sweeps
+        once per `interaction_prune_every` inserts. A stale row survives the
+        sub-threshold inserts and is pruned exactly when the sweep fires."""
+        soul_path, db_path, audit_path = tmp_paths
+        soul_path.parent.mkdir(parents=True, exist_ok=True)
+        soul_path.write_text("# Test", encoding="utf-8")
+        cfg = {
+            "personality": {
+                "soul_path": str(soul_path),
+                "db_path": str(db_path),
+                "interaction_ttl_days": 1,
+                "interaction_prune_every": 3,
+            },
+            "logging": {"audit_file": str(audit_path),
+                        "audit_fields": {"include_query_hash": True}},
+            "policy": {"privacy": {}},
+        }
+        with patch("utils.personality.audit_log"):
+            from utils.personality import PersonalityManager
+            pm = PersonalityManager(cfg)
+
+        # Stale row inserted AFTER init (so __init__'s maintenance() didn't see it).
+        pm.conn.execute(
+            "INSERT INTO interactions (timestamp, query_hash, outcome) "
+            "VALUES (datetime('now', '-100 days'), 'old', 'local')"
+        )
+        pm.conn.commit()
+
+        def _old_rows() -> int:
+            return pm.conn.execute(
+                "SELECT COUNT(*) AS c FROM interactions WHERE query_hash='old'"
+            ).fetchone()["c"]
+
+        # Two inserts: below the sweep threshold of 3 -> stale row still present.
+        pm.record_interaction("h1", "local")
+        pm.record_interaction("h2", "local")
+        assert _old_rows() == 1
+
+        # Third insert hits the threshold -> sweep fires, stale row pruned.
+        pm.record_interaction("h3", "local")
+        assert _old_rows() == 0
+        # Fresh rows are retained.
+        assert pm.conn.execute(
+            "SELECT COUNT(*) AS c FROM interactions WHERE query_hash IN ('h1','h2','h3')"
+        ).fetchone()["c"] == 3
+
 
 class TestApplyEvolutionInjectionGate:
     """S8 regression: apply_evolution ENFORCES the injection scan at the write boundary.
