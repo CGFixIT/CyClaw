@@ -18,12 +18,23 @@ import yaml
 from utils import health
 from utils.errors import LLMServiceError
 
+# Inert test fixtures mirroring the real loopback LM Studio endpoint
+# (http://127.0.0.1:1234, the value shipped in config.yaml) so the probes are
+# exercised against realistic inputs. No socket is ever opened -- httpx is
+# mocked in every test. DevSkim flags the http scheme + localhost on URL
+# literals; suppressed here per the repo convention (cf. the inline
+# `# DevSkim: ignore` markers in retrieval/hybrid_search.py and
+# utils/personality.py).
+_LM_BASE = "http://127.0.0.1:1234/v1"  # DevSkim: ignore DS137138,DS162092
+_LM_MODELS = "http://127.0.0.1:1234/models"  # DevSkim: ignore DS137138,DS162092
+_HOST_MODELS = "http://host/models"  # DevSkim: ignore DS137138
+
 
 def _write_cfg(tmp_path, *, mode="offline", grok_enabled=False):
     cfg = {
         "app": {"mode": mode},
         "models": {
-            "local_llm": {"base_url": "http://127.0.0.1:1234/v1"},
+            "local_llm": {"base_url": _LM_BASE},
             "grok": {"enabled": grok_enabled, "base_url": "https://api.x.ai/v1"},
         },
     }
@@ -49,7 +60,7 @@ def _clear_health_cfg_cache():
 class TestPing:
     def test_ping_healthy(self, monkeypatch):
         monkeypatch.setattr(health.httpx, "get", lambda url, **kw: _OKResp())
-        status = health._ping("http://host/models", "lm_studio")
+        status = health._ping(_HOST_MODELS, "lm_studio")
         assert status.healthy is True
         assert status.name == "lm_studio"
         assert status.latency_ms is not None
@@ -57,17 +68,17 @@ class TestPing:
 
     def test_ping_unreachable_redacts_url(self, monkeypatch):
         def boom(url, **kw):
-            raise httpx.ConnectError("cannot connect to http://127.0.0.1:1234/models")
+            raise httpx.ConnectError(f"cannot connect to {_LM_MODELS}")
 
         monkeypatch.setattr(health.httpx, "get", boom)
-        status = health._ping("http://127.0.0.1:1234/models", "lm_studio")
+        status = health._ping(_LM_MODELS, "lm_studio")
         assert status.healthy is False
         # The URL (possible creds / internal hostnames) must not leak into /health.
-        assert "http://" not in status.error
+        assert "127.0.0.1" not in status.error
         assert "[URL REDACTED]" in status.error
 
     def test_ping_non_2xx_is_unhealthy(self, monkeypatch):
-        request = httpx.Request("GET", "http://host/models")
+        request = httpx.Request("GET", _HOST_MODELS)
         response = httpx.Response(503, request=request)
 
         class _Resp:
@@ -75,7 +86,7 @@ class TestPing:
                 raise httpx.HTTPStatusError("503", request=request, response=response)
 
         monkeypatch.setattr(health.httpx, "get", lambda url, **kw: _Resp())
-        status = health._ping("http://host/models", "lm_studio")
+        status = health._ping(_HOST_MODELS, "lm_studio")
         assert status.healthy is False
 
 
@@ -121,7 +132,7 @@ class TestRequireHealthy:
         cfg_path = _write_cfg(tmp_path, mode="offline")
 
         def boom(url, **kw):
-            raise httpx.ConnectError("down http://127.0.0.1:1234/models")
+            raise httpx.ConnectError(f"down {_LM_MODELS}")
 
         monkeypatch.setattr(health.httpx, "get", boom)
         with pytest.raises(LLMServiceError):
