@@ -54,6 +54,7 @@ for k, v in _verified.items():
     print(f"  {status}  {k}={v}")
 
 import logging
+from contextlib import asynccontextmanager
 import yaml
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.responses import FileResponse
@@ -150,10 +151,19 @@ if not os.environ.get("CYCLAW_API_KEY", ""):
         "(fail-closed). Set CYCLAW_API_KEY to enable them."
     )
 
+@asynccontextmanager
+async def _lifespan(_app: FastAPI):
+    yield
+    local_llm.close()
+    if grok is not None:
+        grok.close()
+
+
 app = FastAPI(
     title="CyClaw RAG Gateway",
     description="Offline-first, RAG-first, MCP-exposed stack",
-    version="1.4.0"
+    version="1.4.0",
+    lifespan=_lifespan,
 )
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -205,16 +215,6 @@ if retriever is not None:
     compiled_graph = build_graph(
         retriever=retriever, llm=local_llm, grok=grok, cfg=cfg, personality=personality
     )
-
-
-def _close_http_clients() -> None:
-    """Close persistent httpx connections held by LLM clients on server shutdown."""
-    local_llm.close()
-    if grok is not None:
-        grok.close()
-
-
-app.add_event_handler("shutdown", _close_http_clients)
 
 
 @app.post("/query", response_model=QueryResponse)
