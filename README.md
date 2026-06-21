@@ -307,7 +307,7 @@ For Claude Desktop or other MCP-compatible clients:
 }
 ```
 
-The MCP server exposes a retrieval-only `hybrid_search` tool. It has **no sampling capability** and is intentionally isolated from the agentic and sync layers.
+The MCP server exposes a retrieval-only `hybrid_search` tool. It has **no sampling capability** and is intentionally isolated from the agentic and Dropbox corpus sync layers.
 
 ---
 
