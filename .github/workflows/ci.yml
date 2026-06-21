@@ -112,6 +112,7 @@ jobs:
             tests/test_sync_runner.py \
             tests/test_sync_cli.py \
             tests/test_sync_scheduler.py \
+            tests/test_sync_selftest.py \
             -q --tb=short \
             --cov=utils.sanitizer \
             --cov=utils.errors \
@@ -123,6 +124,7 @@ jobs:
             --cov=graph \
             --cov=mcp_hybrid_server \
             --cov=metrics \
+            --cov=sync.selftest \
             --cov-report=xml \
             --cov-report=html \
             --cov-report=term-missing
