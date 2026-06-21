@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 import yaml
 
-from retrieval.indexer import chunk_document, build_index
+from retrieval.indexer import chunk_document, build_index, load_corpus
 
 
 class TestChunkDocument:
@@ -117,3 +117,51 @@ class TestBuildIndexConfigPropagation:
             "build_index did not forward its config_path to get_embeddings_batch; "
             f"got {passed_config!r}"
         )
+
+
+class TestLoadCorpusCaseInsensitive:
+    """load_corpus must match file extensions case-insensitively.
+
+    On Linux/CI rglob(f"*{ext}") was case-sensitive; files with .MD or .TXT
+    would be silently skipped if config specified [".md", ".txt"].
+    This test validates case-insensitive extension matching on all platforms.
+    """
+
+    def test_config_uppercase_matches_lowercase_files(self, tmp_path):
+        corpus = tmp_path / "corpus"
+        corpus.mkdir()
+        # Create files with lowercase extensions
+        (corpus / "doc.md").write_text("content", encoding="utf-8")
+        (corpus / "notes.txt").write_text("content", encoding="utf-8")
+        # Config specifies UPPERCASE extensions (tests reverse case matching)
+        docs = load_corpus(str(corpus), extensions=[".MD", ".TXT"])
+        # Both files should be loaded despite config using uppercase extensions
+        assert len(docs) == 2
+        sources = {source for source, _ in docs}
+        assert any("doc.md" in s for s in sources)
+        assert any("notes.txt" in s for s in sources)
+
+    def test_config_lowercase_matches_uppercase_files(self, tmp_path):
+        corpus = tmp_path / "corpus"
+        corpus.mkdir()
+        # Create files with uppercase extensions (separate base names to avoid
+        # Windows case-insensitivity collisions on NTFS)
+        (corpus / "first.MD").write_text("content", encoding="utf-8")
+        (corpus / "second.TXT").write_text("content", encoding="utf-8")
+        # Config specifies lowercase extensions
+        docs = load_corpus(str(corpus), extensions=[".md", ".txt"])
+        # Both files should be loaded (extension match is case-insensitive)
+        assert len(docs) == 2
+        sources = {source for source, _ in docs}
+        assert any("first.MD" in s for s in sources)
+        assert any("second.TXT" in s for s in sources)
+
+    def test_unmatched_extensions_still_skipped(self, tmp_path):
+        corpus = tmp_path / "corpus"
+        corpus.mkdir()
+        (corpus / "doc.md").write_text("match", encoding="utf-8")
+        (corpus / "other.json").write_text("skip", encoding="utf-8")
+        docs = load_corpus(str(corpus), extensions=[".md"])
+        # Only .md should be loaded; .json should be skipped
+        assert len(docs) == 1
+        assert "doc.md" in docs[0][0]

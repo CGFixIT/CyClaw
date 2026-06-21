@@ -29,19 +29,24 @@ def load_corpus(corpus_path: str, extensions: List[str]) -> List[Tuple[str, str]
     if not corpus_dir.exists():
         raise CorpusEmptyError(f"Corpus directory does not exist: {corpus_path}")
     corpus_resolved = corpus_dir.resolve()
-    for ext in extensions:
-        for file_path in corpus_dir.rglob(f"*{ext}"):
-            # Reject symlinks that escape the corpus directory — rglob follows
-            # symlinks by default, so a link pointing outside data/corpus could
-            # pull arbitrary filesystem content into the index.
-            if not file_path.resolve().is_relative_to(corpus_resolved):
-                print(f"[WARN] Skipping {file_path}: resolves outside corpus directory")
-                continue
-            try:
-                content = file_path.read_text(encoding="utf-8")
-                docs.append((str(file_path), content))
-            except Exception as e:
-                print(f"[WARN] Skipping {file_path}: {e}")
+    normalized_extensions = {ext.lower() for ext in extensions}
+    for file_path in corpus_dir.rglob("*"):
+        if not file_path.is_file():
+            continue
+        # Match file extension case-insensitively (e.g., .MD matches .md config entry).
+        if file_path.suffix.lower() not in normalized_extensions:
+            continue
+        # Reject symlinks that escape the corpus directory — rglob follows
+        # symlinks by default, so a link pointing outside data/corpus could
+        # pull arbitrary filesystem content into the index.
+        if not file_path.resolve().is_relative_to(corpus_resolved):
+            print(f"[WARN] Skipping {file_path}: resolves outside corpus directory")
+            continue
+        try:
+            content = file_path.read_text(encoding="utf-8")
+            docs.append((str(file_path), content))
+        except Exception as e:
+            print(f"[WARN] Skipping {file_path}: {e}")
     if not docs:
         raise CorpusEmptyError(f"No documents found in {corpus_path} with extensions {extensions}")
     return docs
