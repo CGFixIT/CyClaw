@@ -139,6 +139,11 @@ class TestGrokFallbackPath:
 
         # Even with confirmation, offline mode (grok=None) blocks Grok
         assert result["answer_model"] == "offline-best-effort"
+        # The router must send a confirmed offline query to offline_best_effort
+        # (a real local answer), NOT to grok_fallback whose None-guard returns a
+        # dead-end "[Grok unavailable]" stub.
+        assert "Best effort offline answer." in result["answer"]
+        assert "Grok unavailable" not in result["answer"]
 
 
 class TestOfflineBestEffortPath:

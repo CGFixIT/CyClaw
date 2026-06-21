@@ -392,18 +392,25 @@ def score_router(state: GraphState) -> Literal["local_llm", "user_gate"]:
         return "user_gate"
     return "local_llm"
 
-def user_gate_router(state: GraphState) -> Literal["grok_fallback", "offline_best_effort", "audit_logger"]:
-    """After user_gate: route based on confirmation and mode config."""
+def user_gate_router(state: GraphState, grok: Optional[GrokClient] = None) -> Literal["grok_fallback", "offline_best_effort", "audit_logger"]:
+    """After user_gate: route based on confirmation and Grok availability.
+
+    ``grok`` is bound at build time (``build_graph`` passes the same client it
+    injects into ``grok_fallback_node``). When it is ``None`` — offline mode or
+    Grok disabled — a confirmed query is routed straight to offline-best-effort
+    so the user gets a real local answer. Previously it was routed to
+    ``grok_fallback`` regardless of mode; the node's ``grok is None`` guard then
+    returned a "[Grok unavailable: offline mode]" stub, a dead-end that wasted
+    the confirmation round-trip and produced no actual answer.
+    """
     confirmed = state.get("user_confirmed_online")
 
     if confirmed is None:
         # Pause state — gate.py will return 202 and await /confirm
         return "audit_logger"
 
-    # Check mode from audit_event context (injected at gate level via state)
-    # If user confirmed AND hybrid mode → Grok
-    # Otherwise → offline best effort
-    if confirmed:
+    # Confirmed AND Grok available (hybrid mode) → Grok; otherwise local best effort.
+    if confirmed and grok is not None:
         return "grok_fallback"
     else:
         return "offline_best_effort"
@@ -476,7 +483,7 @@ def build_graph(
     # user_gate → grok_fallback | offline_best_effort | audit_logger (conditional)
     graph.add_conditional_edges(
         "user_gate",
-        user_gate_router,
+        partial(user_gate_router, grok=grok),
         {
             "grok_fallback":        "grok_fallback",
             "offline_best_effort":  "offline_best_effort",
