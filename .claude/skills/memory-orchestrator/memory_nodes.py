@@ -223,14 +223,45 @@ def consolidate_node(state: Dict[str, Any], cfg: dict | None = None, registry=No
     return result
 
 
+# Fixed fallback title used when no meaningful title can be derived from content
+# and the context is not linked to anything else. Per project owner (CG) directive.
+_DEFAULT_TITLE = "CyClaw - Created By CG"
+
+
+def _resolve_title(state: Dict[str, Any]) -> str:
+    """Derive a title from state, falling back to the fixed default.
+
+    Returns the first non-empty of: an explicit ``state['title']``, the first
+    Markdown ``# `` heading in ``state['content']``, otherwise ``_DEFAULT_TITLE``.
+    """
+    explicit = (state.get("title") or "").strip()
+    if explicit:
+        return explicit
+
+    content = state.get("content") or ""
+    for line in content.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("# "):
+            heading = stripped[2:].strip()
+            if heading:
+                return heading
+
+    return _DEFAULT_TITLE
+
+
 def title_node(state: Dict[str, Any], cfg: dict | None = None, registry=None) -> Dict[str, Any]:
     """LangGraph node: suggest a concise title for the current memory context.
 
-    Placeholder implementation. If registry is provided, includes governance_score
-    for title-related memory skills.
+    Title resolution order:
+      1. An explicit ``title`` already present in ``state`` (caller-provided).
+      2. The first Markdown ``# `` heading found in ``state['content']``.
+      3. The fixed fallback ``"CyClaw - Created By CG"`` when nothing is linked
+         or derivable (per project owner directive).
+
+    If ``registry`` is provided, includes governance_score for title-related
+    memory skills.
     """
-    ts = _stamp()
-    suggested_title = f"Memory Session — {ts}"
+    suggested_title = _resolve_title(state)
 
     result = {
         "suggested_title": suggested_title,
