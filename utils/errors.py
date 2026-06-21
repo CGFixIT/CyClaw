@@ -98,32 +98,29 @@ class AgenticError(RAGError):
     mcp_hybrid_server.py, so the gateway can stay oblivious to it.
     """
 
-    def __init__(self, message: str, details: Optional[dict] = None):
-        super().__init__(message, code="AGENTIC_ERROR", details=details)
+    def __init__(self, message: str, code: str = "AGENTIC_ERROR", details: Optional[dict] = None):
+        super().__init__(message, code=code, details=details)
 
 
 class GhNotInstalledError(AgenticError):
     """The GitHub CLI (`gh`) was not found on PATH."""
 
     def __init__(self, message: str, details: Optional[dict] = None):
-        super().__init__(message, details=details)
-        self.code = "GH_NOT_INSTALLED"
+        super().__init__(message, code="GH_NOT_INSTALLED", details=details)
 
 
 class GhVersionError(AgenticError):
     """`gh` is installed but below the required version floor (or unparseable)."""
 
     def __init__(self, message: str, details: Optional[dict] = None):
-        super().__init__(message, details=details)
-        self.code = "GH_VERSION_TOO_OLD"
+        super().__init__(message, code="GH_VERSION_TOO_OLD", details=details)
 
 
 class AgenticConfigError(AgenticError):
     """The agentic: block in config.yaml is missing or invalid."""
 
     def __init__(self, message: str, details: Optional[dict] = None):
-        super().__init__(message, details=details)
-        self.code = "AGENTIC_CONFIG_INVALID"
+        super().__init__(message, code="AGENTIC_CONFIG_INVALID", details=details)
 
 
 class AgenticWriteRefused(AgenticError):
@@ -134,16 +131,14 @@ class AgenticWriteRefused(AgenticError):
     """
 
     def __init__(self, message: str, details: Optional[dict] = None):
-        super().__init__(message, details=details)
-        self.code = "AGENTIC_WRITE_REFUSED"
+        super().__init__(message, code="AGENTIC_WRITE_REFUSED", details=details)
 
 
 class SkillRegistryError(AgenticError):
     """The governed skills registry could not load, validate, or apply a change."""
 
     def __init__(self, message: str, details: Optional[dict] = None):
-        super().__init__(message, details=details)
-        self.code = "SKILL_REGISTRY_ERROR"
+        super().__init__(message, code="SKILL_REGISTRY_ERROR", details=details)
 
 
 @dataclass

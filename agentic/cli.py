@@ -27,7 +27,6 @@ from agentic.config import AgenticConfig, load_agentic_config
 from utils.errors import (
     AgenticConfigError,
     AgenticError,
-    AgenticWriteRefused,
     GhNotInstalledError,
     GhVersionError,
     PromptInjectionError,
