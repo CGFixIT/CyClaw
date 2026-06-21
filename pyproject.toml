@@ -20,14 +20,14 @@ classifiers = [
 ]
 
 dependencies = [
-    "fastapi==0.137.2",
+    "fastapi==0.138.0",
     "uvicorn[standard]==0.49.0",
     "pydantic==2.13.4",
     "pyyaml==6.0.3",
     "httpx==0.28.1",
-    "langgraph==1.2.5",
-    "langchain-core==1.4.7",
-    "chromadb==1.5.6",  # CVE-2026-45829 (Critical pre-auth RCE, no upstream patch). Risk accepted ONLY for local/offline air-gapped use via PersistentClient (embedded mode, path from config.yaml). No HttpClient, no trust_remote_code. See SECURITY.md, pip-audit workflow, Docker support in feature/CyClaw-Agent, and cyclaw-advisor §K/§M.
+    "langgraph==1.2.6",
+    "langchain-core==1.4.8",
+    "chromadb==1.5.9",  # CVE-2026-45829 (Critical pre-auth RCE, no upstream patch). Risk accepted ONLY for local/offline air-gapped use via PersistentClient (embedded mode, path from config.yaml). No HttpClient, no trust_remote_code. See SECURITY.md, pip-audit workflow, Docker support in feature/CyClaw-Agent, and cyclaw-advisor §K/§M.
     "sentence-transformers==5.6.0",
     "rank-bm25==0.2.2",
     "numpy==1.26.4",
@@ -35,10 +35,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-test = ["pytest==9.1.0", "pytest-asyncio==1.4.0"]
+test = ["pytest==9.1.1", "pytest-asyncio==1.4.0"]
 dev = ["ruff", "mypy", "bandit", "pytest-cov"]
-torch-cpu = ["torch==2.6.0+cpu"]  # Minimum safe version post CVE-2025-32434 (weights_only=True RCE bypass in torch<2.6). Always prefer safetensors.
-full = ["torch==2.6.0+cpu", "pytest==9.1.0", "pytest-asyncio==1.4.0", "ruff", "mypy", "bandit", "pytest-cov"]
+torch-cpu = ["torch==2.12.1"]  # Minimum safe version post CVE-2025-32434 (weights_only=True RCE bypass in torch<2.6). Always prefer safetensors.
+full = ["torch==2.12.1", "pytest==9.1.1", "pytest-asyncio==1.4.0", "ruff", "mypy", "bandit", "pytest-cov"]
 
 [project.scripts]
 cyclaw-server = "gate:main"
