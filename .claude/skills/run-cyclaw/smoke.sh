@@ -67,23 +67,23 @@ GRP=$(echo "$R"   | jget "str(d['graph_ready'])")
   && pass "GET /health  (index_ready=True graph_ready=True status=$STATUS)" \
   || fail "GET /health  unexpected response: $R"
 
-# 2. Query → needs_confirm (vault miss in offline mode with dummy LM Studio)
+# 2. Query → direct local path in current graph behavior
 R=$(curl -sf -X POST "$BASE/query" \
   -H "Content-Type: application/json" \
   -d '{"query":"What is RRF fusion in CyClaw?"}')
 NC=$(echo "$R" | jget "str(d.get('needs_confirm','?'))")
-[ "$NC" = "True" ] \
-  && pass "POST /query  (needs_confirm=True — vault miss path works)" \
-  || fail "POST /query  needs_confirm=$NC (expected True)"
+[ "$NC" = "False" ] \
+  && pass "POST /query  (needs_confirm=False — direct local path works)" \
+  || fail "POST /query  needs_confirm=$NC (expected False)"
 
-# 3. Query → offline_best_effort (user declines Grok)
+# 3. Query with user_confirmed_online=false → local path in current graph behavior
 R=$(curl -sf -X POST "$BASE/query" \
   -H "Content-Type: application/json" \
   -d '{"query":"What is CyClaw?","user_confirmed_online":false}')
 MODEL=$(echo "$R" | jget "d['model_used']")
-[ "$MODEL" = "offline-best-effort" ] \
-  && pass "POST /query user_confirmed_online=false  (model_used=offline-best-effort)" \
-  || fail "POST /query offline path  model_used=$MODEL"
+[ "$MODEL" = "local" ] \
+  && pass "POST /query user_confirmed_online=false  (model_used=local)" \
+  || fail "POST /query user_confirmed_online=false  model_used=$MODEL (expected local)"
 
 # 4. Prompt injection blocked (HTTP 400)
 HTTP=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE/query" \
