@@ -5,10 +5,11 @@ Usage:
 """
 
 import json
-import os
 from collections import Counter
 from pathlib import Path
+
 import yaml
+
 
 def load_events(audit_file: str):
     events = []

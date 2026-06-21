@@ -15,6 +15,7 @@ import yaml
 
 from .errors import HealthStatus, LLMServiceError
 
+
 @lru_cache(maxsize=8)
 def _health_cfg(config_path: str) -> dict:
     """Parse config once per path. check_all runs on every /health request, so

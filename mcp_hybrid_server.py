@@ -5,12 +5,12 @@ Only exposes hybrid_search tool via JSON-RPC over stdio.
 User gate handled entirely in FastAPI HTTP layer.
 """
 
-import sys
 import json
+import sys
 
 from retrieval.hybrid_search import HybridRetriever
-from utils.logger import audit_log
 from utils.errors import RAGError
+from utils.logger import audit_log
 
 CAPABILITIES = {
     "tools": {},

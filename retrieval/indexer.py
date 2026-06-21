@@ -5,19 +5,19 @@ Sanitizes chunks at ingestion time via prompt filter.
 """
 
 import json
-import os
 from pathlib import Path
 from typing import List, Tuple
 
 import chromadb
-from chromadb.config import Settings
-from rank_bm25 import BM25Okapi
 import yaml
+from chromadb.config import Settings
 
-from .stemmer import tokenize_and_stem
-from .embeddings import get_embeddings_batch
 from utils.errors import CorpusEmptyError
 from utils.sanitizer import sanitize_chunk
+
+from .embeddings import get_embeddings_batch
+from .stemmer import tokenize_and_stem
+
 
 def load_config(config_path: str = "config.yaml") -> dict:
     with open(config_path, encoding="utf-8") as f:
@@ -120,7 +120,7 @@ def build_index(config_path: str = "config.yaml") -> None:
     )
     try:
         client.delete_collection(collection_name)
-    except Exception:
+    except Exception:  # noqa: S110 — delete-if-exists; collection may not exist yet
         pass
     # Embeddings are L2-normalized (retrieval/embeddings.py), so the collection
     # must use the cosine space: with unit vectors ChromaDB's default `l2` returns
