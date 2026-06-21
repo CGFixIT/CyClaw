@@ -65,14 +65,18 @@ jobs:
           pip install torch==2.6.0+cpu --index-url https://download.pytorch.org/whl/cpu
           pip install -r requirements.txt pytest pytest-cov
 
-      - name: Prepare hermetic test env
-        shell: bash
-        run: |
-          # data/corpus/cyclaw_overview.md is committed — the RAG smoke test indexes it.
-          # Minimal soul.md + env var for gate tests. No prod secrets.
-          mkdir -p data/personality index logs
-          echo '# Soul' > data/personality/soul.md
-          echo 'GROK_API_KEY=dummy' >> $GITHUB_ENV
+       name: Preparing Hermetic test ("soul.md")
+
+env
+  shell: bash
+  run: |
+    # data/corpus/cyclaw_overview.md is committed — the RAG smoke test indexes it.
+    # Minimal soul.md + env var for gate tests. No prod secrets.
+    mkdir -p data/personality index logs
+    echo '# Soul
+
+CyClaw is an offline-first RAG-enforced technical assistant. its offline Drobox-Syncing RAG consists of Chroma + BM25 + RRF fusion to determine if query by user is a "vault hit or miss"' > data/personality/soul.md
+    echo 'GROK_API_KEY=dummy' >> $GITHUB_ENV
 
       - name: RAG Query Smoke (ChromaDB 1.5.6 + BM25 + RRF)
         shell: bash
