@@ -9,7 +9,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 import yaml
 
-import retrieval.indexer as indexer
 from retrieval.indexer import chunk_document, build_index
 
 
@@ -104,8 +103,8 @@ class TestBuildIndexConfigPropagation:
             yaml.dump(cfg, f)
 
         fake_embeddings = MagicMock(return_value=[[0.1, 0.2, 0.3]])
-        with patch.object(indexer, "get_embeddings_batch", fake_embeddings), \
-                patch.object(indexer, "chromadb") as mock_chromadb:
+        with patch("retrieval.indexer.get_embeddings_batch", fake_embeddings), \
+                patch("retrieval.indexer.chromadb") as mock_chromadb:
             mock_client = MagicMock()
             mock_client.create_collection.return_value = MagicMock()
             mock_chromadb.PersistentClient.return_value = mock_client
