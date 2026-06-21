@@ -15,9 +15,8 @@ consolidated report at the end.
 
 **Commit:**
 1. Run `git status` in each repo directory that was touched during the session
-2. If uncommitted changes exist, present a summary of what would be committed and **wait for explicit user approval before doing anything**
-3. Only if the user approves: create a new branch off `main` (e.g. `claude/wrap-up-<slug>`) — **never commit or push directly to `main`**
-4. Commit with a descriptive message on that branch, push it, and open a draft PR into `main`
+2. If uncommitted changes exist, ask the human for approval and commit to main with a descriptive message in the open pr created to merge into main branch
+3. Push to remote (if needed)
 
 **Task cleanup:**
 9. Check the task list for in-progress or stale items
