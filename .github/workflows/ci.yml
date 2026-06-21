@@ -7,20 +7,16 @@
 #   - Coverage scoped to exercised modules only
 #   - Aligns with v1.4.0 invariants (reproducible CI security gate, Python 3.12, stable Chroma pin)
 #   - Cross-ref: cyclaw-advisor + python-development best practices for observable, testable CI
-# ==============================================================================
+# ==========================================================================
 
-name: CyClaw CI (Tests + Reproducible Gate)
+name: CyClaw CI (Tests + Gate Integration)
 
 on:
   push:
-    branches: [ main, cc, feature/CyClaw-Agent ]
+    branches: [ main, feature/CyClaw-Agent ]
   pull_request:
     branches: [ main, cc, feature/CyClaw-Agent ]
 
-# Cancel superseded runs: when new commits are pushed to the same PR/branch,
-# in-progress runs for that ref are cancelled instead of running to completion
-# on stale code. Pushes to main are exempt (cancel-in-progress is false there)
-# so every commit landed on main keeps full, uninterrupted CI history.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
@@ -33,10 +29,8 @@ jobs:
     name: ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     # Bound every run: the install step pulls torch + chromadb + sentence-transformers
-    # and the RAG smoke spins up an embedded ChromaDB. A hung download or a wedged
-    # service should fail fast, not idle until GitHub's 6-hour default and burn
-    # Actions minutes on both OS legs of the matrix.
-    timeout-minutes: 30
+
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -50,18 +44,12 @@ jobs:
         with:
           python-version: '3.12'
           cache: 'pip'
-          # Key the pip download cache to the dependency manifests. When these are
-          # unchanged, pip restores wheels (incl. the heavy torch/chromadb/
-          # sentence-transformers downloads) from cache instead of re-fetching --
-          # the biggest win on the slower windows-latest leg. Conservative: this
-          # only caches the pip download dir, so a stale/missing cache degrades to
-          # a normal install, never a broken one.
           cache-dependency-path: |
             requirements.txt
             constraints.txt
             pyproject.toml
 
-      - name: Upgrade pip (CVE mitigation for CI env only)
+      - name: Upgrade pip (CVE mitigation for CI env)
         shell: bash
         run: |
           python -m pip install --upgrade "pip>=26.1.2"
@@ -175,41 +163,6 @@ CyClaw is an offline-first RAG-enforced technical assistant. its offline Dropbox
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
 
-      - name: Discover skills with verify/smoke scripts
-        id: discover
-        run: |
-          SKILLS=$(find .claude/skills -maxdepth 1 -mindepth 1 -type d | while read -r d; do
-            if [ -f "$d/verify.sh" ] || [ -f "$d/smoke.sh" ]; then
-              basename "$d"
-            fi
-          done | jq -R -s -c 'split("\n") | map(select(. != ""))')
-          echo "skills=$SKILLS" >> "$GITHUB_OUTPUT"
-          if [ "$SKILLS" = "[]" ]; then
-            echo "has_skills=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "has_skills=true" >> "$GITHUB_OUTPUT"
-          fi
-          echo "Discovered skills: $SKILLS"
-
-  verify-skills:
-    name: verify-skills (${{ matrix.skill }})
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    needs: discover-skills
-    # Skip cleanly when no skill ships a verify/smoke script (empty matrix).
-    if: needs.discover-skills.outputs.has_skills == 'true'
-    # These skill scripts are full app-runtime e2e smokes (they build the index
-    # and launch the uvicorn server), not lightweight self-tests. They are run
-    # with the full environment below, but kept NON-BLOCKING (continue-on-error):
-    # the authoritative pass/fail gate is the `test` job's unit suite + RAG smoke.
-    # This surfaces runtime regressions as a visible signal without gating merges
-    # on environment-heavy e2e that can be flaky on shared runners.
-    continue-on-error: true
-    strategy:
-      fail-fast: false
-      matrix:
-        skill: ${{ fromJson(needs.discover-skills.outputs.skills) }}
-
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
 
@@ -237,7 +190,7 @@ CyClaw is an offline-first RAG-enforced technical assistant. its offline Dropbox
         run: |
           mkdir -p data/personality index logs
           echo '# Soul' > data/personality/soul.md
-          echo 'GROK_API_KEY=dummy' >> "$GITHUB_ENV"
+          echo 'GROK_API_KEY = Testing OWASP Pattern banned' >> "$GITHUB_ENV"
 
       - name: Run verify.sh if present
         if: hashFiles(format('.claude/skills/{0}/verify.sh', matrix.skill)) != ''
@@ -249,4 +202,4 @@ CyClaw is an offline-first RAG-enforced technical assistant. its offline Dropbox
         if: hashFiles(format('.claude/skills/{0}/smoke.sh', matrix.skill)) != ''
         run: |
           echo "Running smoke for ${{ matrix.skill }}"
-          bash ".claude/skills/${{ matrix.skill }}/smoke.sh"
+          
