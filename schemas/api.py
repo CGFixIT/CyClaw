@@ -3,8 +3,10 @@
 Covers query request/response, source info, health, and soul evolution.
 """
 
-from pydantic import BaseModel, Field
 from typing import List, Optional
+
+from pydantic import BaseModel, Field
+
 
 class QueryRequest(BaseModel):
     # min_length=1 rejects empty queries at the schema boundary (HTTP 422)

@@ -10,6 +10,7 @@ Extends NLTK PorterStemmer with custom rules for:
 import re
 from functools import lru_cache
 from typing import List
+
 from nltk.stem import PorterStemmer
 
 _stemmer = PorterStemmer()

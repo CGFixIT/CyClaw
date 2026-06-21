@@ -12,7 +12,7 @@ every chunk at index time) does not recompile regexes on each call.
 import logging
 import re
 from functools import lru_cache
-from typing import List, Pattern, Tuple
+from typing import Pattern, Tuple
 
 import yaml
 

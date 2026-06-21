@@ -12,14 +12,16 @@ from pathlib import Path
 from typing import List, Optional
 
 import chromadb
+import yaml
 from chromadb.config import Settings
 from rank_bm25 import BM25Okapi
-import yaml
 
-from .stemmer import tokenize_and_stem
-from .embeddings import get_embedding
-from utils.errors import IndexNotFoundError, EmbeddingServiceError
+from utils.errors import EmbeddingServiceError, IndexNotFoundError
 from utils.logger import audit_log
+
+from .embeddings import get_embedding
+from .stemmer import tokenize_and_stem
+
 
 @dataclass
 class SearchResult:
@@ -67,7 +69,7 @@ class HybridRetriever:
         except Exception as e:
             raise IndexNotFoundError(
                 f"Collection '{collection_name}' not found in ChromaDB: {e}"
-            )
+            ) from e
 
         # Validate path is a regular file before deserializing. The BM25 index is
         # project-generated (retrieval/indexer.py) and read from a config-controlled

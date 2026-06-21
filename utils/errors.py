@@ -7,6 +7,7 @@ catches and maps to proper HTTP responses.
 from dataclasses import dataclass
 from typing import Optional
 
+
 class RAGError(Exception):
     def __init__(self, message: str, code: str = "RAG_ERROR", details: Optional[dict] = None):
         self.message = message

@@ -6,9 +6,12 @@ Grok is only instantiated in hybrid mode when explicitly enabled.
 
 import os
 from typing import Optional
+
 import httpx
 import yaml
-from utils.errors import LLMServiceError, GrokServiceError
+
+from utils.errors import GrokServiceError, LLMServiceError
+
 
 class LocalLLMClient:
     def __init__(self, config_path: str = "config.yaml", cfg: Optional[dict] = None):

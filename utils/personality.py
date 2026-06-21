@@ -19,9 +19,9 @@ import hashlib
 import os
 import re
 import threading
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Optional, List
+from typing import List
 
 from utils import personality_db
 from utils.errors import PromptInjectionError

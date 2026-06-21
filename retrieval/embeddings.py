@@ -13,9 +13,10 @@ Security note (2026-06):
 """
 
 import os
-import yaml
-from typing import List
 from functools import lru_cache
+from typing import List
+
+import yaml
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 

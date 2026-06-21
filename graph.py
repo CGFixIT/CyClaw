@@ -35,17 +35,17 @@ CHANGES FROM ORIGINAL (soul.md / persistent personality integration):
 #       forwarding is enabled it uses the same data-trust framing.
 """
 
-from typing import List, Optional, Literal, TypedDict
+import logging
+from typing import List, Literal, Optional, TypedDict
 
-from langgraph.graph import StateGraph, END
+from langgraph.graph import END, StateGraph
 
-from retrieval.hybrid_search import HybridRetriever, SearchResult
-from llm.client import LocalLLMClient, GrokClient
+from llm.client import GrokClient, LocalLLMClient
+from retrieval.hybrid_search import HybridRetriever
+from utils.errors import GrokServiceError, LLMServiceError, RAGError
 from utils.logger import audit_log, hash_query
-from utils.errors import RAGError, LLMServiceError, GrokServiceError
 from utils.personality import PersonalityManager
 
-import logging
 logger = logging.getLogger("cyclaw.graph")
 
 # =============================================================================
@@ -215,8 +215,6 @@ def user_gate_node(state: GraphState, cfg: dict) -> dict:
     If True/False, pass through for downstream routing.
     """
     confirmed = state.get("user_confirmed_online")
-    top_score = state.get("top_score", 0.0)
-    threshold = cfg["retrieval"]["min_score"]
 
     if confirmed is None:
         # First pass: tell gateway to prompt user
