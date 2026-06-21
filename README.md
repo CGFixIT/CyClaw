@@ -1,7 +1,7 @@
 # CyClaw
 
 > **Offline-first, RAG-enforced, soul-governed personal AI assistant (no internet required!)**
-> Version 1.4 (Just added Dropbox Sync for Data Corpus)
+> Version 1.5.0 (Out-of-band agentic layer + LangGraph memory nodes + Docker)
 
 [![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.136-green.svg)](https://fastapi.tiangolo.com/)
@@ -21,8 +21,9 @@ CyClaw is a personal RAG (Retrieval-Augmented Generation) backend that:
 3. **Maintains a persistent soul/personality layer** (`soul.md`) with SHA-256 drift detection, atomic evolution writes, and user-gated modification
 4. **Falls back to Grok (xAI) only with explicit user confirmation** in hybrid mode — triple-gated at config, env, and per-query level
 5. **Exposes both a FastAPI HTTP gateway and an MCP server** for Claude Desktop / Copilot Studio integration
+6. **Ships an optional, disabled-by-default agentic layer** (`agentic/`) for read-only GitHub context and a governed skills registry — entirely out-of-band, never imported by the request path (v1.5.0)
 
-Zero telemetry. Binds to `127.0.0.1:8787` only. All embeddings run locally via `sentence-transformers`. No cloud dependency for offline operation.
+Zero telemetry. Binds to `127.0.0.1:8787` only. All embeddings run locally via `sentence-transformers`. No cloud dependency for offline operation. Reproducible containerized deployment via Docker + Compose (v1.5.0).
 
 ---
 
@@ -32,8 +33,9 @@ Zero telemetry. Binds to `127.0.0.1:8787` only. All embeddings run locally via `
 |---|---|---|
 | v1.2.0 | Superseded | 8 OWASP patterns, 90-day TTL, sanitizer baseline |
 | v1.3.0 | **Pre-Langgrinch** | Rate limiting (60/min), 13 OWASP patterns, soul SHA-256 drift detection, atomic writes, TTL→365 days |
-| v1.4.0 | **Production (current)** | Dropbox/cloud corpus sync (out-of-band rclone wrapper + full audit integration) + requirements.txt pinned for Python 3.12 + vuln patches |
-| v1.5.0 | **Planning** | Fix Stemmer.py, sql write placeholder code sections, other cleanups, BM25 SHA Integrity Detection, Dropbox sync hardening & scheduler polish
+| v1.4.0 | Superseded | Dropbox/cloud corpus sync (out-of-band rclone wrapper + full audit integration) + requirements.txt pinned for Python 3.12 + vuln patches |
+| v1.5.0 | **Production (current)** | Out-of-band agentic layer (read-only GitHub via `gh` CLI + governed skills registry, disabled by default, write-scaffold stubbed & non-executing) · memory-orchestrator refactored into reusable LangGraph nodes (`memory_nodes.py`, full CLI/hook backward compat) · LangGraph SQLite checkpointer for resumable sessions · Docker + docker-compose (non-root, seccomp-ready, telemetry-killed) · strict Pydantic (`extra='forbid'`) on all API schemas · SQLite-persisted rate limiting · CI skill-verify matrix · dependency-comment consistency + Chroma CVE threat-model alignment |
+| v1.6.0 | **Planning** | Fix Stemmer.py, sql write placeholder code sections, other cleanups, BM25 SHA Integrity Detection, Dropbox sync hardening & scheduler polish |
 
 ---
 
@@ -174,7 +176,19 @@ CyClaw/
 ├── graph.py                       # LangGraph 7-node state machine
 ├── mcp_hybrid_server.py           # MCP server (retrieval-only, no LLM)
 ├── metrics.py                     # Audit JSONL analyzer
-├── package.json
+├── Dockerfile                     # Multi-stage, non-root, offline-first (v1.5+)
+├── docker-compose.yml             # Non-root, seccomp-ready, telemetry-killed (v1.5+)
+├── agentic/                       # Out-of-band agentic layer (disabled by default, v1.5+)
+│   ├── __init__.py
+│   ├── cli.py                     # `python -m agentic.cli {status,test,...}`
+│   ├── config.py
+│   ├── context.py                 # read-only GitHub context
+│   ├── gh_client.py               # gh CLI wrapper (argv-list, no token forwarded)
+│   ├── registry.py                # governed skills registry + governance_score
+│   ├── writer.py                  # write scaffold (EXECUTION_ENABLED=False, stubbed)
+│   └── selftest.py
+├── deploy/
+│   └── seccomp/                   # seccomp profile(s) for container hardening
 ├── pyproject.toml
 ├── requirements.txt               # Pinned Python deps
 ├── setup-guide.md
@@ -290,6 +304,32 @@ For Claude Desktop or other MCP-compatible clients:
 ```
 
 The MCP server exposes a single `hybrid_search` tool. It has **no sampling capability** — `sampling: null` is set at the protocol level, making it architecturally impossible for this server to invoke an LLM.
+
+---
+
+## Agentic Layer (v1.5.0 — optional, disabled by default)
+
+v1.5.0 introduces an **experimental, opt-in agentic layer** (`agentic/`) modeled 1:1 on the same out-of-band precedent as `sync/`. It extracts transferable *patterns* from modern agentic tooling — not autonomy — and maps them to safe extension points.
+
+**All five security invariants hold by construction (enforced *and* unit-tested):**
+- **Never touches the request path**: `gate.py`, `graph.py`, and the MCP server do **not** import anything from `agentic/`. `tests/test_agentic_isolation.py` asserts this.
+- **Disabled by default**: `config.yaml` → `agentic.enabled: false`. Nothing runs unless explicitly enabled.
+- **Read-only GitHub context** via the `gh` CLI — argv-list (never `shell=True`), `shutil.which` resolution, version floor, fully audited. CyClaw forwards **no token**; `gh` owns its own credential.
+- **Governed skills registry** reuses the soul `propose/apply` pattern: injection scan at the write boundary, human reason required, atomic `tmp`+`os.replace` write, SHA-256 versioning, and a `governance_score(name) -> int` (0–100).
+- **Write scaffold is DISABLED + STUBBED**: `EXECUTION_ENABLED = False`; the executor raises `NotImplementedError`. Enabling real writes is deliberately a future, separately-reviewed change.
+- **Zero new runtime dependencies** (`gh` is external, like `rclone`) — CI / pip-audit / OSV surface unchanged.
+
+The memory lifecycle is also now exposed as reusable **LangGraph nodes** (`.claude/skills/memory-orchestrator/memory_nodes.py`: `extract → consolidate → title → next_action`) while `orchestrate.py` remains a thin, 100%-backward-compatible CLI + hook shim.
+
+---
+
+## Containerized Deployment (v1.5.0)
+
+```bash
+docker compose up --build      # boots the FastAPI gateway on :8000, non-root, telemetry-killed
+```
+
+The `Dockerfile` is a multi-stage, non-root (`uid 1000`), `python:3.12-slim` build installing via `uv` (with a pinned `pip -c constraints.txt` fallback). `docker-compose.yml` mounts `data/`, `checkpoints/`, and `logs/` as volumes, sets `no-new-privileges`, and references a seccomp profile under `deploy/seccomp/`. Offline-first env (`CYCLAW_OFFLINE=1`, `CYCLAW_TELEMETRY_KILL=1`) is baked in.
 
 ---
 
