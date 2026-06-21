@@ -1,47 +1,93 @@
-"""Thread-safe in-memory per-IP rate limiter.
+"""Thread-safe rate limiter with optional sqlite persistence.
 
 Extracted from ``gate.py`` so the limiter is a single importable unit shared
-by the FastAPI gateway and its tests (no duplicated logic that can silently
-drift apart).
+by the FastAPI gateway and its tests.
 
-The gateway calls ``allow()`` from FastAPI's threadpool (via
-``asyncio.to_thread``), so concurrent requests for the same IP execute on
-different threads. The per-IP timestamp map is therefore mutated under a single
-``threading.Lock``: every read-modify-write — including the idle-IP sweep — is
-guarded, so two requests cannot interleave and overcount past the limit.
+Default mode (db_path=None): pure in-memory (original behavior, fast for tests).
+Persistent mode (db_path="data/rate_limits.db"): state survives restarts.
 
-Behavior preserved from the original ``gate.py`` implementation:
-  * 60 requests / 60-second sliding window per client IP (configurable here).
-  * Idle-IP eviction so the map cannot grow without bound (an entry whose
-    timestamps are all older than the window can never block a future request,
-    so it is safe to drop). The sweep runs at most once per window to keep the
-    common path cheap.
+The gateway calls ``allow()`` from FastAPI's threadpool, so we keep the
+threading.Lock for the hot path. When persistence is enabled we also write
+through to sqlite under the same lock (simple but correct).
 
-The clock is injectable (``clock`` parameter) so tests can drive window expiry
-and eviction deterministically without ``time.sleep``.
+Behavior preserved:
+  * 60 requests / 60-second sliding window per client IP (configurable).
+  * Idle-IP eviction.
+  * Injectable clock for deterministic tests.
+
+Hardened in feature/CyClaw-Agent: optional sqlite persistence so rate state
+survives container/process restarts (in-memory died on restart).
 """
 
+import json
+import sqlite3
 import threading
 import time
 from collections import defaultdict
-from typing import Callable, Dict, List
+from pathlib import Path
+from typing import Callable, Dict, List, Optional
 
 
 class RateLimiter:
-    """Fixed-window-ish sliding rate limiter, safe under concurrent threads."""
+    """Fixed-window-ish sliding rate limiter, safe under concurrent threads.
+
+    When db_path is provided, hits are persisted to sqlite so the limiter
+    survives restarts (key hardening request for the agentic branch).
+    """
 
     def __init__(
         self,
         max_requests: int = 60,
         window_seconds: float = 60,
         clock: Callable[[], float] = time.time,
+        db_path: Optional[str] = None,   # NEW: set to "data/rate_limits.db" for persistence
     ) -> None:
         self.max_requests = max_requests
         self.window_seconds = window_seconds
         self._clock = clock
+        self._db_path = db_path
         self._hits: Dict[str, List[float]] = defaultdict(list)
         self._last_sweep = 0.0
         self._lock = threading.Lock()
+
+        if self._db_path:
+            self._init_db()
+            self._load_from_db()
+
+    def _init_db(self) -> None:
+        Path(self._db_path).parent.mkdir(parents=True, exist_ok=True)
+        with sqlite3.connect(self._db_path) as conn:
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS rate_hits (
+                    ip TEXT PRIMARY KEY,
+                    timestamps TEXT NOT NULL,
+                    last_sweep REAL NOT NULL
+                )
+            """)
+            conn.commit()
+
+    def _load_from_db(self) -> None:
+        if not self._db_path:
+            return
+        with sqlite3.connect(self._db_path) as conn:
+            rows = conn.execute("SELECT ip, timestamps, last_sweep FROM rate_hits").fetchall()
+            for ip, ts_json, last_sweep in rows:
+                try:
+                    self._hits[ip] = json.loads(ts_json)
+                except Exception:
+                    self._hits[ip] = []
+                self._last_sweep = max(self._last_sweep, last_sweep or 0.0)
+
+    def _persist(self, now: float) -> None:
+        if not self._db_path:
+            return
+        with sqlite3.connect(self._db_path) as conn:
+            for ip, hits in list(self._hits.items()):
+                conn.execute(
+                    "INSERT OR REPLACE INTO rate_hits (ip, timestamps, last_sweep) VALUES (?, ?, ?)",
+                    (ip, json.dumps(hits), now),
+                )
+            conn.commit()
 
     def _sweep(self, now: float) -> None:
         """Evict clients whose timestamps are all outside the window.
@@ -62,9 +108,8 @@ class RateLimiter:
     def allow(self, client_ip: str) -> bool:
         """Return True if the request is within the limit, else False.
 
-        The entire read-modify-write is performed under the lock so concurrent
-        requests for one IP cannot both observe ``len(recent) < max`` and both
-        append (the interleave that would overcount past the limit).
+        The entire read-modify-write is performed under the lock.
+        When persistence is enabled we also flush to sqlite under the same lock.
         """
         now = self._clock()
         with self._lock:
@@ -72,9 +117,11 @@ class RateLimiter:
             recent = [t for t in self._hits[client_ip] if now - t < self.window_seconds]
             if len(recent) >= self.max_requests:
                 self._hits[client_ip] = recent
+                self._persist(now)
                 return False
             recent.append(now)
             self._hits[client_ip] = recent
+            self._persist(now)
             return True
 
     def tracked_ips(self) -> int:
