@@ -13,9 +13,9 @@ name: CyClaw CI (Tests + Reproducible Gate)
 
 on:
   push:
-    branches: [ main, cc ]
+    branches: [ main, cc, feature/CyClaw-Agent ]
   pull_request:
-    branches: [ main, cc ]
+    branches: [ main, cc, feature/CyClaw-Agent ]
 
 # Cancel superseded runs: when new commits are pushed to the same PR/branch,
 # in-progress runs for that ref are cancelled instead of running to completion
@@ -142,3 +142,44 @@ jobs:
 
       - name: Final status
         run: echo "CI workflow completed on ${{ matrix.os }} (reproducible gate passed)"
+
+  # ==============================================================================
+  # Skill verification matrix (new in feature/CyClaw-Agent)
+  # Runs every .claude/skills/*/verify.sh and smoke.sh in parallel.
+  # This enforces that all skills (including new agentic/memory ones) stay
+  # healthy and respect the governance invariants.
+  # ==============================================================================
+  verify-skills:
+    name: verify-skills (${{ matrix.skill }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        # Discover all skills that have verification scripts
+        skill: [${{ join(fromJson(steps.discover.outputs.skills), ', ') }}]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Discover skills with verify/smoke scripts
+        id: discover
+        run: |
+          SKILLS=$(find .claude/skills -maxdepth 1 -mindepth 1 -type d | while read d; do
+            if [ -f "$d/verify.sh" ] || [ -f "$d/smoke.sh" ]; then
+              basename "$d"
+            fi
+          done | jq -R -s -c 'split("\n") | map(select(. != ""))')
+          echo "skills=$SKILLS" >> $GITHUB_OUTPUT
+
+      - name: Run verify.sh if present
+        if: hashFiles('.claude/skills/${{ matrix.skill }}/verify.sh') != ''
+        run: |
+          echo "Running verify for ${{ matrix.skill }}"
+          bash .claude/skills/${{ matrix.skill }}/verify.sh
+
+      - name: Run smoke.sh if present
+        if: hashFiles('.claude/skills/${{ matrix.skill }}/smoke.sh') != ''
+        run: |
+          echo "Running smoke for ${{ matrix.skill }}"
+          bash .claude/skills/${{ matrix.skill }}/smoke.sh
