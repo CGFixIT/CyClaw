@@ -1,6 +1,6 @@
 # CyClaw Dockerfile - Production-grade, zero-trust, reproducible
 # Python 3.12 + uv for fast installs. Seccomp/AppArmor ready. Non-root.
-# Aligns with v1.4.0 invariants + advisor hardening suggestions.
+# Aligns with v1.5.0 pyproject + constraints for hermetic deps; CI uses requirements.txt for compat.
 
 FROM python:3.12-slim-bookworm AS builder
 
@@ -10,11 +10,12 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 WORKDIR /app
 
 # Dependency files first for layer caching
-COPY pyproject.toml constraints.txt* requirements.txt* ./
+COPY pyproject.toml constraints.txt requirements.txt ./
 
-# Install with uv (preferred) or fallback pip + constraints
+# Install with uv (preferred for pyproject.toml + constraints + uv.sources for torch CPU)
+# Fallback to pip + requirements.txt (proper reqs format) + constraints for legacy/CI alignment
 RUN uv pip install --system --no-cache-dir -r pyproject.toml --constraint constraints.txt 2>/dev/null || \
-    pip install --no-cache-dir -r pyproject.toml -c constraints.txt
+    pip install --no-cache-dir -r requirements.txt -c constraints.txt
 
 # Runtime stage
 FROM python:3.12-slim-bookworm
