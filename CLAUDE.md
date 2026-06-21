@@ -4,19 +4,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 It is the authoritative operating contract for all agent work in this repository. Read it fully before acting.
 
-<<<<<<< HEAD
 ---
 
 ## Project Overview
 
-=======
-It is the authoritative operating contract for all agent work in this repository. Read it fully before acting.
-
----
-
-## Project Overview
-
->>>>>>> 3f445c2 (docs: combine CLAUDE.md — /init prefix + main's comprehensive rewrite)
 CyClaw is a Python FastAPI RAG server (`gate.py`) backed by a LangGraph security topology, ChromaDB + BM25 hybrid retrieval, and a local LLM via LM Studio. It binds exclusively to `127.0.0.1:8787`.
 
 **Quick start:** `.claude/skills/run-cyclaw/SKILL.md`
@@ -222,9 +213,9 @@ When orchestrating workers, you (the primary agent) are responsible for synthesi
 - Write-heavy tasks should run one at a time per file set to avoid conflicts.
 - Each worker prompt must be entirely self-contained — workers cannot see your conversation with the user.
 - Embed file paths, line numbers, error messages, and relevant code snippets directly in worker prompts.
-- State what "done" looks like — concrete completion criteria.
-- Never write "based on what you discovered" in a worker prompt — that delegates comprehension and produces inferior results.
-- Do not spawn a worker solely to review another worker's output.
+- State what “done” looks like — concrete completion criteria.
+- Never write “based on what you discovered” in a worker prompt — that delegates comprehension and produces inferior results.
+- Do not spawn a worker solely to review another worker’s output.
 - Do not spawn workers for trivial file reads you could handle directly.
 - Enforce a hard delegation depth limit — no unbounded chains.
 
@@ -307,10 +298,6 @@ Skills live at `.claude/skills/<name>/SKILL.md`. When a skill is not present in 
 
 | Skill | Type | Purpose |
 |---|---|---|
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 3f445c2 (docs: combine CLAUDE.md — /init prefix + main's comprehensive rewrite)
 | `run-cyclaw` | one-shot | Smoke-test the FastAPI server |
 | `architecture-refactor` | loop | Iterative architecture cleanup |
 | `speed-refactor` | loop | Optimize all endpoints to <50 ms |
@@ -327,7 +314,6 @@ Skills live at `.claude/skills/<name>/SKILL.md`. When a skill is not present in 
 | `create-session-notes` | one-shot | Produce structured session handoff notes |
 | `memory-consolidation` | one-shot | Consolidate and compress task memory |
 | `memory-extraction` | one-shot | Extract key decisions and facts from context |
-<<<<<<< HEAD
 
 ---
 
@@ -359,59 +345,6 @@ Utility prompts live in `.claude/utility-prompts/`. Reference by path when neede
 | `next-action-suggestion.md` | Suggest next logical action at end of a task |
 | `session-title.md` | Generate a concise, descriptive session title |
 | `tool-summary.md` | Summarize tools used and outcomes in a session |
-=======
-| `/run-cyclaw` | one-shot | Smoke-test the FastAPI server |
-| `/architecture-refactor` | loop | Iterative architecture cleanup |
-| `/speed-refactor` | loop | Optimize all endpoints to <50 ms |
-| `/tests-refactor` | loop | Coverage to 100%, pass rate ≥85% |
-| `/logging-refactor` | loop | Log coverage on every important path |
-| `/wrap-up` | one-shot | End-of-session checklist |
-| `/sandbox-runtime-verification` | one-shot | Full Python 3.12 runtime gate: deps, index, tests, smoke |
-| `/create-session-notes` | one-shot | Maintain structured SESSION_NOTES.md for continuity |
-| `/solution-architect` | agent | Plan implementation strategy before writing code |
-| `/verification-specialist` | agent | Adversarial verification with mandatory command output |
-| `/memory-extraction` | agent | Persist useful memories from conversation to memory directory |
-| `/memory-consolidation` | agent | Deduplicate and prune the memory directory |
-| `/conversation-summary` | agent | Condense conversation for seamless continuation |
-| `/documentation-guide` | agent | Produce or revise documentation for a target audience |
-| `/general-purpose` | agent | Multi-step codebase research and task completion |
-| `/code-explorer` | agent | Read-only codebase search and exploration |
-
-Reference prompts for tools and patterns live in `.claude/tools/`, `.claude/patterns/`, and `.claude/utility-prompts/`.
->>>>>>> 096b593 (docs: update CLAUDE.md skills table with 10 new skills)
-=======
-
----
-
-## Patterns Reference
-
-Reusable behavioral patterns live in `.claude/patterns/`. They are modular instruction segments — reference them explicitly when needed rather than treating them as auto-loaded.
-
-| Pattern File | Purpose |
-|---|---|
-| `01-system-prompt-architecture.md` | Operating contract structure: identity, constraints, workflow, output format |
-| `02-core-behavioral-rules.md` | Day-to-day execution defaults: when to ask, when to proceed, communication style |
-| `03-safety-and-risk-assessment.md` | Risk tier classification (low/medium/high) and required safeguards per tier |
-| `04-tool-specific-instructions.md` | Per-tool ordering, constraints, and failure recovery |
-| `05-agent-delegation.md` | Delegation rules, parent responsibilities, and handoff protocol |
-| `06-verification-and-testing.md` | Verification ladder: local checks → targeted tests → integration checks |
-| `07-memory-and-context.md` | Compact memory model and context management rules |
-| `08-multi-agent-coordination.md` | Role assignments, handoff protocol, conflict resolution |
-| `09-auxiliary-prompts.md` | Modular micro-instruction library: debug, refactor, test, docs helpers |
-
----
-
-## Utility Prompts Reference
-
-Utility prompts live in `.claude/utility-prompts/`. Reference by path when needed.
-
-| File | Purpose |
-|---|---|
-| `coordinator-prompt.md` | Full orchestrator identity and workflow for multi-agent sessions |
-| `next-action-suggestion.md` | Suggest next logical action at end of a task |
-| `session-title.md` | Generate a concise, descriptive session title |
-| `tool-summary.md` | Summarize tools used and outcomes in a session |
->>>>>>> 3f445c2 (docs: combine CLAUDE.md — /init prefix + main's comprehensive rewrite)
 
 ---
 
