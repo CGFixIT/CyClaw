@@ -22,7 +22,6 @@ Addresses:
 import asyncio
 import hmac
 import os
-import re
 
 _TELEMETRY_KILL = {
     "LANGCHAIN_TRACING_V2": "false",
@@ -64,7 +63,7 @@ from graph import build_graph, GraphState
 from retrieval.hybrid_search import HybridRetriever
 from llm.client import LocalLLMClient, GrokClient
 from schemas.api import QueryRequest, QueryResponse, SourceInfo, HealthResponse, SoulEvolutionRequest
-from utils.logger import audit_log, setup_logging
+from utils.logger import audit_log, setup_logging, redact_sensitive
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from utils.sanitizer import check_input
@@ -109,24 +108,17 @@ def check_rate_limit(client_ip: str) -> bool:
     """Thin gateway-level wrapper over the shared RateLimiter instance."""
     return _rate_limiter.allow(client_ip)
 
-# Redact sensitive values from exception messages before returning in HTTP responses.
-# Strips Bearer tokens, known secret-like patterns, and any live env var values
-# that look like credentials (length > 8, not a common word).
-_SECRET_PATTERNS = [
-    re.compile(r'Bearer\s+[A-Za-z0-9\-_\.]+', re.IGNORECASE),  # Authorization headers
-    re.compile(r'[Aa][Pp][Ii][_-]?[Kk][Ee][Yy]["\s:=]+[\w\-\.]+'),  # api_key = ...
-    re.compile(r'sk-[A-Za-z0-9]{20,}'),       # OpenAI-style keys
-    re.compile(r'ghp_[A-Za-z0-9]{36}'),        # GitHub PATs
-    re.compile(r'xox[baprs]-[0-9a-zA-Z\-]+'), # Slack tokens
-    re.compile(r'AKIA[0-9A-Z]{16}'),           # AWS access keys
-]
-
 def _sanitize_error(exc: Exception) -> str:
-    """Strip credential-like content from exception messages before HTTP response."""
+    """Strip credential-like content from exception messages before HTTP response.
+
+    Uses the config-driven secret redaction patterns from utils.logger.redact_sensitive
+    (policy.privacy.redact_secrets_like in config.yaml). This ensures consistency
+    between HTTP error bodies and the audit log, eliminating duplication and drift.
+    """
     msg = str(exc)
-    for pattern in _SECRET_PATTERNS:
-        msg = pattern.sub('[REDACTED]', msg)
-    # Also redact any live env var that looks like a credential (length > 8).
+    # Redact using the config-driven pattern set (single source of truth).
+    msg = redact_sensitive(msg)
+    # Extra safety: also redact specific env vars that may contain credentials.
     # CYCLAW_API_KEY is the server's own auth secret — if it ever surfaced in an
     # auth-library or middleware traceback it must not be echoed in a 500 body.
     for env_key in ("GROK_API_KEY", "LANGCHAIN_API_KEY", "LANGSMITH_API_KEY", "SSC_TOKEN", "CYCLAW_API_KEY"):
