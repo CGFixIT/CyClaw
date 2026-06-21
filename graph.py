@@ -33,12 +33,18 @@ CHANGES FROM ORIGINAL (soul.md / persistent personality integration):
 #       omitted here — Grok is an external model and the soul/identity layer
 #       must never be forwarded off-box (invariant 3 + privacy). When context
 #       forwarding is enabled it uses the same data-trust framing.
+
+# 2026-06-21 (feature/CyClaw-Agent): Added persistent SqliteSaver checkpointer
+#   + interrupt_before=["user_gate"]. This enables resumable sessions across
+#   restarts/crashes while preserving 100% of the 5 core invariants (topology
+#   edges still decide routing; checkpointer only saves/restores GraphState).
 """
 
 import logging
 from typing import List, Literal, Optional, TypedDict
 
 from langgraph.graph import END, StateGraph
+from langgraph.checkpoint.sqlite import SqliteSaver
 
 from llm.client import GrokClient, LocalLLMClient
 from retrieval.hybrid_search import HybridRetriever
@@ -434,6 +440,11 @@ def build_graph(
     All nodes are partial functions — dependencies injected at build time,
     not at query time. This makes the graph stateless and safe to reuse.
 
+    New in feature/CyClaw-Agent: persistent SqliteSaver checkpointer + 
+    interrupt_before=["user_gate"]. Sessions survive restarts. The interrupt
+    happens exactly where we already pause for human confirmation — topology
+    and all 5 invariants remain untouched.
+
     Args:
         retriever: HybridRetriever instance (ChromaDB + BM25)
         llm: LocalLLMClient instance (LM Studio)
@@ -498,4 +509,8 @@ def build_graph(
     # audit_logger → END (always — convergence guaranteed)
     graph.add_edge("audit_logger", END)
 
-    return graph.compile()
+    # Persistent checkpointer + interrupt for resumable "always-on soul" sessions.
+    # DB lives in checkpoints/cyclaw.db (gitignored, Docker volume mounted).
+    # interrupt_before on the existing user_gate node — no new routing logic.
+    checkpointer = SqliteSaver.from_conn_string("checkpoints/cyclaw.db")
+    return graph.compile(checkpointer=checkpointer, interrupt_before=["user_gate"])
