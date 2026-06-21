@@ -108,12 +108,13 @@ def audit_log(event: dict, config_path: str = "config.yaml") -> None:
     log_path = Path(cfg["logging"]["audit_file"])
     log_path.parent.mkdir(parents=True, exist_ok=True)
     audit_fields = cfg["logging"].get("audit_fields", {})
-    if "query" in event and audit_fields.get("include_query_hash", True):
-        raw_query = event.pop("query")
-        event["query_hash"] = hash_query(raw_query)
-    for key, value in event.items():
+    record = dict(event)  # work on a shallow copy — never mutate the caller's dict
+    if "query" in record and audit_fields.get("include_query_hash", True):
+        raw_query = record.pop("query")
+        record["query_hash"] = hash_query(raw_query)
+    for key, value in list(record.items()):
         if isinstance(value, str) and key not in ("query_hash", "timestamp", "event"):
-            event[key] = redact_sensitive(value, cfg)
-    event["timestamp"] = datetime.now(timezone.utc).isoformat()
+            record[key] = redact_sensitive(value, cfg)
+    record["timestamp"] = datetime.now(timezone.utc).isoformat()
     with open(log_path, "a", encoding="utf-8") as f:
-        f.write(json.dumps(event) + "\n")
+        f.write(json.dumps(record) + "\n")
