@@ -1,6 +1,17 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
   "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -f .claude/skills/python-coding-agent/SKILL.md ] && jq -cn --rawfile ctx .claude/skills/python-coding-agent/SKILL.md '{hookSpecificOutput:{hookEventName:\"SessionStart\",additionalContext:$ctx}}' 2>/dev/null || true",
+            "statusMessage": "Loading Python coding agent..."
+          }
+        ]
+      }
+    ],
     "PreCompact": [
       {
         "hooks": [
