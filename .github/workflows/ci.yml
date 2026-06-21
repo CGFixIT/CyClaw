@@ -94,6 +94,7 @@ jobs:
             tests/test_security.py \
             tests/test_rate_limit.py \
             tests/test_audit.py \
+            tests/test_client.py \
             tests/test_personality.py \
             tests/test_conftest_fixtures.py \
             tests/test_stemmer.py \
@@ -115,6 +116,7 @@ jobs:
             --cov=utils.logger \
             --cov=utils.personality \
             --cov=utils.ratelimit \
+            --cov=llm.client \
             --cov=graph \
             --cov=mcp_hybrid_server \
             --cov-report=xml \
