@@ -7,6 +7,11 @@
 # Docker support added in feature/CyClaw-Agent for production reproducibility.
 
 fastapi==0.137.2
+# Starlette is transitive via FastAPI (requires starlette>=0.46.0, no ceiling). Pinned
+# defensively so a future Starlette that drops the httpx shim in starlette.testclient
+# (StarletteDeprecationWarning -> httpx2) can't be pulled in silently and break the
+# TestClient suite. See docs/FORWARD_COMPAT_TRACKING.md (R5).
+starlette==1.3.1
 uvicorn[standard]==0.49.0
 pydantic==2.13.4
 pyyaml==6.0.3

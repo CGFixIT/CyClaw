@@ -21,6 +21,11 @@ classifiers = [
 
 dependencies = [
     "fastapi==0.137.2",
+    # Starlette is a transitive dep of FastAPI (fastapi 0.137.2 requires starlette>=0.46.0,
+    # no upper bound). Pinned defensively: a future Starlette removes the httpx shim from
+    # starlette.testclient (StarletteDeprecationWarning, install httpx2). Holding 1.3.1 keeps
+    # the TestClient suite green until the httpx2 migration. See docs/FORWARD_COMPAT_TRACKING.md.
+    "starlette==1.3.1",
     "uvicorn[standard]==0.49.0",
     "pydantic==2.13.4",
     "pyyaml==6.0.3",
