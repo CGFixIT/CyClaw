@@ -28,6 +28,15 @@
 
 The main branch runs in its entirety under Python 3.12. No application code was modified by this verification; `data/personality/soul.md` was backed up and restored.
 
+## Follow-up rerun on this PR branch (`claude/sandbox-verification-3.12-2026-06-21` @ `6df12f6`)
+
+- **Date:** 2026-06-21T18:05:50Z
+- **Scope:** reran the Python 3.12 sandbox verification after the latest branch changes (docs-only).
+- **Fresh 3.12 install check:** a fresh venv still installed `requirements.txt` cleanly on Python 3.12.3.
+- **Confirmed green on 3.12:** `pytest tests/` → **264 passed**; `gate_runtime_check.py` → **PASS**.
+- **Environment blocker in this sandbox:** the retrieval stages could not rebuild the index because `sentence-transformers` could not fetch `all-MiniLM-L6-v2` from Hugging Face (`[Errno -5] No address associated with hostname`), and the scripted `torch==2.6.0+cpu` bootstrap also hit transient DNS resolution failures against the PyTorch wheel host on the first rerun.
+- **Impact:** the remaining FAILs (`ci_rag_smoke`, API smoke, terminal emulation) were downstream of the missing embedding model / BM25 rebuild, not a regression introduced by this PR's latest commit.
+
 ---
 
 ## Recommendations (evidence-backed, not blocking)
