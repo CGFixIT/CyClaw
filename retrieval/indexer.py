@@ -140,7 +140,7 @@ def build_index(config_path: str = "config.yaml") -> None:
         batch_end = min(batch_start + batch_size, len(all_chunks))
         batch_chunks = all_chunks[batch_start:batch_end]
         batch_meta = all_metadata[batch_start:batch_end]
-        batch_embeddings = get_embeddings_batch(batch_chunks)
+        batch_embeddings = get_embeddings_batch(batch_chunks, config_path)
         batch_ids = [f"chunk_{batch_start + i}" for i in range(len(batch_chunks))]
         collection.add(
             documents=batch_chunks,
