@@ -5,7 +5,9 @@
 #   - Explicit hermetic prepare (mkdirs, minimal soul.md, env var) cross-platform
 #   - Real RAG smoke validates ChromaDB 1.5.6 + BM25 + RRF on committed corpus
 #   - Coverage scoped to exercised modules only
-#   - Aligns with v1.4.0 invariants (reproducible CI security gate, Python 3.12, stable Chroma pin)
+#   - Aligns with v1.5.0 invariants + PR #179 dependency manifest alignment
+#     (constraints.txt now expanded and authoritative for pip hermetic installs;
+#      pyproject.toml remains single source of truth + uv recommended path)
 #   - Cross-ref: cyclaw-advisor + python-development best practices for observable, testable CI
 # ==============================================================================
 
@@ -69,11 +71,12 @@ jobs:
       - name: Install deps (torch CPU + project + test tools)
         shell: bash
         run: |
-          # Pin matches pyproject.toml [torch-cpu]: torch>=2.6.0 is the minimum
-          # safe version after CVE-2025-32434 (weights_only=True RCE bypass in
-          # torch<2.6.0). CI must not install a version below the documented gate.
+          # Pin matches pyproject.toml [torch-cpu] + constraints.txt (post PR #179 alignment).
+          # torch CPU index first to guarantee safe wheel before sentence-transformers pulls it.
+          # Then requirements.txt -c constraints.txt ensures all direct pins (fastapi, langgraph,
+          # chromadb local-only, pydantic family, etc.) are hermetically enforced.
           pip install torch==2.6.0+cpu --index-url https://download.pytorch.org/whl/cpu
-          pip install -r requirements.txt pytest pytest-cov
+          pip install -r requirements.txt -c constraints.txt pytest pytest-cov
 
       - name: Prepare hermetic test env
         shell: bash
@@ -224,8 +227,10 @@ jobs:
         shell: bash
         run: |
           python -m pip install --upgrade "pip>=26.1.2"
+          # Now consistently uses constraints.txt (expanded + aligned in PR #179)
+          # + torch CPU pin for CVE safety. Matches Dockerfile and pyproject best practice.
           pip install torch==2.6.0+cpu --index-url https://download.pytorch.org/whl/cpu
-          pip install -r requirements.txt
+          pip install -r requirements.txt -c constraints.txt
           # Some skill scripts invoke `python3.12` explicitly; ensure it resolves.
           command -v python3.12 >/dev/null 2>&1 || sudo ln -sf "$(command -v python)" /usr/local/bin/python3.12
 
