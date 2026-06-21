@@ -1,0 +1,65 @@
+# ==============================================================================
+# CyClaw Gitleaks — Secret Scanning
+#
+# Scans the repository for hardcoded secrets (API keys, tokens, private keys,
+# credentials) using Gitleaks. Runs on every push/PR to the default branch, on
+# a weekly schedule, and on demand. Full git history is fetched so Gitleaks can
+# audit every commit — not just the working tree — which matters for CyClaw
+# because its threat model treats leaked credentials (GROK_API_KEY,
+# CYCLAW_API_KEY, rclone/Dropbox tokens) as a top-tier risk.
+#
+# Supply-chain note: every third-party action ref is pinned to a full commit
+# SHA (see the trailing "# vX.Y.Z" comments), matching the convention used by
+# ci.yml, osv-scanner.yml, and pip-audit.yml.
+# ==============================================================================
+
+name: CyClaw Gitleaks Secret Scan
+
+on:
+  # Full-history scan on every push to the default branch.
+  push:
+    branches: [ main ]
+  # Differential scan on PRs targeting main (gates new secrets before merge).
+  pull_request:
+    branches: [ main ]
+  # Weekly safety net — Fridays 09:23 UTC. Staggered away from the other
+  # scheduled scanners (devskim/osv/pip-audit/codeql/fortify/defender) so the
+  # security workflows don't all contend for runners at once.
+  # NOTE: scheduled triggers only fire from the repository's default branch.
+  schedule:
+    - cron: '23 9 * * 5'
+  # Manual run from the Actions tab.
+  workflow_dispatch:
+
+# Cancel superseded runs on the same ref. Pushes to main are exempt
+# (cancel-in-progress is false there) so every commit landed on main keeps a
+# complete, uninterrupted secret-scan history.
+concurrency:
+  group: gitleaks-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+# Deny-all by default; the job grants only what it needs.
+permissions: {}
+
+jobs:
+  gitleaks:
+    name: Scan for secrets
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read        # checkout the repository (with full history)
+      pull-requests: write  # let the action annotate PRs with any findings
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+        with:
+          # Full history so Gitleaks scans every commit for secrets, not just HEAD.
+          fetch-depth: 0
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7  # v2.3.9
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # GITLEAKS_LICENSE is only required for GitHub Organization accounts.
+          # CyClaw (CGFixIT/CyClaw) lives under a personal account, so no license
+          # key is needed and none should be added.
