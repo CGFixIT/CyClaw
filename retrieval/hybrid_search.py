@@ -230,4 +230,13 @@ class HybridRetriever:
                 provenance={"semantic": sm, "keyword": km}
             ))
 
-        return merged[:max(self.top_k_semantic, self.top_k_keyword)]
+        # Return the full RRF-fused union. The previous
+        # ``merged[:max(top_k_semantic, top_k_keyword)]`` cap was both redundant
+        # and lossy: every caller already slices to its own budget --
+        # graph.py via ``_format_context_chunks(limit=...)`` / ``docs[:5]`` and
+        # mcp_hybrid_server via ``hybrid_search(query)[:top_k]``. Capping here to
+        # 5 silently overrode an MCP caller asking for ``top_k > 5`` (the fused
+        # union can hold up to top_k_semantic + top_k_keyword distinct chunks),
+        # dropping chunks the caller explicitly requested before they ever saw
+        # them. Slicing is the caller's responsibility, not the fuser's.
+        return merged

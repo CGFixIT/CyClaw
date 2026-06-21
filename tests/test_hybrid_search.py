@@ -75,6 +75,34 @@ class TestSinglePathNormalization:
         assert single < both_paths_agree
 
 
+class TestFusionReturnsFullUnion:
+    """The fuser must return the entire RRF-fused union and let each caller
+    slice to its own budget. A previous inner cap of
+    ``max(top_k_semantic, top_k_keyword)`` silently dropped chunks an MCP caller
+    requested via ``top_k > 5``."""
+
+    @staticmethod
+    def _hit(mode, chunk_id):
+        return SearchResult(
+            text=f"t{chunk_id}", score=1.0, source="s.md", chunk_id=chunk_id,
+            stem_tags=[], retrieval_mode=mode,
+        )
+
+    def test_disjoint_paths_are_not_truncated(self):
+        # 5 semantic + 5 keyword chunks with NO overlap -> a 10-chunk union.
+        sem = [self._hit("semantic", i) for i in range(5)]
+        kw = [self._hit("keyword", i) for i in range(5, 10)]
+        fake = SimpleNamespace(
+            rrf_k=60, top_k_semantic=5, top_k_keyword=5,
+            semantic_search=lambda q: sem,
+            keyword_search=lambda q: kw,
+        )
+        out = HybridRetriever.hybrid_search(fake, "q")
+        # Pre-fix this returned only 5 (max(5, 5)); the other 5 were dropped.
+        assert len(out) == 10
+        assert {r.chunk_id for r in out} == set(range(10))
+
+
 class TestTokenizationForBM25:
     """Ensure tokenization produces useful BM25 input."""
 
