@@ -60,7 +60,10 @@ jobs:
         with:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.build-mode }}
-          # queries: security-and-quality
+          # Run the extended query suite (default security queries PLUS the
+          # security-and-quality pack) so CodeQL also surfaces maintainability
+          # and reliability issues, not just the smaller default security set.
+          queries: security-and-quality
 
       - name: Run manual build steps
         if: matrix.build-mode == 'manual'
