@@ -70,3 +70,6 @@ rclone.conf
 # Coverage artifacts
 .coverage
 htmlcov/
+
+# Memory orchestrator runtime state (regenerable; snapshots themselves stay committable)
+docs/memories/.orchestrator-state.json
