@@ -53,6 +53,7 @@ langchain-core==1.4.7
 langchain-protocol==0.0.18
 langgraph==1.2.5
 langgraph-checkpoint==4.1.1
+langgraph-checkpoint-sqlite==3.0.3
 langgraph-prebuilt==1.1.0
 langgraph-sdk==0.4.2
 langsmith==0.8.18

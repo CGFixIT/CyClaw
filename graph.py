@@ -41,6 +41,8 @@ CHANGES FROM ORIGINAL (soul.md / persistent personality integration):
 """
 
 import logging
+import sqlite3
+from pathlib import Path
 from typing import List, Literal, Optional, TypedDict
 
 from langgraph.checkpoint.sqlite import SqliteSaver
@@ -512,5 +514,15 @@ def build_graph(
     # Persistent checkpointer + interrupt for resumable "always-on soul" sessions.
     # DB lives in checkpoints/cyclaw.db (gitignored, Docker volume mounted).
     # interrupt_before on the existing user_gate node — no new routing logic.
-    checkpointer = SqliteSaver.from_conn_string("checkpoints/cyclaw.db")
+    #
+    # NOTE: SqliteSaver.from_conn_string() is a CONTEXT MANAGER in current
+    # langgraph and yields a saver only inside a `with` block — using its return
+    # value directly as `checkpointer=` does not work and broke CI. We instead
+    # open a long-lived sqlite3 connection (the app process owns it for its
+    # lifetime) and construct SqliteSaver directly, which is the supported
+    # non-context-manager path. check_same_thread=False because uvicorn serves
+    # requests across worker threads.
+    Path("checkpoints").mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect("checkpoints/cyclaw.db", check_same_thread=False)
+    checkpointer = SqliteSaver(conn)
     return graph.compile(checkpointer=checkpointer, interrupt_before=["user_gate"])

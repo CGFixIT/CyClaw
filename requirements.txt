@@ -12,6 +12,7 @@ pydantic==2.13.4
 pyyaml==6.0.3
 httpx==0.28.1
 langgraph==1.2.5
+langgraph-checkpoint-sqlite==3.0.3  # provides langgraph.checkpoint.sqlite.SqliteSaver (resumable sessions)
 langchain-core==1.4.7
 chromadb==1.5.6  # CVE-2026-45829 (Critical pre-auth RCE; no upstream patch). Risk accepted ONLY for local/offline air-gapped use via PersistentClient (embedded mode, path from config.yaml). No HttpClient, no trust_remote_code. See SECURITY.md + pip-audit workflow.
 sentence-transformers==5.6.0
