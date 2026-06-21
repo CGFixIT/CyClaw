@@ -4,6 +4,8 @@ Covers chunk_document edge cases and the build_index fail-fast guards that
 reject chunking misconfiguration before a corrupt index can be written.
 """
 
+from unittest.mock import MagicMock, patch
+
 import pytest
 import yaml
 
@@ -68,3 +70,50 @@ class TestBuildIndexValidation:
         config_path = self._write_config(tmp_path, chunk_size=100, chunk_overlap=200)
         with pytest.raises(ValueError, match="chunk_overlap .* must be < chunk_size"):
             build_index(config_path)
+
+
+class TestBuildIndexConfigPropagation:
+    """build_index must build the semantic index with the embedding model from
+    the SAME config it was called with — not the default config.yaml.
+
+    Query-time embeddings already honour config_path
+    (HybridRetriever.semantic_search -> get_embedding(query, self.config_path)).
+    If build_index embeds the corpus with a different model/dimension, the index
+    and the query vectors disagree and semantic retrieval silently breaks. This
+    test pins the contract that the config_path reaches get_embeddings_batch.
+    """
+
+    def test_config_path_reaches_embeddings(self, tmp_path):
+        corpus = tmp_path / "corpus"
+        corpus.mkdir()
+        (corpus / "a.md").write_text("hello world cyclaw retrieval fusion", encoding="utf-8")
+        cfg = {
+            "corpus": {"path": str(corpus), "extensions": [".md"]},
+            "indexing": {
+                "chroma_path": str(tmp_path / "chroma"),
+                "bm25_path": str(tmp_path / "bm25.json"),
+                "collection_name": "test_kb",
+                "chunk_size": 512,
+                "chunk_overlap": 50,
+                "batch_size": 10,
+            },
+        }
+        config_path = tmp_path / "config.yaml"
+        with open(config_path, "w", encoding="utf-8") as f:
+            yaml.dump(cfg, f)
+
+        fake_embeddings = MagicMock(return_value=[[0.1, 0.2, 0.3]])
+        with patch("retrieval.indexer.get_embeddings_batch", fake_embeddings), \
+                patch("retrieval.indexer.chromadb") as mock_chromadb:
+            mock_client = MagicMock()
+            mock_client.create_collection.return_value = MagicMock()
+            mock_chromadb.PersistentClient.return_value = mock_client
+            build_index(str(config_path))
+
+        assert fake_embeddings.called, "get_embeddings_batch was never called"
+        args, kwargs = fake_embeddings.call_args
+        passed_config = args[1] if len(args) > 1 else kwargs.get("config_path")
+        assert passed_config == str(config_path), (
+            "build_index did not forward its config_path to get_embeddings_batch; "
+            f"got {passed_config!r}"
+        )
