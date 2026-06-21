@@ -1,13 +1,13 @@
 # CyClaw
 
-> **Offline-first, RAG-enforced, soul-governed personal AI assistant (no internet required!)**
+> **Offline-first, RAG-enforced, $ecure Local AI "Second Brain" (no internet required for RAG and cached Qwen7B-Instruct cached locally for RAG vault misses.)**
 > Version 1.6.0 (agentic release + governed local workflows)
 
 [![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.136-green.svg)](https://fastapi.tiangolo.com/)
 [![LangGraph](https://img.shields.io/badge/LangGraph-1.1-orange.svg)](https://github.com/langchain-ai/langgraph)
 [![CodeQL Advanced](https://github.com/CGFixIT/CyClaw/actions/workflows/codeql.yml/badge.svg)](https://github.com/CGFixIT/CyClaw/actions/workflows/codeql.yml)
-[![CyClaw CI (Simplified + Coverage)](https://github.com/CGFixIT/CyClaw/actions/workflows/ci.yml/badge.svg)](https://github.com/CGFixIT/CyClaw/actions/workflows/ci.yml)
+[![CyClaw CI (Simplified + Gated Integration)](https://github.com/CGFixIT/CyClaw/actions/workflows/ci.yml/badge.svg)](https://github.com/CGFixIT/CyClaw/actions/workflows/ci.yml)
 [![Screenshots: local AI](https://i.imgur.com/kGZBkIj.png)](https://github.com/CGFixIT/CyClaw/tree/main/docs/screenshots)   <-- Screenshots of Local AI web interface
 
 ---
