@@ -10,7 +10,29 @@ import sys
 
 from retrieval.hybrid_search import HybridRetriever
 from utils.errors import RAGError
-from utils.logger import audit_log
+from utils.logger import audit_log, redact_sensitive
+
+# Bounds for the client-supplied top_k. The retriever fuses at most
+# top_k_semantic + top_k_keyword distinct chunks, so an unbounded value buys
+# nothing; a non-int or non-positive value would otherwise crash the slice.
+_DEFAULT_TOP_K = 5
+_MAX_TOP_K = 50
+
+
+def _coerce_top_k(raw: object) -> int:
+    """Coerce a JSON-RPC ``top_k`` argument to a positive, bounded int.
+
+    JSON-RPC clients can send ``top_k`` as a string, float, null, or a negative
+    number. ``results[:top_k]`` would raise TypeError on a string and silently
+    return nothing on a negative value, so normalise here instead.
+    """
+    try:
+        value = int(raw)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return _DEFAULT_TOP_K
+    if value < 1:
+        return _DEFAULT_TOP_K
+    return min(value, _MAX_TOP_K)
 
 CAPABILITIES = {
     "tools": {},
@@ -50,7 +72,7 @@ def _handle_search(msg_id, args: dict, retriever: HybridRetriever) -> dict:
     # parity with the HTTP path is ever desired, add check_input(query) below and
     # mirror the HTTP audit-on-block; it is omitted by design today.
     query = args.get("query", "")
-    top_k = args.get("top_k", 5)
+    top_k = _coerce_top_k(args.get("top_k", _DEFAULT_TOP_K))
     mode = args.get("mode", "hybrid")
     try:
         if mode == "semantic":
@@ -80,7 +102,11 @@ def _handle_search(msg_id, args: dict, retriever: HybridRetriever) -> dict:
     except RAGError as e:
         return _error(msg_id, -32000, f"{e.code}: {e.message}")
     except Exception as e:
-        return _error(msg_id, -32000, f"Search error: {str(e)}")
+        # Privacy parity with the HTTP path (gate._sanitize_error): a raw
+        # exception string can carry a filesystem path or a token surfaced from a
+        # degraded dependency. Redact with the config-driven secret patterns
+        # before it leaves the process in the JSON-RPC error body.
+        return _error(msg_id, -32000, f"Search error: {redact_sensitive(str(e))}")
 
 def handle_message(msg: dict, retriever: HybridRetriever) -> dict:
     method = msg.get("method")

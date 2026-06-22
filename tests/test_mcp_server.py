@@ -291,3 +291,59 @@ def test_mcp_audit_event_hashes_full_query(retriever, tmp_path, monkeypatch):
     # Parity: identical to what the HTTP/graph audit path writes for this query.
     assert event["query_hash"] == hash_query(long_query)
     reset_config_cache()
+
+
+# ---------------------------------------------------------------------------
+# 11. top_k coercion: a JSON-RPC client can send top_k as a string/float/null
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize(
+    "raw, expected",
+    [
+        (5, 5),
+        ("3", 3),       # JSON string
+        (4.0, 4),       # float
+        ("abc", 5),     # non-numeric -> default
+        (None, 5),      # null -> default
+        (0, 5),         # non-positive -> default
+        (-2, 5),        # negative -> default
+        (999, 50),      # above ceiling -> clamped to _MAX_TOP_K
+    ],
+)
+def test_coerce_top_k(raw, expected):
+    assert mcp_hybrid_server._coerce_top_k(raw) == expected
+
+
+def test_string_top_k_does_not_crash_slice(retriever):
+    """A string top_k must be coerced before slicing, not raise TypeError."""
+    msg = {
+        "jsonrpc": "2.0", "id": 11, "method": "tools/call",
+        "params": {"name": "hybrid_search",
+                   "arguments": {"query": "test", "top_k": "1", "mode": "hybrid"}},
+    }
+    result = handle_message(msg, retriever)
+    assert "error" not in result
+    assert len(result["result"]["chunks"]) == 1  # coerced "1" -> slice to 1
+
+
+# ---------------------------------------------------------------------------
+# 12. Generic (non-RAGError) failures are redacted before leaving the process
+# ---------------------------------------------------------------------------
+
+def test_generic_error_is_redacted(retriever):
+    """A raw exception string carrying a secret must be redacted in the error body."""
+    secret = "sk-" + "a" * 40  # matches default policy.privacy.redact_secrets_like
+    reset_config_cache()
+    retriever.semantic_search.side_effect = RuntimeError(f"upstream failed token={secret}")
+    msg = {
+        "jsonrpc": "2.0", "id": 12, "method": "tools/call",
+        "params": {"name": "hybrid_search",
+                   "arguments": {"query": "test", "mode": "semantic"}},
+    }
+    result = handle_message(msg, retriever)
+
+    assert result["error"]["code"] == -32000
+    message = result["error"]["message"]
+    assert secret not in message, "raw secret must not leak into the JSON-RPC error"
+    assert "[REDACTED_SECRET]" in message
+    reset_config_cache()
