@@ -22,30 +22,56 @@ from utils.errors import LLMServiceError, GrokServiceError
 _URL = "http://127.0.0.1:1234/v1/chat/completions"  # DevSkim: ignore DS162092,DS137138 - loopback test URL
 
 
-def _write_config(tmp_path) -> str:
-    """Minimal config.yaml with the models.* blocks both clients read."""
-    cfg = {
-        "models": {
-            "local_llm": {
-                "base_url": "http://127.0.0.1:1234/v1",  # DevSkim: ignore DS162092,DS137138
-                "model": "test-model",
-                "max_tokens": 256,
-                "temperature": 0.1,
-                "timeout_sec": 5,
-            },
-            "grok": {
-                "base_url": "https://api.x.ai/v1",
-                "model": "grok-4",
-                "max_tokens": 256,
-                "temperature": 0.2,
-                "timeout_sec": 5,
-            },
-        }
+def _write_config(tmp_path, retry: dict = None) -> str:
+    """Minimal config.yaml with the models.* blocks both clients read.
+
+    When ``retry`` is given it is injected into both model blocks so the retry
+    path can be exercised; when omitted (the default) no ``retry`` key is
+    present, so the clients default to ``max_retries == 0`` — the original
+    single-attempt behavior every pre-existing test relies on.
+    """
+    local_llm = {
+        "base_url": "http://127.0.0.1:1234/v1",  # DevSkim: ignore DS162092,DS137138
+        "model": "test-model",
+        "max_tokens": 256,
+        "temperature": 0.1,
+        "timeout_sec": 5,
     }
+    grok = {
+        "base_url": "https://api.x.ai/v1",
+        "model": "grok-4",
+        "max_tokens": 256,
+        "temperature": 0.2,
+        "timeout_sec": 5,
+    }
+    if retry is not None:
+        local_llm["retry"] = dict(retry)
+        grok["retry"] = dict(retry)
+    cfg = {"models": {"local_llm": local_llm, "grok": grok}}
     p = tmp_path / "config.yaml"
     with open(p, "w", encoding="utf-8") as f:
         yaml.dump(cfg, f)
     return str(p)
+
+
+class _ScriptedPost:
+    """Replacement for ``httpx.Client.post`` that returns/raises a scripted sequence.
+
+    Each call consumes the next item: an ``httpx.Response`` is returned, an
+    ``Exception`` is raised. The last item is reused once the script is
+    exhausted, so a persistent-failure script can drive any number of retries.
+    """
+
+    def __init__(self, script: list):
+        self._script = list(script)
+        self.calls = []
+
+    def __call__(self, url, **kwargs):
+        self.calls.append((url, kwargs))
+        item = self._script.pop(0) if len(self._script) > 1 else self._script[0]
+        if isinstance(item, Exception):
+            raise item
+        return item
 
 
 class _FakePost:
@@ -184,4 +210,101 @@ class TestGrokClient:
         with pytest.raises(GrokServiceError) as exc:
             client.generate("a prompt")
         assert "dns failure" in exc.value.message
+        client.close()
+
+
+# =============================================================================
+# Retry / exponential backoff (shared _post_with_retry helper)
+# =============================================================================
+
+@pytest.fixture
+def no_sleep(monkeypatch):
+    """Patch llm.client.time.sleep so backoff is instant; record the delays."""
+    delays: list[float] = []
+    monkeypatch.setattr("llm.client.time.sleep", lambda s: delays.append(s))
+    return delays
+
+
+class TestRetryBehavior:
+    def test_default_config_does_not_retry(self, tmp_path, no_sleep):
+        # No retry block in config -> max_retries == 0 -> single attempt only.
+        client = LocalLLMClient(_write_config(tmp_path))
+        fake = _ScriptedPost([_status_response(503)])
+        client._client.post = fake
+        with pytest.raises(LLMServiceError):
+            client.generate("p")
+        assert len(fake.calls) == 1
+        assert no_sleep == []
+        client.close()
+
+    def test_retries_then_succeeds_on_transient_5xx(self, tmp_path, no_sleep):
+        client = LocalLLMClient(_write_config(tmp_path, retry={"max_retries": 2, "backoff_base_sec": 0.5}))
+        # Two 503s then a 200 -> recovers on the third attempt.
+        fake = _ScriptedPost([_status_response(503), _status_response(503), _ok_response("recovered")])
+        client._client.post = fake
+        assert client.generate("p") == "recovered"
+        assert len(fake.calls) == 3
+        assert no_sleep == [0.5, 1.0]  # backoff_base * 2**attempt for attempts 0,1
+        client.close()
+
+    def test_retries_exhausted_raises(self, tmp_path, no_sleep):
+        client = LocalLLMClient(_write_config(tmp_path, retry={"max_retries": 2, "backoff_base_sec": 0.5}))
+        fake = _ScriptedPost([_status_response(500)])  # persistent failure
+        client._client.post = fake
+        with pytest.raises(LLMServiceError) as exc:
+            client.generate("p")
+        assert exc.value.details.get("status") == 500
+        assert len(fake.calls) == 3  # 1 initial + 2 retries
+        assert no_sleep == [0.5, 1.0]
+        client.close()
+
+    def test_client_error_4xx_fails_fast(self, tmp_path, no_sleep):
+        # A 400 is not transient: no retry even with retries configured.
+        client = LocalLLMClient(_write_config(tmp_path, retry={"max_retries": 3, "backoff_base_sec": 0.5}))
+        fake = _ScriptedPost([_status_response(400)])
+        client._client.post = fake
+        with pytest.raises(LLMServiceError) as exc:
+            client.generate("p")
+        assert exc.value.details.get("status") == 400
+        assert len(fake.calls) == 1
+        assert no_sleep == []
+        client.close()
+
+    def test_timeout_is_retried(self, tmp_path, no_sleep):
+        client = LocalLLMClient(_write_config(tmp_path, retry={"max_retries": 1, "backoff_base_sec": 2.0}))
+        fake = _ScriptedPost([httpx.TimeoutException("slow"), _ok_response("ok after timeout")])
+        client._client.post = fake
+        assert client.generate("p") == "ok after timeout"
+        assert len(fake.calls) == 2
+        assert no_sleep == [2.0]
+        client.close()
+
+    def test_transport_error_is_retried(self, tmp_path, no_sleep):
+        client = LocalLLMClient(_write_config(tmp_path, retry={"max_retries": 1, "backoff_base_sec": 1.0}))
+        req = httpx.Request("POST", _URL)
+        fake = _ScriptedPost([httpx.ConnectError("refused", request=req), _ok_response("ok")])
+        client._client.post = fake
+        assert client.generate("p") == "ok"
+        assert len(fake.calls) == 2
+        client.close()
+
+    def test_grok_429_is_retried(self, tmp_path, monkeypatch, no_sleep):
+        # 429 (rate limit) is transient for Grok; 4xx like 401 would not be.
+        monkeypatch.setenv("GROK_API_KEY", "xai-secret")
+        client = GrokClient(_write_config(tmp_path, retry={"max_retries": 2, "backoff_base_sec": 1.0}))
+        fake = _ScriptedPost([_status_response(429), _ok_response("grok ok")])
+        client._client.post = fake
+        assert client.generate("p") == "grok ok"
+        assert len(fake.calls) == 2
+        client.close()
+
+    def test_grok_401_fails_fast(self, tmp_path, monkeypatch, no_sleep):
+        monkeypatch.setenv("GROK_API_KEY", "xai-secret")
+        client = GrokClient(_write_config(tmp_path, retry={"max_retries": 3, "backoff_base_sec": 1.0}))
+        fake = _ScriptedPost([_status_response(401)])
+        client._client.post = fake
+        with pytest.raises(GrokServiceError) as exc:
+            client.generate("p")
+        assert exc.value.details.get("status") == 401
+        assert len(fake.calls) == 1  # no wasted retries / credits on auth failure
         client.close()

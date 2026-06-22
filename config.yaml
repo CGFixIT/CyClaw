@@ -30,6 +30,9 @@ models:
     max_tokens: 5000
     temperature: 0.3
     timeout_sec: 720
+    retry:                  # bounded exp-backoff on transient failures (timeout/5xx/429); 4xx fails fast
+      max_retries: 2        # extra attempts beyond the first
+      backoff_base_sec: 0.5 # delay = backoff_base_sec * 2**attempt (0.5s, 1s)
   embeddings:
     provider: "sentence-transformers"
     model: "all-MiniLM-L6-v2"
@@ -42,6 +45,9 @@ models:
     timeout_sec: 30
     max_tokens: 2048
     temperature: 0.2
+    retry:                  # only 5xx/429/timeouts are retried — never 4xx, so no wasted xAI spend on bad requests/auth
+      max_retries: 2        # extra attempts beyond the first
+      backoff_base_sec: 1.0 # delay = backoff_base_sec * 2**attempt (1s, 2s)
 
 corpus:
   path: "data/corpus"
