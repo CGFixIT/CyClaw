@@ -125,6 +125,7 @@ jobs:
             tests/test_sync_scheduler.py \
             tests/test_sync_selftest.py \
             -q --tb=short \
+            --cov=gate \
             --cov=utils.sanitizer \
             --cov=utils.errors \
             --cov=utils.logger \
@@ -134,9 +135,17 @@ jobs:
             --cov=llm.client \
             --cov=graph \
             --cov=retrieval.embeddings \
+            --cov=retrieval.hybrid_search \
+            --cov=retrieval.indexer \
+            --cov=retrieval.stemmer \
             --cov=mcp_hybrid_server \
             --cov=metrics \
             --cov=sync.selftest \
+            --cov=sync.runner \
+            --cov=sync.config \
+            --cov=sync.filters \
+            --cov=sync.cli \
+            --cov=sync.scheduler \
             --cov-report=xml \
             --cov-report=html \
             --cov-report=term-missing
