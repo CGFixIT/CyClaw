@@ -151,3 +151,39 @@ def test_gate_uses_production_limiter():
     assert isinstance(gate._rate_limiter, RateLimiter)
     # The wrapper must call through to the instance (not a private copy).
     assert gate.check_rate_limit("203.0.113.7") is True
+
+
+class TestPersistence:
+    """Optional sqlite persistence (api.rate_limit.persist_path in config.yaml).
+
+    gate.py now wires ``db_path`` from config, so per-IP counters can survive a
+    process/container restart instead of resetting to zero. These tests exercise
+    the underlying RateLimiter persistence that wiring depends on. The fake clock
+    keeps both windows pinned so the reloaded hits stay in-window.
+    """
+
+    def test_counters_survive_restart(self, tmp_path):
+        db = tmp_path / "rl.db"
+        now = 1000.0
+        rl = RateLimiter(max_requests=3, window_seconds=60, clock=lambda: now, db_path=str(db))
+        assert rl.allow("198.51.100.5") is True   # 1
+        assert rl.allow("198.51.100.5") is True   # 2
+
+        # A fresh limiter pointed at the same db reloads the prior hits, so the
+        # window continues across the simulated restart rather than resetting.
+        rl2 = RateLimiter(max_requests=3, window_seconds=60, clock=lambda: now, db_path=str(db))
+        assert rl2.allow("198.51.100.5") is True   # 3rd hit fills the window
+        assert rl2.allow("198.51.100.5") is False  # 4th exceeds max_requests=3
+
+    def test_db_file_and_parent_created(self, tmp_path):
+        db = tmp_path / "nested" / "rl.db"
+        rl = RateLimiter(max_requests=5, window_seconds=60, db_path=str(db))
+        rl.allow("203.0.113.9")
+        assert db.exists(), "persistence db (and its parent dir) should be created on first use"
+
+    def test_in_memory_default_has_no_db(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        rl = RateLimiter(max_requests=5, window_seconds=60)  # db_path=None -> in-memory
+        assert rl.allow("203.0.113.10") is True
+        assert rl.tracked_ips() == 1
+        assert not list(tmp_path.glob("*.db")), "in-memory mode must not write a sqlite file"

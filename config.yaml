@@ -172,6 +172,12 @@ api:
   host: "127.0.0.1"  # DevSkim: ignore DS162092 - loopback-only binding by design
   port: 8787
   request_timeout_sec: 30
+  rate_limit:
+    max_requests: 60       # per-IP request ceiling within the window
+    window_seconds: 60     # sliding-window length in seconds
+    # null = in-memory (counters reset on restart). Set to a sqlite path such as
+    # "data/rate_limits.db" so per-IP counters survive process/container restarts.
+    persist_path: null
 
 logging:
   level: "INFO"

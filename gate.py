@@ -103,16 +103,31 @@ def require_api_key(
     if not credentials or not hmac.compare_digest(credentials.credentials, api_key):
         raise HTTPException(status_code=401, detail="Invalid or missing API key")
 
-# Simple in-memory rate limiter (per-IP for /query). The limiter itself lives
-# in utils/ratelimit.py as a lock-synchronized class so the gateway and its
-# tests share one implementation (no duplicated logic) and concurrent requests
-# under FastAPI's threadpool cannot interleave and overcount.
+# Per-IP rate limiter for /query. The limiter itself lives in utils/ratelimit.py
+# as a lock-synchronized class so the gateway and its tests share one
+# implementation (no duplicated logic) and concurrent requests under FastAPI's
+# threadpool cannot interleave and overcount.
+#
+# Settings come from config.yaml (api.rate_limit), falling back to the historical
+# 60 req / 60 s in-memory defaults. RateLimiter already supports sqlite
+# write-through persistence, but it was never wired in here, so per-IP counters
+# reset to zero on every process/container restart — a restart loop could let a
+# client exceed the documented 60 req/min ceiling. Set
+# api.rate_limit.persist_path (e.g. "data/rate_limits.db") to make counters
+# survive restarts; leaving it null preserves the original in-memory behavior.
 from fastapi import Request
 from utils.ratelimit import RateLimiter
 
-RATE_LIMIT_REQUESTS = 60
-RATE_LIMIT_WINDOW = 60  # seconds
-_rate_limiter = RateLimiter(max_requests=RATE_LIMIT_REQUESTS, window_seconds=RATE_LIMIT_WINDOW)
+with open("config.yaml", encoding="utf-8") as _rl_f:
+    _rl_cfg = ((yaml.safe_load(_rl_f) or {}).get("api", {}) or {}).get("rate_limit", {}) or {}
+RATE_LIMIT_REQUESTS = _rl_cfg.get("max_requests", 60)
+RATE_LIMIT_WINDOW = _rl_cfg.get("window_seconds", 60)  # seconds
+RATE_LIMIT_DB_PATH = _rl_cfg.get("persist_path") or None
+_rate_limiter = RateLimiter(
+    max_requests=RATE_LIMIT_REQUESTS,
+    window_seconds=RATE_LIMIT_WINDOW,
+    db_path=RATE_LIMIT_DB_PATH,
+)
 
 def check_rate_limit(client_ip: str) -> bool:
     """Thin gateway-level wrapper over the shared RateLimiter instance."""
