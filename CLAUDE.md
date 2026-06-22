@@ -47,28 +47,40 @@ HTTP POST /query  (or MCP tool call)
 | `graph.py` | 7-node LangGraph topology; all security policy lives here |
 | `retrieval/hybrid_search.py` | RRF fusion (k=60) over ChromaDB + BM25 |
 | `retrieval/indexer.py` | Corpus ingestion, chunk sanitization |
+| `retrieval/embeddings.py` | Local CPU embedding service; `SentenceTransformer` with triple `lru_cache` (model, config, query) |
+| `retrieval/stemmer.py` | Enhanced Porter stemmer with AI/ML/CyClaw custom vocab; avoids NLTK punkt (CVE exposure) |
 | `llm/client.py` | `LocalLLMClient` (LM Studio) + `GrokClient` (xAI fallback) |
 | `utils/sanitizer.py` | 31-pattern prompt-injection filter; patterns in `config.yaml` |
 | `utils/personality.py` | Soul versioning, SHA-256 drift detection, injection scan on write |
+| `utils/personality_db.py` | DB backend shim for soul versions; SQLite default, Postgres via `CYCLAW_DB_URL` env or `personality.database_url` config |
 | `utils/logger.py` | Audit JSONL; SHA-256 query hashing, PII redaction |
 | `utils/ratelimit.py` | Thread-safe per-IP rate limiting (60 req/min) |
+| `utils/health.py` | `check_all()` / `_ping()` backing `/health`; skips Grok probe when `GROK_API_KEY` is unset |
+| `utils/errors.py` | Typed exception hierarchy rooted at `RAGError`; all modules raise these, never bare `Exception` |
 | `schemas/api.py` | Pydantic models: `QueryRequest`, `QueryResponse`, `HealthResponse` |
 | `metrics.py` | `audit.jsonl` analyzer |
 | `mcp_hybrid_server.py` | MCP server (retrieval only, no LLM, no `sampling`) |
-| `sync/` | Out-of-band Dropbox corpus sync via `rclone`; never imported by gate/graph |
+| `sync/` | Out-of-band Dropbox corpus sync via `rclone`; run as `python -m sync.cli`; never imported by gate/graph |
+| `agentic/` | Out-of-band GitHub context + governed skills registry; run as `python -m agentic.cli`; **never imported by gate/graph/mcp** |
 
 ### Configuration
 
 `config.yaml` is the single source of truth for all tunables:
 
 - `app.mode` — `"offline"` (default) or `"hybrid"` (enables Grok fallback)
-- `models.local_llm` — LM Studio endpoint, model, timeout, max_tokens
-- `models.grok` — xAI fallback (disabled by default)
-- `retrieval.top_k`, `retrieval.min_score` — RRF result count and score floor
+- `models.local_llm` — LM Studio endpoint (`127.0.0.1:1234/v1`), model, timeout, max_tokens
+- `models.embeddings` — `all-MiniLM-L6-v2`, `dim: 384`, `cache_dir: .emb_cache`
+- `models.grok` — xAI fallback (disabled by default; requires `GROK_API_KEY` env var)
+- `indexing.chroma_path` / `indexing.bm25_path` — index storage paths
+- `retrieval.top_k_semantic` / `retrieval.top_k_keyword` / `retrieval.rrf_k` / `retrieval.min_score`
 - `policy.prompt_filter.banned_patterns` — 31 injection patterns (authoritative list)
-- `policy.privacy` — PII redaction rules (emails, IPs, secrets)
+- `policy.privacy` — PII redaction rules (emails, IPs, secrets, tokens)
+- `personality.soul_path` / `personality.db_path` — soul Markdown and SQLite DB paths
+- `personality.database_url` — optional Postgres DSN (overrides SQLite; also settable via `CYCLAW_DB_URL` env var)
 - `api.host` / `api.port` — `127.0.0.1:8787`
+- `security.allowed_origins` — CORS origin list; `security.allowed_hosts` — TrustedHostMiddleware allow-list (DNS-rebinding defense)
 - `sync` — optional Dropbox rclone integration (disabled by default)
+- `agentic` — optional GitHub context + skills registry layer (disabled by default; see below)
 
 ### Security Invariants
 
@@ -87,6 +99,39 @@ Additional layers: loopback-only binding, atomic soul writes (`os.replace` + inj
 - **chromadb** has a known CVE (pre-auth RCE); accepted because only `PersistentClient` (embedded) is used — `pip-audit` ignores it per threat model.
 - **torch** must be installed separately (`pip install torch==2.6.0+cpu`) **before** `requirements.txt` to avoid the CVE-2025-32434 `weights_only` bypass.
 - Install requirements: `pip install -r requirements.txt --ignore-installed PyYAML`
+
+### Agentic Layer (`agentic/`)
+
+An **opt-in, out-of-band** layer for read-only GitHub context and a governed local skills registry. **Disabled by default. Never imported by `gate.py`, `graph.py`, or `mcp_hybrid_server.py`** — architectural isolation preserves the five security invariants.
+
+Enable in `config.yaml`:
+```yaml
+agentic:
+  enabled: true
+  repo: "CGFixIT/CyClaw"
+  mode: "read"           # "write" is a dry-run scaffold only (v0.1 never executes)
+  writes_enabled: false
+  gh_min_version: "2.40.0"
+  registry_path: "data/agentic/skills_registry.json"
+```
+
+**CLI entry point:**
+```bash
+python -m agentic.cli status                          # config + gh + registry summary
+python -m agentic.cli context --repo                  # repo overview (JSON)
+python -m agentic.cli context --pr 123                # PR metadata + diff (JSON)
+python -m agentic.cli context --issue 45              # issue metadata (JSON)
+python -m agentic.cli propose-skill --name X --desc Y --body-file f.md --reason "draft"
+python -m agentic.cli apply-skill   --name X --desc Y --body-file f.md --reason "..." --confirm
+python -m agentic.cli test                            # pre-flight self-test
+GROK_API_KEY=dummy pytest tests/test_agentic_*.py -q  # agentic unit tests
+```
+
+**Exit codes:** `0` success · `2` operation failed · `3` env/config error · `4` write refused by gate.
+
+**Skills registry governance** mirrors soul governance: `propose_skill` never writes; `apply_skill` enforces the injection gate (same `banned_patterns` + OWASP baseline), requires a non-empty `reason`, and writes atomically. `governance_score(name)` returns 0–100 (injection penalty + structure bonuses).
+
+Full docs: `docs/agentic/AGENTIC_README.md`, `docs/agentic/SKILLS_REGISTRY_GOVERNANCE.md`.
 
 ---
 
@@ -275,12 +320,18 @@ The stop hook rejects commits whose committer email is not `noreply@anthropic.co
 GROK_API_KEY=dummy pytest tests/ -q --tb=short
 # Single file:
 GROK_API_KEY=dummy pytest tests/test_graph.py -q --tb=short
+# Agentic layer only:
+GROK_API_KEY=dummy pytest tests/test_agentic_*.py -q
+# CI RAG smoke (runs against real index, not a mock):
+GROK_API_KEY=dummy python tests/ci_rag_smoke.py
 ```
 
 - CI target: Python 3.12.
 - `GROK_API_KEY` must be set (any non-empty value works offline).
-- Coverage target: 80% (`pyproject.toml`).
-- Test files: `test_gate`, `test_graph`, `test_hybrid_search`, `test_personality`, `test_sanitizer`, `test_audit`, `test_rate_limit`, `test_mcp_server`, `test_security`, `test_telemetry_kill`, `test_sync_*` (5 files).
+- Coverage target: 80% (`pyproject.toml`); sources include `gate`, `graph`, `mcp_hybrid_server`, `metrics`, `llm`, `retrieval`, `utils`, `sync`, `agentic`.
+- `tests/conftest.py` provides shared fixtures: `test_config`, `mock_retriever`, `mock_llm`, `MockRetriever`, `MockLocalLLM`, `MockGrokClient`, `bm25_index`. No live services required — all external deps are mocked.
+
+**Test files (complete):** `test_gate`, `test_graph`, `test_hybrid_search`, `test_personality`, `test_personality_changes`, `test_sanitizer`, `test_audit`, `test_rate_limit`, `test_mcp_server`, `test_security`, `test_telemetry_kill`, `test_client`, `test_embeddings`, `test_health`, `test_indexer`, `test_metrics`, `test_rag_integration`, `test_stemmer`, `test_conftest_fixtures`, `test_agentic_cli`, `test_agentic_config`, `test_agentic_gh_client`, `test_agentic_registry`, `test_agentic_selftest`, `test_agentic_writer`, `test_agentic_isolation`, `test_sync_cli`, `test_sync_config`, `test_sync_filters`, `test_sync_runner`, `test_sync_scheduler`, `test_sync_selftest`.
 
 ---
 
@@ -305,14 +356,18 @@ Skills live at `.claude/skills/<name>/SKILL.md`. When a skill is not present in 
 | `/wrap-up` | one-shot | End-of-session checklist |
 | `/sandbox-runtime-verification` | one-shot | Full Python 3.12 runtime gate: deps, index, tests, smoke |
 | `/create-session-notes` | one-shot | Maintain structured SESSION_NOTES.md for continuity |
+| `/CyClaw-Optimize` | one-shot | Scan main branch for optimization opportunities; open focused PRs |
+| `/CyClaw-Sandbox` | one-shot | Clone main fresh, install deps, mock LM Studio, run full audit (config, gate/graph, pytest, terminal endpoints, RAG vault-hit probe, metrics), open PR with report |
 | `/solution-architect` | agent | Plan implementation strategy before writing code |
 | `/verification-specialist` | agent | Adversarial verification with mandatory command output |
 | `/memory-extraction` | agent | Persist useful memories from conversation to memory directory |
 | `/memory-consolidation` | agent | Deduplicate and prune the memory directory |
+| `/memory-orchestrator` | agent | Orchestrate full memory lifecycle (extract + consolidate) |
 | `/conversation-summary` | agent | Condense conversation for seamless continuation |
 | `/documentation-guide` | agent | Produce or revise documentation for a target audience |
 | `/general-purpose` | agent | Multi-step codebase research and task completion |
 | `/code-explorer` | agent | Read-only codebase search and exploration |
+| `/next-action-suggestion` | agent | Suggest highest-value next action after a task completes |
 
 ---
 
