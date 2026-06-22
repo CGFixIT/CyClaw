@@ -38,7 +38,7 @@ models:
   grok:
     enabled: false
     base_url: "https://api.x.ai/v1"
-    model: "grok-4"   # grok-beta was retired by xAI; see https://docs.x.ai/developers/models
+    model: "grok-4.3"   # grok-beta and grok-4 were retired by xAI (grok-4 sunset 2026-05-15); grok-4.3 is the current flagship. See https://docs.x.ai/developers/models
     timeout_sec: 30
     max_tokens: 2048
     temperature: 0.2
