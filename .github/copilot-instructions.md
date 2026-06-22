@@ -24,9 +24,14 @@ Trust this file first and only search the repo when these instructions are incom
 ## Environment and bootstrap
 Always use **Python 3.12**. CI uses 3.12 on Ubuntu and Windows.
 
-## Forbidden Behaviors
-- never auto assign yourself to an open PR or merge request and make edits or changes without clear human approval from me (cgrady92) - your job with automated github PRs is to review merge and pull requests to warn me about potential issues beforehand, not to change anything yourself. 
-- when a ci check fails more than 5 times in a row, assign yourself and attempt to fix. if you resolve, send a notification and leave a .txt file in the project root to remind me. if unable to resolve, revert any changes you made and notify my by gothub email alerts. 
+## Core Behaviors
+- When a PR is opened, wait 5 minutes then assess the changes made in the context of looking for potential negative or unexpected consequences. You are also to look for notable project changes from a given open PR compared to main branch.
+- After you have a clear understanding or the PR goal, its changes, and a holistic view of the impact, comment on the Pull Request beginning with a 1 word title description (e.g. "Warning: Merge may Break Functionality if main branch", or "Warning: May Violate Security Posture as Stated in Readme", or "Information: This PR adds external agentic capabilities to CyClaw. Carefully verify code changes before merge.", etc. that is all. leave the PR and or merge request open; this is just a comment informing me of outcome and other issues I may have missed (like potential conflicts in merge to main branch)
+- If an open PR is failing any given ci check more than 5 times consecutively, assign yourself and analyze the logs to understand the cause of the issue, assess certsin code file sections to pinpoint any referenvrd that are unclear from a contect on the branch  merging to main, then finally when the issue and resolution is fully understood, start applying changes to **ci file only** to fix. after the changes have been made, initiate a rebase of all open PR's against main branch and force CI checks to restart. then wait to verify changes did resolve the failing ci check. If failures continue to occur, reassess using the same process until the ci check(s) passes. if you are unable to resolve the issue after 3 attempted cycles and continual CI check failure, revert all changes back to how it was before you assignef yourself and leave a detailed comment describing the ci check failure, what you attempted to fix, and suggestions for next steps before merging. if you were able to make changes and get the ci checks to pass, also leave a detailed comment describing the initial issue, what changed were made, and that they were resolved.
+- Use Claude Haiku llm when assessing code, Use an advanced model like GPT Codex or GPT5.3 When attenpting to fix ci files if they fail.
+
+Forbidden Behaviors:
+-Never make any changes or edits to a branch on an open PR without clear human approval or the ci checks already failing as described earlier
 
 Recommended clean setup:
 ```bash
