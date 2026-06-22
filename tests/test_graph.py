@@ -315,6 +315,28 @@ class TestGrokFallbackPrompt:
         assert grok.last_prompt == "USER QUERY: ping"
         assert "[Source:" not in grok.last_prompt
 
+    def test_prompt_truncated_to_cost_cap(self, tmp_path):
+        """grok_max_prompt_chars caps the prompt forwarded to the paid API."""
+        grok = MockGrokClient()
+        cfg = {"policy": {"fallback": {"send_local_context_to_grok": False,
+                                       "grok_max_prompt_chars": 20}}}
+        grok_fallback_node({"query": "x" * 500}, grok=grok, cfg=cfg)
+        assert len(grok.last_prompt) == 20
+
+    def test_cap_disabled_when_non_positive(self, tmp_path):
+        """A grok_max_prompt_chars <= 0 disables the cap (full prompt forwarded)."""
+        grok = MockGrokClient()
+        cfg = {"policy": {"fallback": {"send_local_context_to_grok": False,
+                                       "grok_max_prompt_chars": 0}}}
+        grok_fallback_node({"query": "y" * 500}, grok=grok, cfg=cfg)
+        assert grok.last_prompt == "USER QUERY: " + "y" * 500
+
+    def test_default_cap_does_not_truncate_normal_query(self, tmp_path):
+        """With no cap configured the generous default leaves normal prompts intact."""
+        grok = MockGrokClient()
+        grok_fallback_node({"query": "what is RRF?"}, grok=grok, cfg=self._cfg(send_ctx=False))
+        assert grok.last_prompt == "USER QUERY: what is RRF?"
+
     def test_grok_none_degrades_without_crash(self, tmp_path):
         result = grok_fallback_node({"query": "x"}, grok=None, cfg=self._cfg(False))
         assert result["answer_model"] == "offline-best-effort"

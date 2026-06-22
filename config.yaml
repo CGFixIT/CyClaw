@@ -88,6 +88,10 @@ policy:
     enabled: true
     require_user_confirm: true
     send_local_context_to_grok: false
+    # Cost guard: hard ceiling on the prompt forwarded to the external (paid)
+    # Grok API. Generous default — no effect on normal queries; lower it to cap
+    # per-call token spend. Set <= 0 to disable the cap entirely.
+    grok_max_prompt_chars: 8000
   prompt_filter:
     enabled: true
     # Regex patterns (single-quoted so backslashes reach the regex engine

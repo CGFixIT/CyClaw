@@ -270,6 +270,20 @@ Answer the query using the partial context where relevant."""
     else:
         prompt = f"USER QUERY: {query}"
 
+    # Cost guard for the only external, paid API call in the topology. The
+    # gateway already caps raw input length (policy.prompt_filter.max_input_chars),
+    # but the Grok-forwarded prompt also carries the local-context block and the
+    # framing, so this is an independent, operator-visible ceiling on per-call
+    # token spend. Default is generous (no behavior change for normal queries);
+    # lower it to tighten the budget. A value <= 0 disables the cap.
+    max_chars = cfg["policy"]["fallback"].get("grok_max_prompt_chars", 8000)
+    if max_chars and max_chars > 0 and len(prompt) > max_chars:
+        logger.warning(
+            "Grok prompt truncated from %d to %d chars (policy.fallback.grok_max_prompt_chars)",
+            len(prompt), max_chars,
+        )
+        prompt = prompt[:max_chars]
+
     try:
         answer = grok.generate(prompt)
     except GrokServiceError as e:
