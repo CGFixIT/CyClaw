@@ -10,6 +10,7 @@ import json
 
 import yaml
 
+import metrics
 from metrics import load_events, print_metrics
 
 
@@ -84,3 +85,33 @@ class TestPrintMetrics:
         assert "avg: 0.500" in out
         assert "min: 0.400" in out
         assert "max: 0.600" in out
+
+
+class TestMain:
+    """Cover the ``cyclaw-metrics`` console entry point (``metrics:main``).
+
+    Regression guard: the declared ``cyclaw-metrics = "metrics:main"`` script
+    once raised ``AttributeError`` at invocation because the module defined only
+    ``print_metrics`` and no ``main``. These tests fail loudly if the entry
+    point is removed or stops delegating to ``print_metrics``.
+    """
+
+    def test_main_delegates_to_print_metrics(self, monkeypatch):
+        calls: list[tuple] = []
+        monkeypatch.setattr(metrics, "print_metrics", lambda *a, **k: calls.append((a, k)))
+        assert metrics.main() is None
+        assert len(calls) == 1
+
+    def test_main_runs_end_to_end_with_default_config(self, tmp_path, monkeypatch, capsys):
+        """``main()`` takes no args and reads ``config.yaml`` from the CWD;
+        run it for real against a temp corpus to prove the wiring holds."""
+        audit_file = _write_audit(
+            tmp_path, [{"event": "rag_query", "top_score": 0.42, "retrieval_mode": "hybrid"}]
+        )
+        with open(tmp_path / "config.yaml", "w", encoding="utf-8") as f:
+            yaml.dump({"logging": {"audit_file": audit_file}}, f)
+        monkeypatch.chdir(tmp_path)
+        metrics.main()
+        out = capsys.readouterr().out
+        assert "Total events: 1" in out
+        assert "hybrid: 1" in out
