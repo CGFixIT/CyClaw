@@ -4,19 +4,13 @@ Quick reference for Claude Code assistance patterns in CyClaw.
 
 ## Skills
 
-| Skill | Type | Purpose |
-|-------|------|--------|
-| [`run-cyclaw`](skills/run-cyclaw/SKILL.md) | Operational | Build, run, and smoke-test the FastAPI server |
-| [`architecture-refactor`](skills/architecture-refactor/SKILL.md) | Loop | Iterative architecture cleanup |
-| [`tests-refactor`](skills/tests-refactor/SKILL.md) | Loop | Test coverage to 100%, pass rate ≥85% |
-| [`logging-refactor`](skills/logging-refactor/SKILL.md) | Loop | Logging on every important path, tested logs |
-| [`speed-refactor`](skills/speed-refactor/SKILL.md) | Loop | Endpoint latency to <50 ms |
-| [`wrap-up`](skills/wrap-up/SKILL.md) | Session | End-of-session checklist (ship, remember, review, publish) |
-
-## Invoking Skills
+The skills directory holds many more skills than the handful below (operational,
+refactor-loop, memory, and agent skills). For the **authoritative, complete list**, see the
+**"Available Skills (main branch)"** table in the root [`CLAUDE.md`](../CLAUDE.md) — kept in
+sync there so a second list does not drift. A few common entry points:
 
 ```bash
-/run-cyclaw              # Smoke-test the server
+/run-cyclaw              # Smoke-test the FastAPI server
 /architecture-refactor   # Start architecture refactor loop
 /tests-refactor          # Start test coverage loop
 /logging-refactor        # Start logging audit loop
@@ -42,13 +36,16 @@ All `*-refactor` skills follow the same seven-step cycle:
 .claude/
 ├── README.md              ← this file
 ├── settings.json          ← project permissions and hooks
-├── skills/                ← project-specific skills
+├── skills/                ← project-specific skills (see CLAUDE.md for the full list)
 │   ├── run-cyclaw/        ← SKILL.md + smoke.sh
 │   ├── architecture-refactor/
 │   ├── tests-refactor/
-│   ├── logging-refactor/
-│   ├── speed-refactor/
+│   ├── …                  ← many more (memory, agent, sandbox, optimize, …)
 │   └── wrap-up/
+├── patterns/              ← reusable behavioral patterns (01–09)
+├── utility-prompts/       ← coordinator / session-title / tool-summary / next-action
+├── commands/              ← reference command docs
+├── hooks/                 ← SessionStart / PreCompact / SessionEnd scripts
 └── rules/                 ← project-specific rules (scoped by paths:)
 ```
 
