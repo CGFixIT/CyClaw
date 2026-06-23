@@ -11,6 +11,7 @@ only wastes time and, for Grok, external credits. Retry is config-driven via a
 preserving the original single-attempt behavior.
 """
 
+import json
 import os
 import time
 from typing import Callable, Optional
@@ -27,6 +28,23 @@ _RETRYABLE_EXTRA_STATUS = frozenset({429})
 def _is_retryable_status(status: int) -> bool:
     """5xx server errors and 429 (rate limit) are transient; other 4xx are not."""
     return status >= _RETRYABLE_STATUS_FLOOR or status in _RETRYABLE_EXTRA_STATUS
+
+
+def _extract_content(resp: httpx.Response) -> str:
+    """Pull ``choices[0].message.content`` from a 200 response, failing clearly.
+
+    A 2xx body that is not valid JSON or lacks the expected OpenAI-compatible
+    shape (e.g. an upstream proxy returning an HTML error page, or an
+    ``{"error": ...}`` payload) would otherwise surface as a bare ``KeyError``/
+    ``JSONDecodeError`` with a cryptic message. Raising a descriptive
+    ``ValueError`` here lets the caller's ``on_other`` map it to the project's
+    typed error with an auditable message. The shape is deterministic, so this
+    is not retried — a retry would re-fetch the same malformed body."""
+    try:
+        data = resp.json()
+        return data["choices"][0]["message"]["content"]
+    except (json.JSONDecodeError, KeyError, IndexError, TypeError) as e:
+        raise ValueError(f"malformed LLM response ({type(e).__name__}): {e}") from e
 
 
 def _read_retry(model_cfg: dict) -> tuple[int, float]:
@@ -59,7 +77,7 @@ def _post_with_retry(
         try:
             resp = do_post()
             resp.raise_for_status()
-            return resp.json()["choices"][0]["message"]["content"]
+            return _extract_content(resp)
         except httpx.HTTPStatusError as e:
             if attempt < max_retries and _is_retryable_status(e.response.status_code):
                 time.sleep(backoff_base * (2 ** attempt))
