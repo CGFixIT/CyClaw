@@ -27,10 +27,10 @@ from utils import personality_db
 from utils.errors import PromptInjectionError
 from utils.logger import audit_log
 
-# Critical patterns enforced at the soul-write boundary (apply_evolution).
-# These patterns are memory-poisoning / instruction-override attempts that must
-# never be written to soul.md, which is prepended to every LLM system prompt.
-ENFORCED_SOUL_PATTERNS = [
+# Memory-poisoning / instruction-override patterns shared by both lists below.
+# Any pattern here must never appear in soul.md (write-boundary enforcement)
+# and is also suspicious in propose_evolution advisory review.
+_CORE_INJECTION_PATTERNS: list[str] = [
     r"ignore\s+(previous|all|prior)\s+instructions",
     r"disregard\s+(previous|all|prior)",
     r"forget\s+(previous|all|prior)\s+instructions",
@@ -42,23 +42,19 @@ ENFORCED_SOUL_PATTERNS = [
     r"developer\s+mode",
 ]
 
-# Advisory patterns for propose_evolution: broader set of suspicious constructs.
-# These are surfaced for human review but are not enforced (may be legitimate
-# in author-controlled identity text like "You are now CyClaw; act as...").
-# The query path uses config patterns + OWASP; split here for soul authorship.
-OWASP_INJECTION_PATTERNS = [
-    r"ignore\s+(previous|all|prior)\s+instructions",
-    r"disregard\s+(previous|all|prior)",
-    r"forget\s+(previous|all|prior)\s+instructions",
-    r"new\s+instructions\s*:",
-    r"system\s+prompt\s*:",
+# Critical patterns enforced at the soul-write boundary (apply_evolution).
+# soul.md is prepended to every LLM system prompt, so anything here reaching
+# it would persist as a standing instruction to the LLM.
+ENFORCED_SOUL_PATTERNS: list[str] = _CORE_INJECTION_PATTERNS
+
+# Advisory patterns for propose_evolution: the core set plus constructs that
+# are suspicious in arbitrary text but may be legitimate in author-controlled
+# identity statements (e.g. "You are now CyClaw; act as...").
+# These are surfaced for human review but are not enforced at the write boundary.
+OWASP_INJECTION_PATTERNS: list[str] = _CORE_INJECTION_PATTERNS + [
     r"you\s+are\s+now",
     r"pretend\s+(you\s+are|to\s+be)",
     r"act\s+as",
-    r"jailbreak",
-    r"DAN\s+mode",
-    r"developer\s+mode",
-    r"override\s+instructions",
     r"<\s*script\s*>",
 ]
 
