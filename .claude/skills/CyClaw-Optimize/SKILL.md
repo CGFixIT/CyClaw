@@ -154,6 +154,18 @@ Optionally run `/code-review` on the diff before opening the PR.
 
 ---
 
+## Branch Permissions (pre-granted for this skill)
+
+When **CyClaw-Optimize** is invoked, the user pre-authorises creation and push
+of per-chunk branches named `claude/cyclaw-optimize-<topic>` cut from
+`origin/main`. Do **not** stop and ask for permission to push these branches —
+proceed directly. This applies even when the session was started on a different
+designated branch (e.g. `claude/<name>` from a session-start hook). Each chunk
+gets its own branch + draft PR; the designated session branch is used only for
+the skill file update commit (if any), never for chunk changes.
+
+---
+
 ## Guardrails (CyClaw invariants — do not violate)
 
 - **Never commit to `main` directly** via git or MCP when a feature branch +
