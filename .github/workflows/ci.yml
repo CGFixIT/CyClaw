@@ -124,6 +124,13 @@ jobs:
             tests/test_sync_cli.py \
             tests/test_sync_scheduler.py \
             tests/test_sync_selftest.py \
+            tests/test_agentic_config.py \
+            tests/test_agentic_cli.py \
+            tests/test_agentic_registry.py \
+            tests/test_agentic_isolation.py \
+            tests/test_agentic_selftest.py \
+            tests/test_agentic_writer.py \
+            tests/test_agentic_gh_client.py \
             -q --tb=short \
             --cov=gate \
             --cov=utils.sanitizer \
@@ -146,6 +153,7 @@ jobs:
             --cov=sync.filters \
             --cov=sync.cli \
             --cov=sync.scheduler \
+            --cov=agentic \
             --cov-report=xml \
             --cov-report=html \
             --cov-report=term-missing
