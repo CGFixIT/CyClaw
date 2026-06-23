@@ -187,3 +187,30 @@ class TestPersistence:
         assert rl.allow("203.0.113.10") is True
         assert rl.tracked_ips() == 1
         assert not list(tmp_path.glob("*.db")), "in-memory mode must not write a sqlite file"
+
+    def test_multiple_ips_each_persist_independently(self, tmp_path):
+        """Per-IP persistence regression guard. ``_persist`` writes only the IP
+        touched by the current ``allow()`` (O(1)) instead of rewriting the whole
+        map (O(N)). Each tracked IP must still have its own correctly-counted row
+        that survives a restart."""
+        import json
+        import sqlite3
+
+        db = tmp_path / "rl.db"
+        now = 1000.0
+        rl = RateLimiter(max_requests=2, window_seconds=60, clock=lambda: now, db_path=str(db))
+        assert rl.allow("1.1.1.1") is True
+        assert rl.allow("2.2.2.2") is True
+        assert rl.allow("1.1.1.1") is True   # 1.1.1.1 now at the limit (2 hits)
+
+        rows = dict(
+            sqlite3.connect(str(db)).execute("SELECT ip, timestamps FROM rate_hits").fetchall()
+        )
+        assert set(rows) == {"1.1.1.1", "2.2.2.2"}, "every touched IP gets its own row"
+        assert len(json.loads(rows["1.1.1.1"])) == 2
+        assert len(json.loads(rows["2.2.2.2"])) == 1
+
+        # State per IP survives a restart independently.
+        rl2 = RateLimiter(max_requests=2, window_seconds=60, clock=lambda: now, db_path=str(db))
+        assert rl2.allow("1.1.1.1") is False  # already at limit
+        assert rl2.allow("2.2.2.2") is True   # had room for one more
