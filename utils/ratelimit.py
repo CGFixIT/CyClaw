@@ -78,15 +78,22 @@ class RateLimiter:
                     self._hits[ip] = []
                 self._last_sweep = max(self._last_sweep, last_sweep or 0.0)
 
-    def _persist(self, now: float) -> None:
+    def _persist(self, client_ip: str, now: float) -> None:
+        """Persist a single IP's window to sqlite.
+
+        Caller must hold ``self._lock``. Only the IP touched by the current
+        ``allow()`` call is written — previously this rewrote the ENTIRE IP map
+        on every request, turning each request into O(N) row writes (N = tracked
+        IPs) plus a connection open/close. Under load that was severe write
+        amplification; one INSERT OR REPLACE for the touched IP is O(1).
+        """
         if not self._db_path:
             return
         with sqlite3.connect(self._db_path) as conn:
-            for ip, hits in list(self._hits.items()):
-                conn.execute(
-                    "INSERT OR REPLACE INTO rate_hits (ip, timestamps, last_sweep) VALUES (?, ?, ?)",
-                    (ip, json.dumps(hits), now),
-                )
+            conn.execute(
+                "INSERT OR REPLACE INTO rate_hits (ip, timestamps, last_sweep) VALUES (?, ?, ?)",
+                (client_ip, json.dumps(self._hits[client_ip]), now),
+            )
             conn.commit()
 
     def _sweep(self, now: float) -> None:
@@ -117,11 +124,11 @@ class RateLimiter:
             recent = [t for t in self._hits[client_ip] if now - t < self.window_seconds]
             if len(recent) >= self.max_requests:
                 self._hits[client_ip] = recent
-                self._persist(now)
+                self._persist(client_ip, now)
                 return False
             recent.append(now)
             self._hits[client_ip] = recent
-            self._persist(now)
+            self._persist(client_ip, now)
             return True
 
     def tracked_ips(self) -> int:
