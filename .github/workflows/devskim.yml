@@ -37,11 +37,18 @@ jobs:
         with:
           python-version: "3.12"
           cache: "pip"
-          cache-dependency-path: requirements.txt
+          cache-dependency-path: |
+            requirements.txt
+            constraints.txt
+            pyproject.toml
 
       - name: Install project dependencies (Poetry or requirements.txt)
         run: |
           python -m pip install --upgrade pip
+          # CyClaw quirk (CLAUDE.md § Dependency Notes): install CPU-only torch
+          # BEFORE requirements.txt, otherwise Linux pulls the multi-GB CUDA
+          # wheel. Mirrors ci.yml so DevSkim's import-resolution env matches CI.
+          pip install torch==2.6.0+cpu --index-url https://download.pytorch.org/whl/cpu
           if [ -f poetry.lock ]; then
             pip install poetry
             poetry install --no-root --no-interaction --no-ansi
