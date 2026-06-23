@@ -50,7 +50,7 @@ HTTP POST /query  (or MCP tool call)
 | `retrieval/embeddings.py` | Local CPU embedding service; `SentenceTransformer` with triple `lru_cache` (model, config, query) |
 | `retrieval/stemmer.py` | Enhanced Porter stemmer with AI/ML/CyClaw custom vocab; avoids NLTK punkt (CVE exposure) |
 | `llm/client.py` | `LocalLLMClient` (LM Studio) + `GrokClient` (xAI fallback) |
-| `utils/sanitizer.py` | 31-pattern prompt-injection filter; patterns in `config.yaml` |
+| `utils/sanitizer.py` | 33-pattern prompt-injection filter; patterns in `config.yaml` |
 | `utils/personality.py` | Soul versioning, SHA-256 drift detection, injection scan on write |
 | `utils/personality_db.py` | DB backend shim for soul versions; SQLite default, Postgres via `CYCLAW_DB_URL` env or `personality.database_url` config |
 | `utils/logger.py` | Audit JSONL; SHA-256 query hashing, PII redaction |
@@ -73,7 +73,7 @@ HTTP POST /query  (or MCP tool call)
 - `models.grok` — xAI fallback (disabled by default; requires `GROK_API_KEY` env var)
 - `indexing.chroma_path` / `indexing.bm25_path` — index storage paths
 - `retrieval.top_k_semantic` / `retrieval.top_k_keyword` / `retrieval.rrf_k` / `retrieval.min_score`
-- `policy.prompt_filter.banned_patterns` — 31 injection patterns (authoritative list)
+- `policy.prompt_filter.banned_patterns` — 33 injection patterns (authoritative list)
 - `policy.privacy` — PII redaction rules (emails, IPs, secrets, tokens)
 - `personality.soul_path` / `personality.db_path` — soul Markdown and SQLite DB paths
 - `personality.database_url` — optional Postgres DSN (overrides SQLite; also settable via `CYCLAW_DB_URL` env var)
@@ -331,7 +331,7 @@ GROK_API_KEY=dummy python tests/ci_rag_smoke.py
 - Coverage target: 80% (`pyproject.toml`); sources include `gate`, `graph`, `mcp_hybrid_server`, `metrics`, `llm`, `retrieval`, `utils`, `sync`, `agentic`.
 - `tests/conftest.py` provides shared fixtures: `test_config`, `mock_retriever`, `mock_llm`, `MockRetriever`, `MockLocalLLM`, `MockGrokClient`, `bm25_index`. No live services required — all external deps are mocked.
 
-**Test files (complete):** `test_gate`, `test_graph`, `test_hybrid_search`, `test_personality`, `test_personality_changes`, `test_sanitizer`, `test_audit`, `test_rate_limit`, `test_mcp_server`, `test_security`, `test_telemetry_kill`, `test_client`, `test_embeddings`, `test_health`, `test_indexer`, `test_metrics`, `test_rag_integration`, `test_stemmer`, `test_conftest_fixtures`, `test_agentic_cli`, `test_agentic_config`, `test_agentic_gh_client`, `test_agentic_registry`, `test_agentic_selftest`, `test_agentic_writer`, `test_agentic_isolation`, `test_sync_cli`, `test_sync_config`, `test_sync_filters`, `test_sync_runner`, `test_sync_scheduler`, `test_sync_selftest`.
+**Test files (complete):** `test_gate`, `test_graph`, `test_hybrid_search`, `test_personality`, `test_personality_changes`, `test_sanitizer`, `test_audit`, `test_rate_limit`, `test_mcp_server`, `test_security`, `test_telemetry_kill`, `test_client`, `test_embeddings`, `test_health`, `test_indexer`, `test_metrics`, `test_rag_integration`, `test_stemmer`, `test_conftest_fixtures`, `test_startup_robustness`, `test_agentic_cli`, `test_agentic_config`, `test_agentic_gh_client`, `test_agentic_registry`, `test_agentic_selftest`, `test_agentic_writer`, `test_agentic_isolation`, `test_sync_cli`, `test_sync_config`, `test_sync_filters`, `test_sync_runner`, `test_sync_scheduler`, `test_sync_selftest`.
 
 ---
 
@@ -368,6 +368,9 @@ Skills live at `.claude/skills/<name>/SKILL.md`. When a skill is not present in 
 | `/general-purpose` | agent | Multi-step codebase research and task completion |
 | `/code-explorer` | agent | Read-only codebase search and exploration |
 | `/next-action-suggestion` | agent | Suggest highest-value next action after a task completes |
+| `/python-coding-agent` | agent | Senior Python + CyClaw-stack expert; auto-loaded via the SessionStart hook |
+| `/session-title` | agent | Generate a concise, descriptive session title |
+| `/tool-summary` | agent | Summarize tools used and their outcomes in a session |
 
 ---
 
