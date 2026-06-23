@@ -1,16 +1,14 @@
 # Security Policy — CyClaw
 
-CyClaw is a production-grade local AI agent built on three invariants: RAG-first retrieval, LangGraph topology as security policy. Security is a top priority. This document describes how to report vulnerabilities, how we triage and respond, and what is in-scope for vulnerability reports.
+CyClaw is a production-grade local AI agent built on three invariants: RAG-first retrieval, LangGraph topology as security policy, and human-gated soul governance. Security is a top priority. This document describes how to report vulnerabilities, how we triage and respond, and what is in-scope for vulnerability reports.
 
 ---
 
 ## Contact — reporting a vulnerability
 
-Preferred secure channels (choose one or more):
-- GitHub Security Advisories: https://github.com/CGFixIT/CyClaw/security/advisories (recommended)
-- Email: [contact@cgfixit.com] 
-  - If you send email, please encrypt with our PGP key: [PGP KEY FINGERPRINT or URL]. (Replace with actual fingerprint or remove if not used.)
-- If neither is available, open a private repository issue titled "SECURITY: <short description>" and mark it private (do not include secrets).
+Preferred secure channel:
+- GitHub Security Advisories: https://github.com/CGFixIT/CyClaw/security/advisories (recommended) — this provides a private, encrypted channel to the maintainers.
+- If that is unavailable to you, open a private repository issue titled "SECURITY: <short description>" and mark it private (do not include secrets).
 
 Do NOT post vulnerabilities publicly (e.g., regular issues, public Twitter threads) before a coordinated disclosure. See the Disclosure and Timeline section below.
 
@@ -116,7 +114,7 @@ We appreciate security research. Please follow responsible disclosure and avoid 
 
 ## Reporting checklist (quick)
 
-1. Prefer GitHub Security Advisory or email (PGP encrypted if available).
+1. Prefer a private GitHub Security Advisory (or a private repo issue if unavailable).
 2. Provide reproduction steps, environment, git SHA, and a safe PoC.
 3. Avoid including real secrets.
 4. Expect an acknowledgement within 3 business days.
