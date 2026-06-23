@@ -25,7 +25,7 @@ TEST_CONFIG = {
                       "model": "test-model", "max_tokens": 256, "temperature": 0.1, "timeout_sec": 10},
         "embeddings": {"provider": "sentence-transformers", "model": "all-MiniLM-L6-v2",
                        "dim": 384, "cache_dir": None},
-        "grok": {"enabled": False, "base_url": "https://api.x.ai/v1", "model": "grok-4",
+        "grok": {"enabled": False, "base_url": "https://api.x.ai/v1", "model": "grok-4.3",
                  "timeout_sec": 10, "max_tokens": 256, "temperature": 0.2}
     },
     "corpus": {"path": "data/corpus", "extensions": [".md", ".txt"]},
