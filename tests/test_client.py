@@ -39,7 +39,7 @@ def _write_config(tmp_path, retry: dict = None) -> str:
     }
     grok = {
         "base_url": "https://api.x.ai/v1",
-        "model": "grok-4",
+        "model": "grok-4.3",
         "max_tokens": 256,
         "temperature": 0.2,
         "timeout_sec": 5,
