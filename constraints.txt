@@ -35,3 +35,7 @@ torch==2.6.0+cpu
 # Test optional-dependencies (for CI / dev)
 pytest==9.1.0
 pytest-asyncio==1.4.0
+# pytest-cov is declared in pyproject [project.optional-dependencies].{dev,full} but
+# was unpinned here, so coverage tooling floated to whatever the resolver picked —
+# defeating the reproducibility this file exists for. Pin it alongside its siblings.
+pytest-cov==7.1.0
