@@ -141,7 +141,7 @@ class SkillRegistry:
 
     # NEW: governance_score for agentic visibility and verification-specialist
     def governance_score(self, name: str) -> int:
-        """Return 0-100 governance score for a registered skill.
+        """Return 0-100 governance score for a *registered* skill.
 
         Higher = better governed (low injection risk, good structure).
         Used by agentic tools and verification-specialist skill.
@@ -149,16 +149,26 @@ class SkillRegistry:
         skill = self.get_skill(name)
         if not skill:
             return 0
-        canonical = self._canonical(skill)
+        return self._score_spec(skill)
+
+    def _score_spec(self, spec: dict) -> int:
+        """Score an arbitrary skill spec (stored OR proposed) on the 0-100 scale.
+
+        Factored out of :meth:`governance_score` so :meth:`propose_skill` can
+        score the *proposed* body a human is about to apply, rather than the
+        version already on disk — which is 0 for a brand-new skill and the
+        stale body for an update.
+        """
+        canonical = self._canonical(spec)
         flags = self._scan_injection(canonical)
         # Heavy penalty for injection patterns (core invariant)
         penalty = min(len(flags) * 25, 80)
         score = 100 - penalty
         # Bonus for decent description (helps human review)
-        if skill.get("description") and len(skill.get("description", "")) > 30:
+        if spec.get("description") and len(spec.get("description", "")) > 30:
             score += 8
         # Bonus for non-trivial body
-        if skill.get("body") and len(skill.get("body", "")) > 100:
+        if spec.get("body") and len(spec.get("body", "")) > 100:
             score += 5
         return max(0, min(100, int(score)))
 
@@ -189,7 +199,11 @@ class SkillRegistry:
             "reason": reason,
             "proposed_sha": self._sha256(canonical),
             "is_update": bool(existing),
-            "governance_score": self.governance_score(spec["name"]) if existing else 0,
+            # Score the PROPOSED spec (what the human is about to apply), not the
+            # version on disk. The old form returned the stored skill's score for
+            # an update (stale body) and a hardcoded 0 for a brand-new skill,
+            # making the preview's governance signal misleading.
+            "governance_score": self._score_spec(spec),
         }
 
     def apply_skill(self, spec: dict, reason: str, *, scan: bool = True) -> dict:
