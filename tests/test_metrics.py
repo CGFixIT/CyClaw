@@ -72,6 +72,24 @@ class TestPrintMetrics:
         # The MCP events must NOT fall through to the "unknown" bucket.
         assert "unknown" not in out
 
+    def test_model_used_and_online_escalations_are_printed(self, tmp_path, capsys):
+        """compute_metrics() aggregates model_used + online_escalated (both shown
+        at GET /audit/summary); the CLI must surface them, not drop them."""
+        events = [
+            {"event": "rag_query", "model_used": "qwen", "top_score": 0.40,
+             "retrieval_mode": "hybrid", "online_escalated": False},
+            {"event": "rag_query", "model_used": "grok-4.3", "top_score": 0.30,
+             "retrieval_mode": "hybrid", "online_escalated": True},
+        ]
+        audit_file = _write_audit(tmp_path, events)
+        config_path = _write_config(tmp_path, audit_file)
+        print_metrics(config_path)
+        out = capsys.readouterr().out
+        assert "Model used:" in out
+        assert "qwen: 1" in out
+        assert "grok-4.3: 1" in out
+        assert "Online escalations (external LLM): 1" in out
+
     def test_score_stats_span_both_event_types(self, tmp_path, capsys):
         events = [
             {"event": "rag_query", "top_score": 0.40, "retrieval_mode": "hybrid"},

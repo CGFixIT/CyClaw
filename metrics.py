@@ -104,6 +104,7 @@ def print_metrics(config_path: str = "config.yaml"):
     for event, count in summary["event_breakdown"].items():
         print(f"  {event}: {count}")
     if summary["rag_query_count"]:
+        print(f"\nRAG queries: {summary['rag_query_count']}")
         s = summary["scores"]
         if s["avg"] is not None:
             print(f"\nRAG scores — avg: {s['avg']:.3f}, min: {s['min']:.3f}, max: {s['max']:.3f}")
@@ -111,6 +112,15 @@ def print_metrics(config_path: str = "config.yaml"):
             print("\nRetrieval modes:")
             for mode, count in summary["retrieval_modes"].items():
                 print(f"  {mode}: {count}")
+        # model_used and online_escalated are computed by compute_metrics() and
+        # surfaced at GET /audit/summary, but the CLI dropped them on the floor.
+        # Print them so `cyclaw-metrics` shows which model answered and how many
+        # queries escalated to the external (paid) LLM.
+        if summary["model_used"]:
+            print("\nModel used:")
+            for model, count in summary["model_used"].items():
+                print(f"  {model}: {count}")
+        print(f"\nOnline escalations (external LLM): {summary['online_escalated']}")
 
 def main() -> None:
     """Console entry point for ``cyclaw-metrics`` (see pyproject [project.scripts]).
