@@ -102,6 +102,7 @@ jobs:
           pytest \
             tests/test_sanitizer.py \
             tests/test_security.py \
+            tests/test_config_validation.py \
             tests/test_rate_limit.py \
             tests/test_audit.py \
             tests/test_client.py \
@@ -136,6 +137,7 @@ jobs:
             -q --tb=short \
             --cov=gate \
             --cov=utils.sanitizer \
+            --cov=utils.config_validation \
             --cov=utils.errors \
             --cov=utils.logger \
             --cov=utils.personality \

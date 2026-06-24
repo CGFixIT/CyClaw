@@ -117,6 +117,7 @@ def require_api_key(
 # api.rate_limit.persist_path (e.g. "data/rate_limits.db") to make counters
 # survive restarts; leaving it null preserves the original in-memory behavior.
 from fastapi import Request
+from utils.config_validation import validate_retrieval_config
 from utils.ratelimit import RateLimiter
 
 # Load config.yaml ONCE here, anchored to _BASE_DIR rather than the cwd. The
@@ -127,6 +128,11 @@ from utils.ratelimit import RateLimiter
 # prevent — and the second read was pure startup overhead. One read, reused.
 with open(_BASE_DIR / "config.yaml", encoding="utf-8") as _cfg_f:
     cfg = yaml.safe_load(_cfg_f) or {}
+# Fail fast on an out-of-range retrieval tunable (e.g. min_score > 1 silently
+# forces every query to user_gate; top_k <= 0 breaks retrieval). Without this the
+# error would surface as silent mis-routing or a crash deep in a request instead
+# of a clear ConfigError at boot.
+validate_retrieval_config(cfg)
 _rl_cfg = ((cfg.get("api", {}) or {}).get("rate_limit", {})) or {}
 RATE_LIMIT_REQUESTS = _rl_cfg.get("max_requests", 60)
 RATE_LIMIT_WINDOW = _rl_cfg.get("window_seconds", 60)  # seconds
