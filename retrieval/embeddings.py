@@ -60,8 +60,22 @@ def get_embedding(text: str, config_path: str = "config.yaml") -> List[float]:
     return list(_cached_embedding(text, config_path))
 
 def reset_embedding_cache() -> None:
-    """Clear the memoized query-embedding cache (e.g. after a model swap)."""
-    _cached_embedding.cache_clear()
+    """Clear ALL embedding caches so a config/model swap takes full effect.
+
+    A model swap edits ``models.embeddings`` in config.yaml, so clearing only the
+    query-embedding memo (``_cached_embedding``) is not enough: the parsed config
+    (``_embeddings_cfg``) and the loaded SentenceTransformer (``_load_model``) are
+    independently cached and would keep serving the OLD model name and weights —
+    silently defeating the swap. Clear all three together so the next call
+    reloads from the current config.
+
+    ``cache_clear`` is resolved defensively because tests monkeypatch
+    ``_load_model`` with a plain callable that has no ``cache_clear`` attribute.
+    """
+    for cache in (_cached_embedding, _embeddings_cfg, _load_model):
+        clear = getattr(cache, "cache_clear", None)
+        if clear is not None:
+            clear()
 
 def get_embeddings_batch(texts: List[str], config_path: str = "config.yaml") -> List[List[float]]:
     model_name, cache_dir = _embeddings_cfg(config_path)

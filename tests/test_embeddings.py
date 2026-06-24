@@ -90,6 +90,28 @@ class TestResetCache:
         # After a cache clear the same query must re-run the model.
         assert fake_model.calls == 2
 
+    def test_reset_clears_config_and_query_caches(self, tmp_path, fake_model):
+        # Populate both the query memo and the per-path config cache.
+        cfg_path = _write_cfg(tmp_path)
+        embeddings.get_embedding("hello", cfg_path)
+        assert embeddings._cached_embedding.cache_info().currsize > 0
+        assert embeddings._embeddings_cfg.cache_info().currsize > 0
+        embeddings.reset_embedding_cache()
+        # ALL caches must be empty — not just the query memo.
+        assert embeddings._cached_embedding.cache_info().currsize == 0
+        assert embeddings._embeddings_cfg.cache_info().currsize == 0
+
+    def test_reset_picks_up_swapped_model(self, tmp_path):
+        # A model swap rewrites models.embeddings in the SAME config path.
+        cfg_path = _write_cfg(tmp_path, model="model-a")
+        assert embeddings._embeddings_cfg(cfg_path)[0] == "model-a"
+        _write_cfg(tmp_path, model="model-b")
+        # Still stale until the caches are reset (the bug this fix closes:
+        # clearing only _cached_embedding left _embeddings_cfg serving model-a).
+        assert embeddings._embeddings_cfg(cfg_path)[0] == "model-a"
+        embeddings.reset_embedding_cache()
+        assert embeddings._embeddings_cfg(cfg_path)[0] == "model-b"
+
 
 class TestEmbeddingsCfg:
     def test_reads_model_and_cache_dir(self, tmp_path):
