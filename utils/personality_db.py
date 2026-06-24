@@ -1,19 +1,27 @@
 """Database backend shim for PersonalityManager.
 
-Returns (conn, placeholder) where placeholder is '?' for SQLite or '%s' for Postgres.
-Switch to Postgres by setting CYCLAW_DB_URL or personality.database_url in config.yaml
-to a postgresql:// DSN. Default is SQLite (zero-config, local-first).
+Returns ``(conn, placeholder, backend)`` where ``placeholder`` is '?' for SQLite
+or '%s' for Postgres and ``backend`` is the string 'sqlite' or 'postgres' (used
+to pick the right DDL via :func:`ddl_soul_versions` / :func:`ddl_interactions`).
+Switch to Postgres by setting CYCLAW_DB_URL or personality.database_url in
+config.yaml to a postgresql:// DSN. Default is SQLite (zero-config, local-first).
 """
+
+from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import Any
 
 
-def connect(db_path: Path, pers_cfg: dict):
-    """Open a DB connection and return (conn, placeholder_char).
+def connect(db_path: Path, pers_cfg: dict) -> tuple[Any, str, str]:
+    """Open a DB connection and return ``(conn, placeholder_char, backend_name)``.
 
     Postgres: set CYCLAW_DB_URL=postgresql://user:pass@host/dbname
     SQLite:   default, uses db_path resolved from config.
+
+    ``conn`` is a ``sqlite3.Connection`` or a ``psycopg.Connection`` (typed
+    ``Any`` so importing psycopg stays optional for SQLite-only installs).
     """
     dsn = os.environ.get("CYCLAW_DB_URL") or pers_cfg.get("database_url") or ""
     if dsn.startswith("postgresql") or dsn.startswith("postgres"):
