@@ -150,10 +150,20 @@ class MockLocalLLM:
 
 
 class MockGrokClient:
-    """Stand-in for GrokClient; records the last prompt it was given."""
-    def __init__(self, response="This is a test answer from Grok."):
+    """Stand-in for GrokClient; records the last prompt it was given.
+
+    ``available`` mirrors the real ``GrokClient.is_available()`` (True when a
+    ``GROK_API_KEY`` is present). It defaults to True so existing routing tests
+    still reach grok_fallback; set ``available=False`` to simulate Grok enabled
+    in config but with no API key.
+    """
+    def __init__(self, response="This is a test answer from Grok.", available=True):
         self.response = response
         self.last_prompt = None
+        self._available = available
+
+    def is_available(self):
+        return self._available
 
     def generate(self, prompt):
         self.last_prompt = prompt

@@ -234,11 +234,16 @@ except IndexNotFoundError as e:
     print("Run: python -m retrieval.indexer", file=sys.stderr)
     retriever = None
 
-local_llm = LocalLLMClient()
+# Pass the already-parsed cfg dict into both clients rather than letting them
+# re-open a *relative* "config.yaml" (their default when cfg is None). That
+# relative read is cwd-dependent and crashes at import when gate.py is launched
+# from a non-repo-root cwd — the same fragility _BASE_DIR / the single-read above
+# exist to prevent. LocalLLMClient is always built, so this hardens every mode.
+local_llm = LocalLLMClient(cfg=cfg)
 
 grok = None
 if cfg["app"]["mode"] == "hybrid" and cfg["models"]["grok"].get("enabled", False):
-    grok = GrokClient()
+    grok = GrokClient(cfg=cfg)
 
 personality = None
 if cfg.get("personality", {}).get("enabled", False):

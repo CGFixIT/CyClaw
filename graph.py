@@ -425,6 +425,12 @@ def user_gate_router(state: GraphState, grok: Optional[GrokClient] = None) -> Li
     ``grok_fallback`` regardless of mode; the node's ``grok is None`` guard then
     returned a "[Grok unavailable: offline mode]" stub, a dead-end that wasted
     the confirmation round-trip and produced no actual answer.
+
+    A client can exist yet be unusable: Grok enabled in config but ``GROK_API_KEY``
+    unset (``grok.is_available()`` is False). Routing such a query to
+    ``grok_fallback`` only yields a "[Grok Error: GROK_API_KEY not set]" string,
+    so we treat an unavailable client like ``None`` and fall back to a real local
+    answer instead.
     """
     confirmed = state.get("user_confirmed_online")
 
@@ -432,8 +438,9 @@ def user_gate_router(state: GraphState, grok: Optional[GrokClient] = None) -> Li
         # Pause state — gate.py will return 202 and await /confirm
         return "audit_logger"
 
-    # Confirmed AND Grok available (hybrid mode) → Grok; otherwise local best effort.
-    if confirmed and grok is not None:
+    # Confirmed AND Grok present AND actually usable (has API key) → Grok;
+    # otherwise local best effort.
+    if confirmed and grok is not None and grok.is_available():
         return "grok_fallback"
     else:
         return "offline_best_effort"

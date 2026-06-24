@@ -147,6 +147,27 @@ class TestGrokFallbackPath:
         assert "Best effort offline answer." in result["answer"]
         assert "Grok unavailable" not in result["answer"]
 
+    def test_confirmed_but_grok_unavailable_routes_to_offline(self, tmp_path):
+        # Grok enabled in config so a client IS built, but GROK_API_KEY is unset
+        # (is_available() is False). A confirmed query must degrade to a real
+        # local answer rather than routing to grok_fallback and surfacing a
+        # "[Grok Error: GROK_API_KEY not set]" string.
+        cfg = _make_cfg(tmp_path, mode="hybrid", grok_enabled=True)
+        retriever = MockRetriever(MOCK_LOW_SCORE_RESULTS)
+        llm = MockLocalLLM(response="Local fallback when key missing.")
+        grok = MockGrokClient(available=False)
+
+        graph = build_graph(retriever=retriever, llm=llm, grok=grok, cfg=cfg)
+        result = graph.invoke({
+            "query": "Explain quantum physics basics",
+            "user_confirmed_online": True
+        })
+
+        assert result["answer_model"] == "offline-best-effort"
+        assert "Local fallback when key missing." in result["answer"]
+        # Grok must not have been called at all.
+        assert grok.last_prompt is None
+
 
 class TestOfflineBestEffortPath:
     """Path 4: Low score -> user declines -> offline_best_effort"""
