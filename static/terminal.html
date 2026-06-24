@@ -577,6 +577,39 @@
     max-height: 220px;
     overflow: auto;
   }
+  /* ── AGENTIC 4-GATE CHECKLIST (Sync/Agentic panels reuse all soul classes) ── */
+  .gate-checklist {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-muted);
+    border-left: 2px solid var(--border);
+    padding: 4px 0 4px 10px;
+  }
+  .gate-row.ok { color: var(--accent-green); }
+  .gate-row.bad { color: var(--accent-amber); }
+  .gate-confirm-label {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    cursor: pointer;
+  }
+  .soul-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    border-color: var(--border);
+    color: var(--text-muted);
+  }
+  .soul-btn:disabled:hover {
+    color: var(--text-muted);
+    border-color: var(--border);
+    background: transparent;
+  }
 </style>
 </head>
 <body>
@@ -602,7 +635,9 @@
 <div class="main">
   <div class="soul-toolbar">
     <button class="toolbar-btn" id="soulToggleBtn" onclick="toggleSoulPanel()">Soul Console</button>
-    <span class="toolbar-hint">view, reload, propose, and apply the personality layer</span>
+    <button class="toolbar-btn" id="syncToggleBtn" onclick="toggleSyncPanel()">Sync Console</button>
+    <button class="toolbar-btn" id="agenticToggleBtn" onclick="toggleAgenticPanel()">Agentic Console</button>
+    <span class="toolbar-hint">soul · corpus sync · agentic ops — all loopback, audited, API-key gated</span>
     <input id="apiKeyInput" type="password" placeholder="API key (optional)"
            style="margin-left:auto;background:var(--bg-input);border:1px solid var(--border);
            border-radius:var(--radius);padding:4px 8px;font-family:var(--mono);font-size:10px;
@@ -631,6 +666,79 @@
       <div class="proposal-meta" id="proposalMeta"></div>
       <div class="proposal-warning" id="proposalWarning"></div>
       <pre class="proposal-preview" id="proposalPreview"></pre>
+    </div>
+  </div>
+
+  <!-- SYNC CONSOLE — drives the out-of-band sync/ CLI via POST /ops/sync -->
+  <div class="soul-panel" id="syncPanel">
+    <div class="soul-header">
+      <div class="soul-title">Sync Console</div>
+      <div class="soul-meta">
+        <span id="syncEnabled">enabled: --</span>
+        <span id="syncDirection">direction: --</span>
+        <span id="syncSchedule">schedule: --</span>
+        <span id="syncBadge">last: never</span>
+      </div>
+    </div>
+    <div class="soul-actions">
+      <button class="soul-btn" onclick="syncStatusCmd()">Status</button>
+      <button class="soul-btn" onclick="syncDryRun()">Dry-Run</button>
+      <button class="soul-btn apply" onclick="syncPull()">Pull Now</button>
+      <button class="soul-btn" onclick="syncScheduleOn()">Schedule On</button>
+      <button class="soul-btn" onclick="syncScheduleOff()">Schedule Off</button>
+    </div>
+    <div class="soul-status" id="syncStatus"></div>
+    <div class="proposal-box" id="syncBox">
+      <div class="proposal-meta" id="syncMeta"></div>
+      <div class="proposal-warning" id="syncWarning"></div>
+      <pre class="proposal-preview" id="syncPreview"></pre>
+    </div>
+  </div>
+
+  <!-- AGENTIC CONSOLE — drives the out-of-band agentic/ CLI via POST /ops/agentic -->
+  <div class="soul-panel" id="agenticPanel">
+    <div class="soul-header">
+      <div class="soul-title">Agentic Console</div>
+      <div class="soul-meta">
+        <span id="agenticEnabled">enabled: --</span>
+        <span id="agenticMode">mode: --</span>
+        <span id="agenticWrites">writes_enabled: --</span>
+      </div>
+    </div>
+    <div class="soul-actions">
+      <input class="soul-reason" id="agenticNum" type="text" inputmode="numeric"
+             placeholder="PR / Issue # (for Fetch Context)" style="max-width:260px;">
+      <button class="soul-btn" onclick="agenticContextPR()">Fetch PR</button>
+      <button class="soul-btn" onclick="agenticContextIssue()">Fetch Issue</button>
+      <button class="soul-btn" onclick="agenticStatusCmd()">Status</button>
+      <button class="soul-btn" onclick="agenticRegistryHealth()">Registry Health</button>
+    </div>
+    <input class="soul-reason" id="agenticName" type="text" placeholder="skill name (for propose / apply)">
+    <input class="soul-reason" id="agenticDesc" type="text" placeholder="skill description">
+    <textarea class="soul-editor" id="agenticBody" placeholder="skill body (markdown)..." style="min-height:120px;"></textarea>
+    <input class="soul-reason" id="agenticReason" type="text" oninput="refreshAgenticGates()"
+           placeholder="reason for change (required to apply a skill)">
+    <div class="soul-actions">
+      <button class="soul-btn" onclick="agenticPropose()">Propose Skill</button>
+      <label class="gate-confirm-label"><input type="checkbox" id="agenticConfirm" onchange="refreshAgenticGates()"> --confirm</label>
+      <button class="soul-btn apply" id="agenticApplyBtn" onclick="agenticApply()" disabled>Apply Skill (writes disabled)</button>
+    </div>
+    <!-- 4-gate checklist: Apply stays disabled until all four show ✓. Gates 1-2
+         (mode=write, writes_enabled) come from the route's config block; gates 3-4
+         (reason, --confirm) from the inputs above. This is a UI governance overlay:
+         with the shipped defaults (writes_enabled:false) the Apply button is disabled,
+         so no skills-registry write can be triggered from the console at all. -->
+    <div class="gate-checklist" id="agenticGates">
+      <div class="gate-row bad" id="gateMode">✗ mode = write</div>
+      <div class="gate-row bad" id="gateWrites">✗ writes_enabled = true</div>
+      <div class="gate-row bad" id="gateReason">✗ reason non-empty</div>
+      <div class="gate-row bad" id="gateConfirm">✗ --confirm checked</div>
+    </div>
+    <div class="soul-status" id="agenticStatus"></div>
+    <div class="proposal-box" id="agenticBox">
+      <div class="proposal-meta" id="agenticMeta"></div>
+      <div class="proposal-warning" id="agenticWarning"></div>
+      <pre class="proposal-preview" id="agenticPreview"></pre>
     </div>
   </div>
 
@@ -687,6 +795,24 @@ const proposalMeta = document.getElementById('proposalMeta');
 const proposalWarning = document.getElementById('proposalWarning');
 const proposalPreview = document.getElementById('proposalPreview');
 const soulToggleBtn = document.getElementById('soulToggleBtn');
+
+// Sync + Agentic console refs (mirror the soul console ref/element naming).
+const syncPanel = document.getElementById('syncPanel');
+const syncStatus = document.getElementById('syncStatus');
+const syncBox = document.getElementById('syncBox');
+const syncMeta = document.getElementById('syncMeta');
+const syncWarning = document.getElementById('syncWarning');
+const syncPreview = document.getElementById('syncPreview');
+const syncToggleBtn = document.getElementById('syncToggleBtn');
+const agenticPanel = document.getElementById('agenticPanel');
+const agenticStatus = document.getElementById('agenticStatus');
+const agenticBox = document.getElementById('agenticBox');
+const agenticMeta = document.getElementById('agenticMeta');
+const agenticWarning = document.getElementById('agenticWarning');
+const agenticPreview = document.getElementById('agenticPreview');
+const agenticToggleBtn = document.getElementById('agenticToggleBtn');
+const agenticConfirm = document.getElementById('agenticConfirm');
+const agenticApplyBtn = document.getElementById('agenticApplyBtn');
 
 let queryCount = 0;
 let pendingConfirmQuery = null;
@@ -1063,6 +1189,211 @@ async function restoreSoul() {
   } catch (e) {
     setSoulStatus(e.message, 'error');
   }
+}
+
+// ============================================================================
+// SYNC + AGENTIC OPS CONSOLES
+// Same async/fetch/status idiom as the Soul Console. Both POST to /ops/* with
+// the API key from authHeaders(); both render the exit-code envelope so failure
+// states (safety-fuse abort, env/config error, write refused) are explicit.
+// ============================================================================
+
+// Shared POST helper. The route returns HTTP 200 even when the CLI exits
+// non-zero (the exit code lives in the JSON envelope); only gateway-level
+// problems (401/422/400/429/500) trip the !resp.ok branch.
+async function callOps(path, body) {
+  const resp = await fetch(`${API}${path}`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify(body)
+  });
+  const data = await resp.json().catch(() => ({}));
+  if (!resp.ok) {
+    throw new Error(extractErrorMessage(data, 'Ops request failed'));
+  }
+  return data;
+}
+
+// Render the exit-code envelope into a soul-style proposal box.
+function renderOps(box, meta, warning, preview, data) {
+  meta.textContent = `action: ${data.action} · exit: ${data.exit_code} (${data.label}) · ${data.ok ? 'OK' : 'FAILED'}`;
+  const err = (data.stderr || '').trim();
+  warning.textContent = err ? `stderr: ${err.slice(0, 600)}` : '';
+  let bodyText = '';
+  if (data.parsed) {
+    bodyText = JSON.stringify(data.parsed, null, 2);
+  } else {
+    bodyText = (data.stdout || '').trim();
+  }
+  preview.textContent = bodyText || '(no output)';
+  box.style.display = 'block';
+}
+
+// ---- Sync Console ----------------------------------------------------------
+
+function setSyncStatus(message, tone = '') {
+  syncStatus.textContent = message || '';
+  syncStatus.className = `soul-status${tone ? ` ${tone}` : ''}`;
+}
+
+function syncLabelMsg(data) {
+  switch (data.exit_code) {
+    case 0:  return 'OK';
+    case 10: return 'OK — corpus changed; reindex needed (python -m retrieval.indexer)';
+    case 1:  return 'SAFETY FUSE TRIPPED (max-delete / max-transfer abort)';
+    case 2:  return 'operation failed';
+    case 3:  return 'env/config error (rclone missing/too old, or config invalid)';
+    default: return `exit ${data.exit_code}`;
+  }
+}
+
+function applySyncConfig(config) {
+  if (!config) return;
+  document.getElementById('syncEnabled').textContent = `enabled: ${config.enabled}`;
+  document.getElementById('syncDirection').textContent = `direction: ${config.direction}`;
+  document.getElementById('syncSchedule').textContent = `schedule: ${config.schedule}`;
+}
+
+async function runSync(action, opts = {}) {
+  setSyncStatus(`Running sync ${action}...`);
+  try {
+    const data = await callOps('/ops/sync', { action, ...opts });
+    applySyncConfig(data.config);
+    renderOps(syncBox, syncMeta, syncWarning, syncPreview, data);
+    setSyncStatus(`[${action}] ${syncLabelMsg(data)}`, data.ok ? 'success' : 'error');
+    document.getElementById('syncBadge').textContent = `last: ${action} → ${data.label}`;
+    addEntry('system', '', `→ ops/sync ${action} exit ${data.exit_code} (${data.label})`);
+  } catch (e) {
+    setSyncStatus(e.message, 'error');
+  }
+}
+
+function syncStatusCmd()  { return runSync('status'); }
+function syncDryRun()     { return runSync('sync', { dry_run: true }); }
+function syncPull()       { return runSync('sync', { dry_run: false }); }
+function syncScheduleOn() { return runSync('schedule'); }
+function syncScheduleOff(){ return runSync('unschedule'); }
+
+let syncLoaded = false;
+async function toggleSyncPanel() {
+  syncPanel.classList.toggle('open');
+  const open = syncPanel.classList.contains('open');
+  syncToggleBtn.textContent = open ? 'Hide Sync' : 'Sync Console';
+  // Lazy first status read only when a key is already present (all ops need auth).
+  if (open && !syncLoaded && apiKeyInput.value.trim()) { syncLoaded = true; await runSync('status'); }
+}
+
+// ---- Agentic Console -------------------------------------------------------
+
+let agenticConfig = { enabled: false, mode: 'read', writes_enabled: false };
+
+function setAgenticStatus(message, tone = '') {
+  agenticStatus.textContent = message || '';
+  agenticStatus.className = `soul-status${tone ? ` ${tone}` : ''}`;
+}
+
+function agenticLabelMsg(data) {
+  switch (data.exit_code) {
+    case 0:  return 'OK';
+    case 2:  return 'operation failed';
+    case 3:  return 'env/config error (gh missing/too old, or config invalid)';
+    case 4:  return 'WRITE REFUSED by gate';
+    default: return `exit ${data.exit_code}`;
+  }
+}
+
+function setGate(id, ok, label) {
+  const el = document.getElementById(id);
+  el.textContent = `${ok ? '✓' : '✗'} ${label}`;
+  el.className = `gate-row ${ok ? 'ok' : 'bad'}`;
+}
+
+// The 4-gate checklist. Apply stays disabled until all four pass. Gates 1-2 are
+// config-driven (mode=write + writes_enabled), so with the shipped defaults
+// (mode=read, writes_enabled=false) the Apply button is disabled and cannot fire a
+// skills-registry write from the console. This is a UI governance overlay on top of
+// the registry's own gate (reason + injection scan + --confirm) — strictly stricter,
+// never weaker. (GitHub writes are separate and stay stubbed in agentic/writer.py.)
+function refreshAgenticGates() {
+  const reasonOk  = document.getElementById('agenticReason').value.trim().length > 0;
+  const confirmOk = agenticConfirm.checked;
+  const modeOk    = agenticConfig.mode === 'write';
+  const writesOk  = agenticConfig.writes_enabled === true;
+  setGate('gateMode', modeOk, 'mode = write');
+  setGate('gateWrites', writesOk, 'writes_enabled = true');
+  setGate('gateReason', reasonOk, 'reason non-empty');
+  setGate('gateConfirm', confirmOk, '--confirm checked');
+  const allOk = modeOk && writesOk && reasonOk && confirmOk;
+  agenticApplyBtn.disabled = !allOk;
+  agenticApplyBtn.textContent = allOk
+    ? 'Apply Skill (confirm write)'
+    : (writesOk ? 'Apply Skill' : 'Apply Skill (writes disabled)');
+}
+
+function applyAgenticConfig(config) {
+  if (!config) return;
+  agenticConfig = config;
+  document.getElementById('agenticEnabled').textContent = `enabled: ${config.enabled}`;
+  document.getElementById('agenticMode').textContent = `mode: ${config.mode}`;
+  document.getElementById('agenticWrites').textContent = `writes_enabled: ${config.writes_enabled}`;
+  refreshAgenticGates();
+}
+
+async function runAgentic(action, opts = {}) {
+  setAgenticStatus(`Running agentic ${action}...`);
+  try {
+    const data = await callOps('/ops/agentic', { action, ...opts });
+    applyAgenticConfig(data.config);
+    renderOps(agenticBox, agenticMeta, agenticWarning, agenticPreview, data);
+    let extra = '';
+    if (data.parsed && typeof data.parsed.governance_score === 'number') {
+      extra = ` · governance_score: ${data.parsed.governance_score}/100`;
+    }
+    setAgenticStatus(`[${action}] ${agenticLabelMsg(data)}${extra}`, data.ok ? 'success' : 'error');
+    addEntry('system', '', `→ ops/agentic ${action} exit ${data.exit_code} (${data.label})`);
+  } catch (e) {
+    setAgenticStatus(e.message, 'error');
+  }
+}
+
+function agenticStatusCmd()    { return runAgentic('status'); }
+function agenticRegistryHealth(){ return runAgentic('status'); }  // status carries registry_version + skills
+
+function agenticContextPR() {
+  const n = parseInt(document.getElementById('agenticNum').value, 10);
+  if (Number.isNaN(n)) { setAgenticStatus('Enter a PR number first.', 'error'); return; }
+  return runAgentic('context', { pr: n });
+}
+function agenticContextIssue() {
+  const n = parseInt(document.getElementById('agenticNum').value, 10);
+  if (Number.isNaN(n)) { setAgenticStatus('Enter an issue number first.', 'error'); return; }
+  return runAgentic('context', { issue: n });
+}
+function agenticPropose() {
+  const name = document.getElementById('agenticName').value.trim();
+  const desc = document.getElementById('agenticDesc').value.trim();
+  const body = document.getElementById('agenticBody').value;
+  const reason = document.getElementById('agenticReason').value.trim();
+  if (!name || !desc) { setAgenticStatus('Skill name and description are required.', 'error'); return; }
+  return runAgentic('propose-skill', { name, desc, body: body || null, reason: reason || null });
+}
+function agenticApply() {
+  const name = document.getElementById('agenticName').value.trim();
+  const desc = document.getElementById('agenticDesc').value.trim();
+  const body = document.getElementById('agenticBody').value;
+  const reason = document.getElementById('agenticReason').value.trim();
+  if (!name || !desc) { setAgenticStatus('Skill name and description are required.', 'error'); return; }
+  if (!reason) { setAgenticStatus('A non-empty reason is required to apply.', 'error'); return; }
+  return runAgentic('apply-skill', { name, desc, body: body || null, reason, confirm: agenticConfirm.checked });
+}
+
+let agenticLoaded = false;
+async function toggleAgenticPanel() {
+  agenticPanel.classList.toggle('open');
+  const open = agenticPanel.classList.contains('open');
+  agenticToggleBtn.textContent = open ? 'Hide Agentic' : 'Agentic Console';
+  if (open) refreshAgenticGates();
+  if (open && !agenticLoaded && apiKeyInput.value.trim()) { agenticLoaded = true; await runAgentic('status'); }
 }
 
 function escHtml(str) {
