@@ -119,8 +119,15 @@ def require_api_key(
 from fastapi import Request
 from utils.ratelimit import RateLimiter
 
-with open("config.yaml", encoding="utf-8") as _rl_f:
-    _rl_cfg = ((yaml.safe_load(_rl_f) or {}).get("api", {}) or {}).get("rate_limit", {}) or {}
+# Load config.yaml ONCE here, anchored to _BASE_DIR rather than the cwd. The
+# previous code opened a *relative* "config.yaml" for the rate-limit settings and
+# then re-opened (and re-parsed) the same file via _BASE_DIR for app init below.
+# The relative open crashes when gate.py is launched from a non-repo-root cwd
+# (e.g. double-clicked on Windows) — the very failure mode _BASE_DIR exists to
+# prevent — and the second read was pure startup overhead. One read, reused.
+with open(_BASE_DIR / "config.yaml", encoding="utf-8") as _cfg_f:
+    cfg = yaml.safe_load(_cfg_f) or {}
+_rl_cfg = ((cfg.get("api", {}) or {}).get("rate_limit", {})) or {}
 RATE_LIMIT_REQUESTS = _rl_cfg.get("max_requests", 60)
 RATE_LIMIT_WINDOW = _rl_cfg.get("window_seconds", 60)  # seconds
 RATE_LIMIT_DB_PATH = _rl_cfg.get("persist_path") or None
@@ -163,9 +170,8 @@ def _sanitize_error(exc: Exception) -> str:
 # =============================================================================
 # App Init
 # =============================================================================
-
-with open(_BASE_DIR / "config.yaml", encoding="utf-8") as f:
-    cfg = yaml.safe_load(f)
+# cfg was already loaded once above (anchored to _BASE_DIR) — reuse it instead
+# of re-reading and re-parsing config.yaml a second time.
 
 setup_logging(cfg)
 logger = logging.getLogger("cyclaw.gate")
