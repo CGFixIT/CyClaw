@@ -131,6 +131,7 @@ jobs:
             tests/test_agentic_selftest.py \
             tests/test_agentic_writer.py \
             tests/test_agentic_gh_client.py \
+            tests/test_agentic_context.py \
             tests/test_rag_integration.py \
             tests/test_startup_robustness.py \
             -q --tb=short \
