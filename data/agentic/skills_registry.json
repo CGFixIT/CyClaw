@@ -1,0 +1,13 @@
+{
+  "version": "1.0",
+  "generated_at": "2026-06-24T00:00:00Z",
+  "registry": [],
+  "metadata": {
+    "total_skills": 0,
+    "last_applied_skill": null,
+    "governance_enabled": true,
+    "injection_patterns_count": 33,
+    "owasp_baseline_enabled": true
+  },
+  "notes": "Empty registry created on first agentic init. Skills are added via `python -m agentic.cli propose-skill` and `apply-skill`. All writes are scanned against banned_patterns and OWASP baseline, require explicit --reason and --confirm, and are audited to logs/audit.jsonl with PII redaction."
+}
