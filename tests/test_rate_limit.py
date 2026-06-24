@@ -214,3 +214,34 @@ class TestPersistence:
         rl2 = RateLimiter(max_requests=2, window_seconds=60, clock=lambda: now, db_path=str(db))
         assert rl2.allow("1.1.1.1") is False  # already at limit
         assert rl2.allow("2.2.2.2") is True   # had room for one more
+
+    def test_corrupt_persisted_state_logs_and_recovers(self, tmp_path, caplog):
+        """A corrupt timestamps blob must not crash startup or vanish silently.
+
+        Previously the load swallowed any error with a bare ``except`` and reset
+        the IP's window with no trace. Now the corruption is logged (auditable)
+        and the limiter still recovers by resetting just that IP to an empty
+        window."""
+        import logging
+        import sqlite3
+
+        db = tmp_path / "rl.db"
+        now = 1000.0
+        rl = RateLimiter(max_requests=2, window_seconds=60, clock=lambda: now, db_path=str(db))
+        assert rl.allow("9.9.9.9") is True  # writes a valid row
+
+        # Corrupt the persisted timestamps JSON directly in sqlite.
+        with sqlite3.connect(str(db)) as conn:
+            conn.execute("UPDATE rate_hits SET timestamps = ? WHERE ip = ?", ("{not json", "9.9.9.9"))
+            conn.commit()
+
+        # Reload across a simulated restart: the corrupt row is detected.
+        with caplog.at_level(logging.WARNING, logger="utils.ratelimit"):
+            rl2 = RateLimiter(max_requests=2, window_seconds=60, clock=lambda: now, db_path=str(db))
+
+        assert any("corrupt" in r.message.lower() and "9.9.9.9" in r.getMessage() for r in caplog.records), \
+            "corruption must be logged with the affected IP"
+        # Recovered: the window reset to empty, so the IP can make requests again.
+        assert rl2.allow("9.9.9.9") is True
+        assert rl2.allow("9.9.9.9") is True
+        assert rl2.allow("9.9.9.9") is False  # max_requests=2 enforced on the fresh window

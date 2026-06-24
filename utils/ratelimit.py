@@ -20,12 +20,15 @@ survives container/process restarts (in-memory died on restart).
 """
 
 import json
+import logging
 import sqlite3
 import threading
 import time
 from collections import defaultdict
 from pathlib import Path
 from typing import Callable, Dict, List, Optional
+
+logger = logging.getLogger(__name__)
 
 
 class RateLimiter:
@@ -74,7 +77,15 @@ class RateLimiter:
             for ip, ts_json, last_sweep in rows:
                 try:
                     self._hits[ip] = json.loads(ts_json)
-                except Exception:
+                except (json.JSONDecodeError, TypeError, ValueError):
+                    # Corrupt/garbled persisted window (e.g. truncated write from a
+                    # prior crash). Dropping it silently erased an IP's live rate
+                    # limit on every restart with no trace; log it so the state
+                    # loss is auditable rather than invisible. Recover gracefully
+                    # by resetting just this IP's window to empty.
+                    logger.warning(
+                        "Rate-limit state for IP %s is corrupt; resetting its window to empty", ip
+                    )
                     self._hits[ip] = []
                 self._last_sweep = max(self._last_sweep, last_sweep or 0.0)
 
