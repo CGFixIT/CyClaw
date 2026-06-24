@@ -926,17 +926,10 @@ async function submitQuery(confirmedOnline = null) {
       { k: 'hits', v: data.hit_count },
       { k: 'time', v: `${elapsed}ms` }
     ];
-/*
-    const answerEl = addEntry('answer', 'ANSWER', data.answer, false, meta);
-
-    if (data.sources && data.sources.length > 0) {
+    const answerEl = document.getElementById(addEntry('answer', 'ANSWER', data.answer, false, meta));
+    if (answerEl && data.sources && data.sources.length > 0) {
       addSources(answerEl, data.sources);
     }
-*/
-	const answerId = addEntry('answer', 'ANSWER', data.answer, false, meta);
-	if (data.sources && data.sources.length > 0) {
-	  addSources(document.getElementById(answerId), data.sources);
-	}
 
     if (data.error) {
       addEntry('error', 'WARNING', data.error);
