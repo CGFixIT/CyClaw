@@ -1,6 +1,6 @@
 # CyClaw Dockerfile - Production-grade, zero-trust, reproducible
 # Python 3.12 + uv for fast installs. Seccomp/AppArmor ready. Non-root.
-# Aligns with v1.5.0 pyproject + constraints for hermetic deps; CI uses requirements.txt for compat.
+# Aligns with v1.7.0 pyproject + constraints for hermetic deps; CI uses requirements.txt for compat.
 
 FROM python:3.12-slim-bookworm AS builder
 
@@ -13,9 +13,13 @@ WORKDIR /app
 COPY pyproject.toml constraints.txt requirements.txt ./
 
 # Install with uv (preferred for pyproject.toml + constraints + uv.sources for torch CPU)
-# Fallback to pip + requirements.txt (proper reqs format) + constraints for legacy/CI alignment
+# Fallback to pip + requirements.txt (proper reqs format) + constraints for legacy/CI alignment.
+# Plain pip cannot read [tool.uv.sources], so the fallback pre-installs the CPU torch wheel
+# from the PyTorch index first (mirrors ci.yml / pip-audit.yml) before the constrained install,
+# otherwise constraints.txt's `torch==2.6.0+cpu` pin is unresolvable on PyPI.
 RUN uv pip install --system --no-cache-dir -r pyproject.toml --constraint constraints.txt 2>/dev/null || \
-    pip install --no-cache-dir -r requirements.txt -c constraints.txt
+    ( pip install --no-cache-dir torch==2.6.0+cpu --index-url https://download.pytorch.org/whl/cpu && \
+      pip install --no-cache-dir -r requirements.txt -c constraints.txt )
 
 # Runtime stage
 FROM python:3.12-slim-bookworm
