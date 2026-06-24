@@ -97,9 +97,56 @@ why (the leverage: performance / security / financial-risk / auditability /
 maintainability). Prefer chunks that are independently reviewable and easily
 restorable through GitHub.
 
+### Step 3.5 — Plan branch topology for shared files (prevents merge-loss / conflicts)
+
+Always START from `origin/main` (Step 0 / the bootstrap cuts the first branch
+there — that is correct). The strategy below only changes **where you cut the
+2nd-and-later branch when it edits a file an earlier chunk also edits.**
+
+Before creating any branches, build a **file → chunks** map and find every file
+touched by more than one chunk. The usual shared files: `.github/workflows/ci.yml`
+(everyone appends to the pytest list / `--cov` list), `config.yaml`,
+`requirements.txt` / `constraints.txt` / `pyproject.toml`, `CLAUDE.md`. For each
+shared file pick ONE strategy:
+
+- **(A) Consolidate** — put *all* edits to that shared file in a single chunk/PR
+  (or a dedicated "CI wiring" PR). Best when the edits are small and related
+  (e.g. each chunk only appends one line to the ci.yml test list). The other
+  chunks then touch only their own new files and carry no ci.yml edit.
+- **(B) Stack** — cut the later branch from the *earlier branch* instead of
+  `origin/main`, so the later PR already contains the earlier's edit to the
+  shared file. Set the later PR's **base to the earlier branch** on GitHub (not
+  `main`). Stacked PRs must merge parent-first; rebase the child after the
+  parent merges. Best when chunks are large and otherwise independent.
+
+**Why it matters:** two branches cut from the same base that edit the **same or
+adjacent lines** of a shared file produce a merge **conflict** — GitHub blocks
+the merge button until a human resolves it, and a careless resolution can drop
+one side's edit (the "lost changes" failure mode). Non-adjacent edits to the same
+file 3-way-merge cleanly, but verify rather than trust luck.
+
+**Verify before opening PRs** — for every pair of branches that share a file, do
+a throwaway 3-way merge locally and confirm both edits survive with no conflict:
+
+```bash
+git checkout -B _trial origin/main
+git merge --no-ff origin/<branch-A> && git merge --no-ff origin/<branch-B>
+grep -q '<A-marker>' <shared-file> && grep -q '<B-marker>' <shared-file> && echo "both present"
+grep -rc '<<<<<<<' <shared-file>           # must be 0
+python -c "import yaml; yaml.safe_load(open('.github/workflows/ci.yml'))"  # still valid
+git checkout main && git branch -D _trial
+```
+
+> Verified this session: two PRs both appended to `ci.yml` (one to the pytest
+> list, one to the `--cov` list) in **non-adjacent** regions. Trial merges in
+> both orders combined cleanly — both edits present, valid YAML, zero conflict
+> markers — so no consolidation/stacking was needed. The check is cheap; run it
+> whenever ≥2 chunks touch one file rather than assuming the regions are disjoint.
+
 ### Step 4 — One focused PR per chunk
 
-For each chunk, on its own working branch cut from `origin/main`:
+For each chunk, on its own working branch (cut from `origin/main` by default —
+but see **Step 3.5** when the chunk shares a file with another chunk):
 
 1. Make the focused change(s). Keep the diff minimal and on-topic; avoid
    touching unrelated files (CLAUDE.md operating contract).
@@ -196,6 +243,19 @@ the skill file update commit (if any), never for chunk changes.
   resist bundling unrelated fixes because they're "right there."
 - **The 4-minute box is for the initial sweep only** — keep reading code
   afterward to confirm each finding before it becomes a PR.
+- **Shared-file PRs can collide.** When ≥2 chunks edit one file (most often
+  `.github/workflows/ci.yml`, `config.yaml`, the dependency manifests, or
+  `CLAUDE.md`), branches all cut from `origin/main` will *conflict* if their
+  edits touch the same/adjacent lines — and a sloppy conflict resolution drops
+  one side. See **Step 3.5**: consolidate the shared-file edits into one PR, or
+  stack the later branch on the earlier one, and always trial-merge the pair
+  before opening the PRs.
+- **A broken `main` poisons every child PR.** If `main` itself is red (e.g. a
+  bad committed data file or a failing test landed earlier), *every* branch cut
+  from it inherits those failures, so the optimize PRs show red CI for reasons
+  unrelated to their own diffs. Land the root-cause fix PR first, then rebase /
+  re-run the rest. Diagnose a child PR's CI red against `main`'s own state before
+  assuming the PR caused it.
 
 ---
 
