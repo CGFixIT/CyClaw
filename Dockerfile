@@ -5,7 +5,7 @@
 FROM python:3.12-slim-bookworm AS builder
 
 # Install uv (fast, reproducible)
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
+COPY --from=ghcr.io/astral-sh/uv:0.7 /uv /bin/uv
 
 WORKDIR /app
 
@@ -40,11 +40,12 @@ ENV CYCLAW_OFFLINE=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     CYCLAW_TELEMETRY_KILL=1
 
-EXPOSE 8000
+EXPOSE 8787
 
 # Simple healthcheck (assumes /health in gate.py)
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-  CMD python -c "import httpx; httpx.get('http://127.0.0.1:8000/health', timeout=4)" || exit 1
+  CMD python -c "import httpx; httpx.get('http://127.0.0.1:8787/health', timeout=4)" || exit 1
 
-# Default: uvicorn or entrypoint script from pyproject
-CMD ["uvicorn", "gate:app", "--host", "0.0.0.0", "--port", "8000", "--log-level", "info"]
+# Loopback-only binding (security invariant: CyClaw never binds to 0.0.0.0).
+# Port 8787 matches config.yaml api.port.
+CMD ["uvicorn", "gate:app", "--host", "127.0.0.1", "--port", "8787", "--log-level", "info"]

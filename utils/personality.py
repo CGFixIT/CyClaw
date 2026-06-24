@@ -254,6 +254,8 @@ class PersonalityManager:
         # (memory-poisoning / instruction-override) that must never reach soul.md.
         # Broader patterns like "you are now" are advisory-only and don't block writes.
         # Trusted internal callers (restore_from_backup) pass scan=False.
+        if not reason or not reason.strip():
+            raise ValueError("reason must not be empty")
         if scan:
             flags = self._scan_enforced(new_soul)
             if flags:
@@ -269,6 +271,7 @@ class PersonalityManager:
         with self._lock:
             if self.soul_path.exists():
                 bak_path.write_text(self.soul_core, encoding="utf-8")
+                os.chmod(bak_path, 0o600)
             tmp_path.write_text(new_soul, encoding="utf-8")
             os.replace(tmp_path, self.soul_path)
             self.conn.execute(

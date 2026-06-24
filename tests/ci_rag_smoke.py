@@ -29,6 +29,9 @@ Exit non-zero on any failure so the CI step goes red on a real retrieval regress
 """
 
 import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import yaml
 

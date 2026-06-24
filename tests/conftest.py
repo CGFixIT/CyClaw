@@ -43,7 +43,7 @@ TEST_CONFIG = {
                     "redact_secrets_like": ["AKIA[0-9A-Z]{16}"]}
     },
     "api": {"host": "127.0.0.1", "port": 8787},  # DevSkim: ignore DS162092
-    "logging": {"level": "DEBUG", "log_file": "", "audit_file": "",
+    "logging": {"level": "DEBUG", "log_file": "", "audit_file": os.path.join(tempfile.mkdtemp(), "audit.jsonl"),
                 "audit_fields": {"include_query_hash": True, "include_top_score": True,
                                  "include_retrieval_mode": True, "include_online_escalated": True,
                                  "include_model_used": True}},
