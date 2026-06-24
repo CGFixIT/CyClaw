@@ -66,6 +66,15 @@ retrieval:
   top_k_keyword: 5
   rrf_k: 60                # Authoritative RRF k — read by hybrid_search.py
   max_context_tokens: 5000
+
+  # min_score: routing threshold used by route_by_score_node (graph.py).
+  # Scores are RRF-fused ranks in [0, 1]; 0.028 is intentionally permissive —
+  # the design goal is "answer locally whenever any document is retrieved"
+  # and only route to user_gate when retrieval nearly completely fails.
+  # RRF scores rarely exceed 0.1 (rank-based, not similarity-based), so
+  # 0.028 ≈ "top result is in the top 3–4 ranked docs". To make the gate
+  # stricter (e.g. require strong semantic alignment), raise toward 0.05–0.08.
+
   min_score: 0.028
   hybrid:
     enabled: true
