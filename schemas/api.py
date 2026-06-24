@@ -52,5 +52,5 @@ class HealthResponse(BaseModel):
 
 class SoulEvolutionRequest(BaseModel):
     model_config = ConfigDict(extra='forbid', strict=True)
-    new_soul: str
-    reason: str
+    new_soul: str = Field(min_length=1, max_length=65536)
+    reason: str = Field(min_length=1)

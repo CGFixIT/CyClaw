@@ -5,7 +5,7 @@ services:
     build: .
     container_name: cyclaw-prod
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8787:8787"
     volumes:
       - ./data:/app/data:rw
       - ./checkpoints:/app/checkpoints:rw
@@ -22,7 +22,7 @@ services:
     user: "1000:1000"
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8000/health', timeout=3)"]
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://127.0.0.1:8787/health', timeout=3)"]
       interval: 30s
       timeout: 5s
       retries: 3
