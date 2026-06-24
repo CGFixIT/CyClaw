@@ -14,7 +14,8 @@ import yaml
 from pathlib import Path
 
 from graph import (
-    build_graph, offline_best_effort_node, grok_fallback_node
+    build_graph, retrieve_node, local_llm_node,
+    offline_best_effort_node, grok_fallback_node
 )
 from tests.conftest import (
     MockRetriever, MockLocalLLM, MockGrokClient,
@@ -22,6 +23,7 @@ from tests.conftest import (
     TEST_CONFIG
 )
 from utils.logger import reset_config_cache
+from utils.errors import RAGError, LLMServiceError, GrokServiceError
 
 
 @pytest.fixture(autouse=True)
@@ -340,3 +342,57 @@ class TestGrokFallbackPrompt:
     def test_grok_none_degrades_without_crash(self, tmp_path):
         result = grok_fallback_node({"query": "x"}, grok=None, cfg=self._cfg(False))
         assert result["answer_model"] == "offline-best-effort"
+
+
+class TestNodeErrorRecovery:
+    """In-node error-recovery paths the happy-path tests never reach.
+
+    retrieve_node's RAGError branch and the LLM/Grok service-error handlers in
+    local_llm_node / offline_best_effort_node / grok_fallback_node each catch a
+    typed error and degrade to a safe, auditable result. A leaked exception here
+    would crash the whole graph invocation instead, so these handlers are worth
+    pinning down with tests.
+    """
+
+    class _RaisingRetriever:
+        def hybrid_search(self, query):
+            raise RAGError("retriever exploded")
+
+    class _RaisingLLM:
+        def generate(self, prompt):
+            raise LLMServiceError("LM Studio down")
+
+    class _RaisingGrok:
+        def generate(self, prompt):
+            raise GrokServiceError("xAI 500")
+
+    def test_retrieve_node_rag_error_returns_safe_error_state(self):
+        out = retrieve_node({"query": "anything"}, self._RaisingRetriever(), cfg={})
+        assert out["retrieved_docs"] == []
+        assert out["top_score"] == 0.0
+        assert out["retrieval_mode"] == "none"
+        # retrieve_node stamps "{code}: {message}" so the audit node can record it.
+        assert out["error"] == "RAG_ERROR: retriever exploded"
+
+    def test_local_llm_node_handles_llm_service_error(self):
+        out = local_llm_node(
+            {"query": "q", "retrieved_docs": []}, llm=self._RaisingLLM(), cfg={}
+        )
+        assert out["answer_model"] == "local"
+        assert out["answer"].startswith("[LLM Error:")
+        assert "LM Studio down" in out["answer"]
+
+    def test_offline_best_effort_node_handles_llm_service_error(self):
+        out = offline_best_effort_node(
+            {"query": "q", "retrieved_docs": []}, llm=self._RaisingLLM(), cfg={}
+        )
+        assert out["answer_model"] == "offline-best-effort"
+        assert out["answer"].startswith("[LLM Error:")
+        assert "LM Studio down" in out["answer"]
+
+    def test_grok_fallback_node_handles_grok_service_error(self):
+        cfg = {"policy": {"fallback": {"send_local_context_to_grok": False}}}
+        out = grok_fallback_node({"query": "q"}, grok=self._RaisingGrok(), cfg=cfg)
+        assert out["answer_model"] == "grok"
+        assert out["answer"].startswith("[Grok Error:")
+        assert "xAI 500" in out["answer"]
