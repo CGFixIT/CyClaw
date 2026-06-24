@@ -192,11 +192,11 @@ class RcloneConfig:
 
     def _fill_default_paths(self) -> None:
         state_dir = _default_rclone_state_dir()
-        if self.workdir is None:
+        if not self.workdir:
             self.workdir = str(state_dir / "bisync_state")
-        if self.filter_file is None:
+        if not self.filter_file:
             self.filter_file = str(state_dir / "cyclaw_filters.txt")
-        if self.log_dir is None:
+        if not self.log_dir:
             self.log_dir = str(state_dir / "logs")
 
         self.workdir = os.path.expanduser(os.path.expandvars(self.workdir))
