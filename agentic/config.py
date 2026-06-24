@@ -114,7 +114,7 @@ class AgenticConfig:
         if data_root not in resolved.parents:
             raise AgenticConfigError(
                 "agentic.registry_path must resolve to a path inside the repo's data/ tree",
-                details={"resolved": str(resolved), "data_root": str(data_root)},
+                details={"data_root": str(data_root)},
             )
         self.registry_path = str(resolved)
 

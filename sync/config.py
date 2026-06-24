@@ -163,7 +163,7 @@ class RcloneConfig:
         if resolved != corpus_root and corpus_root not in resolved.parents:
             raise SyncConfigError(
                 "sync.local_path must resolve to a path inside the repo's data/corpus tree",
-                details={"resolved": str(resolved), "corpus_root": str(corpus_root)},
+                details={"corpus_root": str(corpus_root)},
             )
 
         # After resolution, store an absolute path so callers never see a
