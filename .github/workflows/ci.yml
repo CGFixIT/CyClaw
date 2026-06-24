@@ -142,6 +142,7 @@ jobs:
             --cov=utils.errors \
             --cov=utils.logger \
             --cov=utils.personality \
+            --cov=utils.personality_db \
             --cov=utils.ratelimit \
             --cov=utils.health \
             --cov=llm.client \
