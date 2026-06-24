@@ -5,6 +5,7 @@ Sanitizes chunks at ingestion time via prompt filter.
 """
 
 import json
+import logging
 from pathlib import Path
 from typing import List, Tuple
 
@@ -17,6 +18,8 @@ from utils.sanitizer import sanitize_chunk
 
 from .embeddings import get_embeddings_batch
 from .stemmer import tokenize_and_stem
+
+logger = logging.getLogger(__name__)
 
 
 def load_config(config_path: str = "config.yaml") -> dict:
@@ -40,13 +43,13 @@ def load_corpus(corpus_path: str, extensions: List[str]) -> List[Tuple[str, str]
         # symlinks by default, so a link pointing outside data/corpus could
         # pull arbitrary filesystem content into the index.
         if not file_path.resolve().is_relative_to(corpus_resolved):
-            print(f"[WARN] Skipping {file_path}: resolves outside corpus directory")
+            logger.warning("Skipping %s: resolves outside corpus directory", file_path)
             continue
         try:
             content = file_path.read_text(encoding="utf-8")
             docs.append((str(file_path), content))
         except Exception as e:
-            print(f"[WARN] Skipping {file_path}: {e}")
+            logger.warning("Skipping %s: %s", file_path, e)
     if not docs:
         raise CorpusEmptyError(f"No documents found in {corpus_path} with extensions {extensions}")
     return docs
@@ -91,9 +94,9 @@ def build_index(config_path: str = "config.yaml") -> None:
             f"chunk_overlap ({chunk_overlap}) must be < chunk_size ({chunk_size})"
         )
 
-    print(f"[Indexer] Loading corpus from {corpus_path}")
+    logger.info("Loading corpus from %s", corpus_path)
     docs = load_corpus(corpus_path, extensions)
-    print(f"[Indexer] Loaded {len(docs)} documents")
+    logger.info("Loaded %d documents", len(docs))
 
     all_chunks = []
     all_metadata = []
@@ -116,7 +119,7 @@ def build_index(config_path: str = "config.yaml") -> None:
                 "stem_tags": json.dumps(tokens[:20])
             })
 
-    print(f"[Indexer] Total chunks: {len(all_chunks)}")
+    logger.info("Total chunks: %d", len(all_chunks))
 
     Path(chroma_path).mkdir(parents=True, exist_ok=True)
     client = chromadb.PersistentClient(
@@ -140,7 +143,7 @@ def build_index(config_path: str = "config.yaml") -> None:
         metadata={"hnsw:space": "cosine"},
     )
 
-    print("[Indexer] Building ChromaDB (semantic) index...")
+    logger.info("Building ChromaDB (semantic) index...")
     for batch_start in range(0, len(all_chunks), batch_size):
         batch_end = min(batch_start + batch_size, len(all_chunks))
         batch_chunks = all_chunks[batch_start:batch_end]
@@ -153,9 +156,9 @@ def build_index(config_path: str = "config.yaml") -> None:
             metadatas=batch_meta,
             ids=batch_ids
         )
-        print(f"[Indexer] Indexed {batch_end}/{len(all_chunks)} chunks")
+        logger.info("Indexed %d/%d chunks", batch_end, len(all_chunks))
 
-    print("[Indexer] Building BM25 (keyword) index...")
+    logger.info("Building BM25 (keyword) index...")
     # tokenized_corpus was built alongside all_chunks above (single tokenization pass).
     Path(bm25_path).parent.mkdir(parents=True, exist_ok=True)
     with open(bm25_path, "w", encoding="utf-8") as f:
@@ -165,7 +168,7 @@ def build_index(config_path: str = "config.yaml") -> None:
             "metadata": all_metadata,
         }, f)
 
-    print(f"[Indexer] Done. ChromaDB: {chroma_path}, BM25: {bm25_path}")
+    logger.info("Done. ChromaDB: %s, BM25: %s", chroma_path, bm25_path)
 
 def main() -> None:
     """Console entry point for ``cyclaw-index`` (see pyproject [project.scripts]).
@@ -173,7 +176,11 @@ def main() -> None:
     Thin wrapper over :func:`build_index`. The declared
     ``cyclaw-index = "retrieval.indexer:main"`` script previously raised
     AttributeError because this module only defined ``build_index``.
+
+    Configures root logging here (not at import time) so the CLI keeps showing
+    progress, while importers of ``build_index`` control their own log handlers.
     """
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     build_index()
 
 
