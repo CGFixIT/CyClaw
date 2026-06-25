@@ -75,9 +75,11 @@ jobs:
         uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3  # v6
 
       - name: Run Fortify Scan
-        # Using stable tag v3 instead of pinned commit SHA for reliability.
-        # Check https://github.com/fortify/github-action/releases for latest.
-        uses: fortify/github-action@v3
+        # Pinned to the v3 release commit (supply-chain hardening: a floating
+        # @v3 tag can be force-pushed to point at swapped action code). Re-resolve
+        # and bump when intentionally upgrading:
+        #   git ls-remote https://github.com/fortify/github-action v3
+        uses: fortify/github-action@0540f6aefd95d12a5fbed40f406d825fad64330e  # v3
         with:
           sast-scan: true          # Run a SAST scan; if not specified or set to false, no SAST scan will be run
           debricked-sca-scan: true # For FoD, run an open-source scan as part of the SAST scan (ignored if SAST scan
