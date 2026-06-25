@@ -20,7 +20,7 @@ returns an `[LLM Error: ...]` answer), and all structural flows are testable.
 ```bash
 # Python 3.12 required
 # Install torch CPU first (avoids PyPI torch pulling CUDA)
-pip install torch==2.6.0+cpu --index-url https://download.pytorch.org/whl/cpu
+pip install torch==2.12.1+cpu --index-url https://download.pytorch.org/whl/cpu
 pip install -r requirements.txt --ignore-installed PyYAML
 ```
 

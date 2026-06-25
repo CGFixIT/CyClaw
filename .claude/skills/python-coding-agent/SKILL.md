@@ -65,7 +65,7 @@ Adapt your role to the task: library extension, DevOps automation, agent orchest
 
 **CyClaw-specific install quirks:**
 - PyYAML: `pip install -r requirements.txt --ignore-installed PyYAML`
-- torch: install `torch==2.6.0+cpu` **before** `requirements.txt` (CVE-2025-32434 `weights_only` bypass)
+- torch: install `torch==2.12.1+cpu` **before** `requirements.txt` (CVE-2025-32434 fixed in 2.6.0; 2.12.1 is within patched range — install order still matters for CPU wheel resolution)
 - ChromaDB CVE-2026-45829: accepted — `PersistentClient` (embedded) only; threat model excludes HTTP client
 
 ---

@@ -79,7 +79,7 @@ Environment knobs (all optional):
 Creates a fresh venv from `python3.12`, then installs:
 
 ```bash
-pip install torch==2.6.0+cpu --index-url https://download.pytorch.org/whl/cpu
+pip install torch==2.12.1+cpu --index-url https://download.pytorch.org/whl/cpu
 pip install -r requirements.txt --ignore-installed PyYAML
 pip install pytest pytest-asyncio pytest-cov pyyaml
 ```

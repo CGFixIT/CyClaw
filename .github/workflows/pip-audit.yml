@@ -52,7 +52,7 @@ jobs:
         # documented CVE-2025-32434 >=2.6.0 floor) so the requirements resolve
         # below reuses it instead of dragging in the heavy CUDA build.
         run: |
-          pip install torch==2.6.0+cpu --index-url https://download.pytorch.org/whl/cpu
+          pip install torch==2.12.1+cpu --index-url https://download.pytorch.org/whl/cpu
 
       - name: Install with constraints (reproducible gate)
         shell: bash
