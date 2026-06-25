@@ -71,11 +71,17 @@ def _read_retry(model_cfg: dict) -> tuple[int, float, float]:
     Returns ``(max_retries, backoff_base_sec, backoff_max_sec)``. ``backoff_max_sec``
     caps each individual sleep so an aggressive base/retry combo cannot stall the
     worker; it defaults to ``_DEFAULT_BACKOFF_MAX_SEC`` when the key is absent.
+
+    Negative values are clamped to their safe floor (0 for counts, 0.0 for durations).
+    A negative ``max_retries`` would make ``range(max_retries + 1)`` empty, causing
+    every call to fall through to the unreachable ``AssertionError``. A negative
+    ``backoff_base`` would pass a negative value to ``time.sleep()``, raising
+    ``ValueError`` on the first retry attempt.
     """
     retry_cfg = model_cfg.get("retry") or {}
-    max_retries = int(retry_cfg.get("max_retries", 0))
-    backoff_base = float(retry_cfg.get("backoff_base_sec", 1.0))
-    backoff_max = float(retry_cfg.get("backoff_max_sec", _DEFAULT_BACKOFF_MAX_SEC))
+    max_retries = max(0, int(retry_cfg.get("max_retries", 0)))
+    backoff_base = max(0.0, float(retry_cfg.get("backoff_base_sec", 1.0)))
+    backoff_max = max(0.0, float(retry_cfg.get("backoff_max_sec", _DEFAULT_BACKOFF_MAX_SEC)))
     return max_retries, backoff_base, backoff_max
 
 

@@ -423,6 +423,36 @@ class TestRetryBehavior:
         client.close()
 
 
+class TestRetryConfigBounds:
+    """Negative retry config values are clamped before they can corrupt a call.
+
+    max_retries < 0 would make range(max_retries + 1) empty, letting every
+    call fall through to the unreachable AssertionError sentinel. A negative
+    backoff_base would pass a negative number to time.sleep(), raising
+    ValueError on the first retry attempt.
+    """
+
+    def test_negative_max_retries_clamped_to_zero(self, tmp_path):
+        client = LocalLLMClient(_write_config(tmp_path, retry={"max_retries": -5}))
+        assert client.retry_max == 0
+        client.close()
+
+    def test_negative_backoff_base_clamped_to_zero(self, tmp_path):
+        client = LocalLLMClient(_write_config(tmp_path, retry={"max_retries": 1, "backoff_base_sec": -2.0}))
+        assert client.retry_backoff == 0.0
+        client.close()
+
+    def test_negative_backoff_max_clamped_to_zero(self, tmp_path):
+        client = LocalLLMClient(_write_config(tmp_path, retry={"max_retries": 1, "backoff_max_sec": -1.0}))
+        assert client.retry_backoff_max == 0.0
+        client.close()
+
+    def test_grok_negative_max_retries_clamped(self, tmp_path):
+        client = GrokClient(_write_config(tmp_path, retry={"max_retries": -99}))
+        assert client.retry_max == 0
+        client.close()
+
+
 class TestContextManager:
     """Both clients support ``with`` so the per-instance httpx.Client is closed
     deterministically (RAII) instead of relying on a manual ``close()`` call."""
