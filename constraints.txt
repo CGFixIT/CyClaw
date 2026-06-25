@@ -9,8 +9,13 @@
 # or `pip-compile` and commit the result. Current state: direct pins aligned with v1.7.0.
 
 # CRITICAL: pydantic family must stay synchronized or pip resolver explodes
+# pydantic 2.13.4 hard-pins pydantic-core==2.46.4 (exact ==, not a range), and
+# 2.13.4 is the latest pydantic on PyPI — no release pairs with pydantic-core
+# 2.47.0 yet. Bumping pydantic-core alone makes `pip install -c constraints.txt`
+# unresolvable. Keep these two in lock-step; only bump pydantic-core together
+# with a compatible pydantic bump.
 pydantic==2.13.4
-pydantic-core==2.47.0
+pydantic-core==2.46.4
 pydantic-settings==2.14.2
 
 # Direct dependencies from pyproject.toml [project.dependencies] -- versions MUST match exactly
