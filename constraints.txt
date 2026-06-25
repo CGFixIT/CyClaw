@@ -10,30 +10,30 @@
 
 # CRITICAL: pydantic family must stay synchronized or pip resolver explodes
 pydantic==2.13.4
-pydantic-core==2.46.4
+pydantic-core==2.47.0
 pydantic-settings==2.14.2
 
 # Direct dependencies from pyproject.toml [project.dependencies] -- versions MUST match exactly
-fastapi==0.137.2
+fastapi==0.138.0
 # Constraints pin versions only; the `[standard]` extra stays in requirements.txt.
 # pip >= 26.1.2 rejects extras in a -c constraints file ("Constraints cannot have
 # extras"), which broke the verify-install gate. See pypa/pip#8210.
 uvicorn==0.49.0
 pyyaml==6.0.3
 httpx==0.28.1
-langgraph==1.2.5
-langchain-core==1.4.7
-chromadb==1.5.6  # CVE-2026-45829 (Critical pre-auth RCE; risk accepted ONLY for local/offline air-gapped PersistentClient embedded mode). See SECURITY.md + pip-audit.
+langgraph==1.2.6
+langchain-core==1.4.8
+chromadb==1.5.9  # CVE-2026-45829 (Critical pre-auth RCE; risk accepted ONLY for local/offline air-gapped PersistentClient embedded mode). See SECURITY.md + pip-audit.
 sentence-transformers==5.6.0
 rank-bm25==0.2.2
 numpy==1.26.4
 nltk==3.9.4
 
 # torch-cpu extra / embedding backend (minimum safe post CVE, CPU index via pyproject [tool.uv.sources])
-torch==2.6.0+cpu
+torch==2.12.1+cpu
 
 # Test optional-dependencies (for CI / dev)
-pytest==9.1.0
+pytest==9.1.1
 pytest-asyncio==1.4.0
 # pytest-cov is declared in pyproject [project.optional-dependencies].{dev,full} but
 # was unpinned here, so coverage tooling floated to whatever the resolver picked —
