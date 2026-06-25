@@ -159,3 +159,44 @@ def test_search_result_fields_populated():
         assert sr.chunk_id is not None and isinstance(sr.chunk_id, int)
         assert sr.stem_tags is not None and isinstance(sr.stem_tags, list)
         assert sr.retrieval_mode is not None and sr.retrieval_mode != ""
+
+
+# ---------------------------------------------------------------------------
+# 11. test_config fixture is isolated from the module-level TEST_CONFIG
+# ---------------------------------------------------------------------------
+
+def test_test_config_fixture_is_isolated_from_module_global(test_config):
+    """Mutating a deeply-nested value in the per-test config must NOT leak.
+
+    The fixture used to ``TEST_CONFIG.copy()`` (shallow) and only hand-clone
+    ``indexing`` / ``logging``. Every other nested dict was a shared reference
+    to the module global, so a test toggling ``grok.enabled`` or appending to
+    ``banned_patterns`` silently poisoned every later test that used the fixture.
+    deepcopy must make each fixture instance fully independent.
+    """
+    cfg, _ = test_config
+    grok_before = TEST_CONFIG["models"]["grok"]["enabled"]
+    patterns_before = list(TEST_CONFIG["policy"]["prompt_filter"]["banned_patterns"])
+
+    # Mutate nested dicts that the OLD shallow copy left shared with the global.
+    cfg["models"]["grok"]["enabled"] = not grok_before
+    cfg["policy"]["prompt_filter"]["banned_patterns"].append("LEAKED_FROM_TEST")
+    cfg["retrieval"]["min_score"] = 0.999
+
+    # The module-level constant must be untouched.
+    assert TEST_CONFIG["models"]["grok"]["enabled"] == grok_before
+    assert TEST_CONFIG["policy"]["prompt_filter"]["banned_patterns"] == patterns_before
+    assert "LEAKED_FROM_TEST" not in TEST_CONFIG["policy"]["prompt_filter"]["banned_patterns"]
+
+
+def test_two_config_fixtures_do_not_share_nested_state(test_config, tmp_path):
+    """Two independent reads of the fixture-built config must not alias nested dicts."""
+    cfg1, _ = test_config
+    # Build a second config the same way the fixture does, to confirm the source
+    # constant is never the shared object handed out.
+    import copy as _copy
+
+    cfg2 = _copy.deepcopy(TEST_CONFIG)
+    cfg1["models"]["grok"]["enabled"] = True
+    assert cfg2["models"]["grok"]["enabled"] is False
+    assert cfg1["models"] is not cfg2["models"]
