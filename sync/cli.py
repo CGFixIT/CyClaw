@@ -86,6 +86,21 @@ def _ok(text: str) -> None:
     print(f"  [OK  ] {text}")
 
 
+def _print_typed_error(exc: object) -> None:
+    """Print a typed error's ``message`` plus any actionable ``details`` keys.
+
+    Only ``cmd_setup`` previously surfaced ``exc.details`` (e.g. the
+    ``corpus_root`` an invalid ``local_path`` must live under); ``cmd_sync`` and
+    the schedule/status handlers dropped them, so operators on the *common*
+    paths got a less actionable error than those running setup. Centralised so
+    every command surfaces the same detail. ``getattr`` keeps it safe for typed
+    errors without a ``details`` attribute (e.g. ``SchedulerError``).
+    """
+    _err(getattr(exc, "message", str(exc)))
+    for k, v in (getattr(exc, "details", None) or {}).items():
+        _err(f"   {k}: {v}")
+
+
 # ---------------------------------------------------------------------------
 # Subcommand handlers
 # ---------------------------------------------------------------------------
@@ -97,9 +112,7 @@ def cmd_setup(args: argparse.Namespace) -> int:
     try:
         cfg = load_sync_config(args.config)
     except SyncConfigError as exc:
-        _err(f"Config error: {exc.message}")
-        for k, v in (exc.details or {}).items():
-            _err(f"   {k}: {v}")
+        _print_typed_error(exc)
         return EXIT_ENV
     _ok(f"Loaded sync config from {args.config}")
     _kv("local_path", cfg.local_path)
@@ -115,9 +128,7 @@ def cmd_setup(args: argparse.Namespace) -> int:
         v = check_rclone_version()
         _ok(f"rclone {v[0]}.{v[1]}.{v[2]} installed")
     except (RcloneNotInstalledError, RcloneVersionError) as exc:
-        _err(exc.message)
-        for k, val in (exc.details or {}).items():
-            _err(f"   {k}: {val}")
+        _print_typed_error(exc)
         return EXIT_ENV
 
     try:
@@ -153,7 +164,7 @@ def cmd_sync(args: argparse.Namespace) -> int:
     try:
         cfg = load_sync_config(args.config)
     except SyncConfigError as exc:
-        _err(f"Config error: {exc.message}")
+        _print_typed_error(exc)
         return EXIT_ENV
 
     # Honour the config toggle: `sync.enabled: false` is an intentional "off",
@@ -167,7 +178,7 @@ def cmd_sync(args: argparse.Namespace) -> int:
     try:
         result = run_sync(cfg, dry_run=args.dry_run, resync=args.resync)
     except (RcloneNotInstalledError, RcloneVersionError) as exc:
-        _err(exc.message)
+        _print_typed_error(exc)
         return EXIT_ENV
     except SyncError as exc:
         _err(f"Sync error: {exc.message}")
@@ -206,7 +217,7 @@ def cmd_schedule(args: argparse.Namespace) -> int:
         cfg = load_sync_config(args.config)
         entry = get_scheduler(cfg).install()
     except (SyncConfigError, SchedulerError) as exc:
-        _err(exc.message)
+        _print_typed_error(exc)
         return EXIT_ENV
     _ok(f"Scheduled: {entry.cron_or_time} on {entry.platform_name}")
     return EXIT_OK
@@ -217,7 +228,7 @@ def cmd_unschedule(args: argparse.Namespace) -> int:
         cfg = load_sync_config(args.config)
         removed = get_scheduler(cfg).remove()
     except (SyncConfigError, SchedulerError) as exc:
-        _err(exc.message)
+        _print_typed_error(exc)
         return EXIT_ENV
     if removed:
         _ok("Scheduled job removed.")
@@ -230,7 +241,7 @@ def cmd_status(args: argparse.Namespace) -> int:
     try:
         cfg = load_sync_config(args.config)
     except SyncConfigError as exc:
-        _err(exc.message)
+        _print_typed_error(exc)
         return EXIT_ENV
 
     _heading("CyClaw Sync Status")
@@ -248,7 +259,7 @@ def cmd_status(args: argparse.Namespace) -> int:
         v = check_rclone_version()
         _ok(f"rclone {v[0]}.{v[1]}.{v[2]}")
     except (RcloneNotInstalledError, RcloneVersionError) as exc:
-        _err(exc.message)
+        _print_typed_error(exc)
 
     try:
         entry = get_scheduler(cfg).status()
