@@ -55,12 +55,25 @@ def _extract_content(resp: httpx.Response) -> str:
     return content
 
 
-def _read_retry(model_cfg: dict) -> tuple[int, float]:
-    """Parse the optional ``retry`` block; default to no retries (backward compatible)."""
+# Fallback ceiling on a single backoff sleep when ``backoff_max_sec`` is absent
+# from config. Without a cap, ``backoff_base * 2**attempt`` grows unbounded, so a
+# mis-tuned ``max_retries``/``backoff_base_sec`` could block the calling worker
+# for minutes-to-hours on the final attempt.
+_DEFAULT_BACKOFF_MAX_SEC = 30.0
+
+
+def _read_retry(model_cfg: dict) -> tuple[int, float, float]:
+    """Parse the optional ``retry`` block; default to no retries (backward compatible).
+
+    Returns ``(max_retries, backoff_base_sec, backoff_max_sec)``. ``backoff_max_sec``
+    caps each individual sleep so an aggressive base/retry combo cannot stall the
+    worker; it defaults to ``_DEFAULT_BACKOFF_MAX_SEC`` when the key is absent.
+    """
     retry_cfg = model_cfg.get("retry") or {}
     max_retries = int(retry_cfg.get("max_retries", 0))
     backoff_base = float(retry_cfg.get("backoff_base_sec", 1.0))
-    return max_retries, backoff_base
+    backoff_max = float(retry_cfg.get("backoff_max_sec", _DEFAULT_BACKOFF_MAX_SEC))
+    return max_retries, backoff_base, backoff_max
 
 
 def _post_with_retry(
@@ -71,16 +84,22 @@ def _post_with_retry(
     on_http: Callable[[httpx.HTTPStatusError], RAGError],
     on_timeout: Callable[[httpx.TimeoutException], RAGError],
     on_other: Callable[[Exception], RAGError],
+    backoff_max: float = _DEFAULT_BACKOFF_MAX_SEC,
 ) -> str:
     """POST with bounded exponential-backoff retry on transient failures.
 
     Retries timeouts, transport/network errors, and retryable HTTP statuses
     (5xx, 429) up to ``max_retries`` extra attempts, sleeping
-    ``backoff_base * 2**attempt`` seconds between tries. Other 4xx statuses and
-    any non-transport exception fail fast. ``max_retries == 0`` reproduces the
-    original single-attempt behavior. The ``on_*`` callables map the terminal
-    failure to the caller's typed error so messages/codes stay unchanged.
+    ``min(backoff_base * 2**attempt, backoff_max)`` seconds between tries — the
+    cap keeps a mis-tuned base/retries combo from blocking the worker for an
+    unbounded time. Other 4xx statuses and any non-transport exception fail fast.
+    ``max_retries == 0`` reproduces the original single-attempt behavior. The
+    ``on_*`` callables map the terminal failure to the caller's typed error so
+    messages/codes stay unchanged.
     """
+    def _delay(attempt: int) -> float:
+        return min(backoff_base * (2 ** attempt), backoff_max)
+
     for attempt in range(max_retries + 1):
         try:
             resp = do_post()
@@ -88,18 +107,18 @@ def _post_with_retry(
             return _extract_content(resp)
         except httpx.HTTPStatusError as e:
             if attempt < max_retries and _is_retryable_status(e.response.status_code):
-                time.sleep(backoff_base * (2 ** attempt))
+                time.sleep(_delay(attempt))
                 continue
             raise on_http(e) from e
         except httpx.TimeoutException as e:
             if attempt < max_retries:
-                time.sleep(backoff_base * (2 ** attempt))
+                time.sleep(_delay(attempt))
                 continue
             raise on_timeout(e) from e
         except httpx.TransportError as e:
             # Connection/read/write/protocol errors below the HTTP layer.
             if attempt < max_retries:
-                time.sleep(backoff_base * (2 ** attempt))
+                time.sleep(_delay(attempt))
                 continue
             raise on_other(e) from e
         except Exception as e:
@@ -118,7 +137,7 @@ class LocalLLMClient:
         self.max_tokens = llm_cfg["max_tokens"]
         self.temperature = llm_cfg["temperature"]
         self.timeout = llm_cfg["timeout_sec"]
-        self.retry_max, self.retry_backoff = _read_retry(llm_cfg)
+        self.retry_max, self.retry_backoff, self.retry_backoff_max = _read_retry(llm_cfg)
         self._client = httpx.Client(timeout=self.timeout)
 
     def close(self) -> None:
@@ -140,6 +159,7 @@ class LocalLLMClient:
             do_post=do_post,
             max_retries=self.retry_max,
             backoff_base=self.retry_backoff,
+            backoff_max=self.retry_backoff_max,
             on_http=lambda e: LLMServiceError(
                 f"LM Studio HTTP error: {e.response.status_code}",
                 details={"status": e.response.status_code},
@@ -161,7 +181,7 @@ class GrokClient:
         self.max_tokens = grok_cfg["max_tokens"]
         self.temperature = grok_cfg["temperature"]
         self.timeout = grok_cfg["timeout_sec"]
-        self.retry_max, self.retry_backoff = _read_retry(grok_cfg)
+        self.retry_max, self.retry_backoff, self.retry_backoff_max = _read_retry(grok_cfg)
         self.api_key = os.environ.get("GROK_API_KEY", "")
         self._client = httpx.Client(timeout=self.timeout)
 
@@ -192,6 +212,7 @@ class GrokClient:
             do_post=do_post,
             max_retries=self.retry_max,
             backoff_base=self.retry_backoff,
+            backoff_max=self.retry_backoff_max,
             on_http=lambda e: GrokServiceError(
                 f"Grok HTTP {e.response.status_code}",
                 details={"status": e.response.status_code},

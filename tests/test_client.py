@@ -294,6 +294,39 @@ class TestRetryBehavior:
         assert no_sleep == [0.5, 1.0]
         client.close()
 
+    def test_backoff_is_capped_at_backoff_max_sec(self, tmp_path, no_sleep):
+        # A large base with several retries would otherwise sleep 10s, 20s, 40s, 80s.
+        # backoff_max_sec clamps every individual sleep so a mis-tuned config can
+        # never block the worker for an unbounded time.
+        client = LocalLLMClient(
+            _write_config(
+                tmp_path,
+                retry={"max_retries": 4, "backoff_base_sec": 10.0, "backoff_max_sec": 5.0},
+            )
+        )
+        fake = _ScriptedPost([_status_response(503)])  # persistent transient failure
+        client._client.post = fake
+        with pytest.raises(LLMServiceError):
+            client.generate("p")
+        assert len(fake.calls) == 5  # 1 initial + 4 retries
+        # Uncapped would be [10.0, 20.0, 40.0, 80.0]; the cap pins each to 5.0.
+        assert no_sleep == [5.0, 5.0, 5.0, 5.0]
+        client.close()
+
+    def test_backoff_max_defaults_when_absent(self, tmp_path, no_sleep):
+        # No backoff_max_sec key -> falls back to the module default (30s), so a
+        # config that predates this option still bounds its sleeps.
+        client = LocalLLMClient(
+            _write_config(tmp_path, retry={"max_retries": 3, "backoff_base_sec": 50.0})
+        )
+        fake = _ScriptedPost([_status_response(500)])
+        client._client.post = fake
+        with pytest.raises(LLMServiceError):
+            client.generate("p")
+        # Uncapped: [50, 100, 200]; default cap pins each to 30.0.
+        assert no_sleep == [30.0, 30.0, 30.0]
+        client.close()
+
     def test_client_error_4xx_fails_fast(self, tmp_path, no_sleep):
         # A 400 is not transient: no retry even with retries configured.
         client = LocalLLMClient(_write_config(tmp_path, retry={"max_retries": 3, "backoff_base_sec": 0.5}))
