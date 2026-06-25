@@ -130,6 +130,35 @@ def test_agentic_apply_confirm_and_body_file(monkeypatch: pytest.MonkeyPatch, tm
     assert res.parsed == {"status": "applied"}
 
 
+def test_agentic_apply_body_file_cleaned_up_when_run_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    # run_agentic_op's docstring promises the temp --body-file is unlinked on
+    # EVERY exit path, "return or raise". Only the return path was covered; this
+    # locks in the finally-block cleanup when _run raises (e.g. the CLI hangs and
+    # subprocess.TimeoutExpired fires) so a crashing op cannot leak skill-body
+    # temp files into the OS temp dir on repeated failures.
+    from pathlib import Path
+
+    captured: list[list[str]] = []
+
+    def _boom(argv: list[str]) -> subprocess.CompletedProcess[str]:
+        captured.append(argv)
+        raise subprocess.TimeoutExpired(cmd=argv, timeout=1)
+
+    monkeypatch.setattr(ops_runner, "_run", _boom)
+
+    with pytest.raises(subprocess.TimeoutExpired):
+        run_agentic_op(
+            "apply-skill", name="demo", desc="a demo skill", body="# body\ncontent",
+            reason="adding demo", confirm=True,
+        )
+
+    # The body-file was created and handed to _run, then unlinked by the finally
+    # block despite _run raising.
+    argv = captured[0]
+    body_file = argv[argv.index("--body-file") + 1]
+    assert not Path(body_file).exists()
+
+
 def test_agentic_apply_no_confirm_omits_flag(monkeypatch: pytest.MonkeyPatch) -> None:
     runner, captured = _fake_run(returncode=4, stderr="apply-skill requires --confirm")
     monkeypatch.setattr(ops_runner, "_run", runner)
