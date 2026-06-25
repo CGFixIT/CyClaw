@@ -160,7 +160,11 @@ def _post_with_retry(
             # Log only the exception *type* — its message can echo response content.
             log.error("%s call failed: non-retryable %s", service, type(e).__name__)
             raise on_other(e) from e
-    raise AssertionError("unreachable: retry loop exited without return/raise")  # pragma: no cover
+    # The loop guarantees every iteration either returns or raises, so this line
+    # is structurally unreachable. If it somehow fires, surface it as a typed
+    # service error so it lands in structured logs rather than a bare exception.
+    log.error("%s retry loop exited without return or raise — this is a bug", service)  # pragma: no cover
+    raise LLMServiceError("retry loop exited without return/raise")  # pragma: no cover
 
 
 class LocalLLMClient:
