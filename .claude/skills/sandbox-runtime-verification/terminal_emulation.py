@@ -20,6 +20,7 @@ Usage (called from verify.sh while server is running):
 """
 
 import json
+import os
 import sys
 
 
@@ -31,6 +32,17 @@ def main() -> int:
     except ImportError:
         print("httpx not installed; skipping terminal emulation (install with pip install httpx)")
         return 0
+
+    # GET /soul is API-key gated (PR #249). Mirror static/terminal.html's
+    # authHeaders(): attach "Authorization: Bearer <key>" only when a key is
+    # present. verify.sh exports CYCLAW_API_KEY before launching the server.
+    api_key = os.environ.get("CYCLAW_API_KEY", "")
+
+    def auth_headers() -> dict:
+        h = {"Content-Type": "application/json"}
+        if api_key:
+            h["Authorization"] = f"Bearer {api_key}"
+        return h
 
     failures = 0
 
@@ -129,25 +141,37 @@ def main() -> int:
             check("/query offline-best-effort", False, repr(exc))
         print()
 
-        # ── 5. GET /soul (terminal.html soul panel) ──────────────────────────
+        # ── 5. GET /soul (terminal.html soul panel — API-key gated, PR #249) ──
         print("[5] GET /soul  (terminal.html soul panel)")
         try:
-            r = client.get("/soul", timeout=5.0)
-            d = r.json()
-            ver = d.get("version")
-            soul_text = d.get("soul", "")
-            print(f"       version      : {ver}")
-            print(f"       soul (chars) : {len(soul_text)}")
-            print(f"       source       : {d.get('source')}")
-            check("/soul version is int", isinstance(ver, int), f"version={ver!r}")
-            # Assert the soul is genuinely non-empty (matches this check's label).
-            # The previous `> 50` magic threshold rejected the committed minimal
-            # soul placeholder ("# Soul") and any other short-but-valid soul,
-            # failing the gate on a non-defect. Soul *content* is governed via
-            # utils/personality.py with an explicit human reason — not by this
-            # length heuristic — so the verification only needs to confirm the
-            # /soul endpoint returns a non-empty body.
-            check("/soul soul text non-empty", len(soul_text) > 0, f"len={len(soul_text)}")
+            # 5a. Unauthenticated read must be rejected now that /soul is gated.
+            r_noauth = client.get("/soul", timeout=5.0)
+            check("/soul rejects unauthenticated read (401)",
+                  r_noauth.status_code == 401,
+                  f"status={r_noauth.status_code}")
+
+            # 5b. Authenticated read (mirrors terminal.html authHeaders()) must
+            # return the soul payload. Only skippable if no key is in the env.
+            if not api_key:
+                check("/soul authenticated read", False,
+                      "CYCLAW_API_KEY not set — cannot exercise the authed path")
+            else:
+                r = client.get("/soul", headers=auth_headers(), timeout=5.0)
+                d = r.json()
+                ver = d.get("version")
+                soul_text = d.get("soul", "")
+                print(f"       version      : {ver}")
+                print(f"       soul (chars) : {len(soul_text)}")
+                print(f"       source       : {d.get('source')}")
+                check("/soul version is int", isinstance(ver, int), f"version={ver!r}")
+                # Assert the soul is genuinely non-empty (matches this check's
+                # label). The previous `> 50` magic threshold rejected the
+                # committed minimal soul placeholder ("# Soul") and any other
+                # short-but-valid soul, failing the gate on a non-defect. Soul
+                # *content* is governed via utils/personality.py with an explicit
+                # human reason — not by this length heuristic — so the
+                # verification only needs to confirm /soul returns a non-empty body.
+                check("/soul soul text non-empty", len(soul_text) > 0, f"len={len(soul_text)}")
         except Exception as exc:
             check("/soul", False, repr(exc))
         print()

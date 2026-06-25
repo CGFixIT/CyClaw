@@ -5,6 +5,7 @@
 #
 # Prereq: server running on the target port, e.g.
 #   $env:GROK_API_KEY = "dummy"
+#   $env:CYCLAW_API_KEY = "verify-soul-key-ci"   # /soul is API-key gated (PR #249)
 #   python -m uvicorn gate:app --host 127.0.0.1 --port 8787
 # Then, from the repo root:
 #   .\.claude\skills\sandbox-runtime-verification\windows-smoke.ps1
@@ -59,12 +60,21 @@ try {
     else { Fail "POST /query injection threw: $_" }
 }
 
-# 5. GET /soul — personality endpoint
+# 5. GET /soul — personality endpoint (API-key gated as of PR #249).
+#    Mirrors static/terminal.html's authHeaders() flow: a key-less read is
+#    rejected with 401; an authenticated read returns the soul payload.
+$ApiKey = if ($env:CYCLAW_API_KEY) { $env:CYCLAW_API_KEY } else { "" }
 try {
-    $s = Invoke-RestMethod -Uri "$Base/soul" -Method GET   # DevSkim: ignore DS137138
-    if ($null -ne $s.version) { Pass "GET /soul (version=$($s.version))" }
-    else { Fail "GET /soul unexpected: $($s | ConvertTo-Json -Compress)" }
-} catch { Fail "GET /soul threw: $_" }
+    $resp = Invoke-WebRequest -Uri "$Base/soul" -Method GET -SkipHttpErrorCheck  # DevSkim: ignore DS137138
+    if ($resp.StatusCode -eq 401) { Pass "GET /soul rejects unauthenticated (HTTP 401)" }
+    else { Fail "GET /soul unauth HTTP $($resp.StatusCode) (expected 401)" }
+} catch { Fail "GET /soul unauth threw: $_" }
+try {
+    $headers = @{ Authorization = "Bearer $ApiKey" }
+    $s = Invoke-RestMethod -Uri "$Base/soul" -Method GET -Headers $headers   # DevSkim: ignore DS137138
+    if ($null -ne $s.version) { Pass "GET /soul authed (version=$($s.version))" }
+    else { Fail "GET /soul authed unexpected: $($s | ConvertTo-Json -Compress)" }
+} catch { Fail "GET /soul authed threw: $_" }
 
 # 6. GET /static/terminal.html — static UI
 try {
