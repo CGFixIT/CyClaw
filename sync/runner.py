@@ -37,6 +37,7 @@ from sync.config import RcloneConfig
 from sync.filters import write_filter_file
 from utils.errors import (
     RcloneNotInstalledError,
+    RcloneTimeoutError,
     RcloneVersionError,
     SyncRuntimeError,
 )
@@ -79,7 +80,9 @@ def check_rclone_version(rclone_bin: str = "rclone") -> tuple[int, int, int]:
             check=False,
         )
     except subprocess.TimeoutExpired as exc:
-        raise RcloneNotInstalledError(
+        # rclone is installed (shutil.which succeeded) but hung on "rclone version";
+        # this is an environment stall, not a missing binary.
+        raise RcloneTimeoutError(
             f"rclone version check timed out: {exc}",
             details={"binary": binary},
         ) from exc

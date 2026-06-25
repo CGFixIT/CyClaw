@@ -65,6 +65,17 @@ class RcloneVersionError(SyncError):
         self.code = "RCLONE_VERSION_TOO_OLD"
 
 
+class RcloneTimeoutError(SyncError):
+    """rclone is installed but the version check timed out (binary stalled)."""
+
+    def __init__(self, message: str, details: dict | None = None):
+        # Call RAGError.__init__ directly with the right code so we never
+        # overwrite an attribute already set by a parent __init__ call.
+        # SyncError.__init__ hardcodes code="SYNC_ERROR" and provides no way
+        # to pass a sub-code through, so bypassing it is intentional here.
+        RAGError.__init__(self, message, code="RCLONE_TIMEOUT", details=details)
+
+
 class SyncConfigError(SyncError):
     """The sync: block in config.yaml is missing or invalid."""
 

@@ -22,6 +22,7 @@ from sync.config import RcloneConfig, load_sync_config
 from sync.filters import generate_filters, write_filter_file
 from utils.errors import (
     RcloneNotInstalledError,
+    RcloneTimeoutError,
     RcloneVersionError,
     SchedulerError,
     SyncConfigError,
@@ -36,6 +37,7 @@ __all__ = [
     "write_filter_file",
     "SyncError",
     "RcloneNotInstalledError",
+    "RcloneTimeoutError",
     "RcloneVersionError",
     "SyncConfigError",
     "SchedulerError",

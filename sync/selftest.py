@@ -18,7 +18,7 @@ import os
 from sync.config import RcloneConfig, load_sync_config
 from sync.filters import filter_summary, generate_filters, write_filter_file
 from sync.runner import build_bisync_argv, build_pull_argv, check_rclone_version
-from utils.errors import RcloneNotInstalledError, RcloneVersionError, SyncConfigError
+from utils.errors import RcloneNotInstalledError, RcloneTimeoutError, RcloneVersionError, SyncConfigError
 
 
 def _ok(name: str) -> tuple[bool, str]:
@@ -69,7 +69,7 @@ def run_self_test(
     try:
         v = check_rclone_version()
         results.append(_ok(f"03. rclone {v[0]}.{v[1]}.{v[2]} installed (>= 1.68.2)"))
-    except (RcloneNotInstalledError, RcloneVersionError) as exc:
+    except (RcloneNotInstalledError, RcloneTimeoutError, RcloneVersionError) as exc:
         results.append(_fail("03. rclone >= 1.68.2 installed", exc.message))
 
     # 4. Filter content asserts the hardened soul exclusion (or its loud absence).

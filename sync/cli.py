@@ -37,6 +37,7 @@ from sync.filters import filter_summary, write_filter_file
 from sync.runner import check_rclone_version, reindex_exit_code_for, run_sync
 from utils.errors import (
     RcloneNotInstalledError,
+    RcloneTimeoutError,
     RcloneVersionError,
     SchedulerError,
     SyncConfigError,
@@ -127,7 +128,7 @@ def cmd_setup(args: argparse.Namespace) -> int:
     try:
         v = check_rclone_version()
         _ok(f"rclone {v[0]}.{v[1]}.{v[2]} installed")
-    except (RcloneNotInstalledError, RcloneVersionError) as exc:
+    except (RcloneNotInstalledError, RcloneTimeoutError, RcloneVersionError) as exc:
         _print_typed_error(exc)
         return EXIT_ENV
 
@@ -177,7 +178,7 @@ def cmd_sync(args: argparse.Namespace) -> int:
 
     try:
         result = run_sync(cfg, dry_run=args.dry_run, resync=args.resync)
-    except (RcloneNotInstalledError, RcloneVersionError) as exc:
+    except (RcloneNotInstalledError, RcloneTimeoutError, RcloneVersionError) as exc:
         _print_typed_error(exc)
         return EXIT_ENV
     except SyncError as exc:
@@ -258,7 +259,7 @@ def cmd_status(args: argparse.Namespace) -> int:
     try:
         v = check_rclone_version()
         _ok(f"rclone {v[0]}.{v[1]}.{v[2]}")
-    except (RcloneNotInstalledError, RcloneVersionError) as exc:
+    except (RcloneNotInstalledError, RcloneTimeoutError, RcloneVersionError) as exc:
         _print_typed_error(exc)
 
     try:

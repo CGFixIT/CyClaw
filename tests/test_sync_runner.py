@@ -31,7 +31,7 @@ from sync.runner import (
     reindex_exit_code_for,
     run_sync,
 )
-from utils.errors import RcloneNotInstalledError, RcloneVersionError, SyncRuntimeError
+from utils.errors import RcloneNotInstalledError, RcloneTimeoutError, RcloneVersionError, SyncRuntimeError
 from utils.logger import reset_config_cache
 
 # shutil.which returns a drive-letter absolute path on Windows; POSIX path on Linux.
@@ -111,6 +111,18 @@ def test_unparseable_version_raises():
          patch("sync.runner.subprocess.run", return_value=MagicMock(returncode=0, stdout="garbage", stderr="")):
         with pytest.raises(RcloneVersionError):
             check_rclone_version()
+
+
+def test_version_timeout_raises_rclone_timeout_error():
+    # rclone is on PATH (which succeeds) but the version check subprocess stalls.
+    # Must raise RcloneTimeoutError — NOT RcloneNotInstalledError — so callers
+    # report the right diagnosis ("binary stalled") rather than "not installed".
+    with patch("sync.runner.shutil.which", return_value=FAKE_RCLONE), \
+         patch("sync.runner.subprocess.run", side_effect=subprocess.TimeoutExpired(cmd=[FAKE_RCLONE, "version"], timeout=10)):
+        with pytest.raises(RcloneTimeoutError) as exc_info:
+            check_rclone_version()
+        assert exc_info.value.code == "RCLONE_TIMEOUT"
+        assert "timed out" in exc_info.value.message
 
 
 # ---------------------------------------------------------------------------
