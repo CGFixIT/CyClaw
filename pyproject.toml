@@ -36,9 +36,9 @@ dependencies = [
 
 [project.optional-dependencies]
 test = ["pytest==9.1.0", "pytest-asyncio==1.4.0"]
-dev = ["ruff", "mypy", "bandit", "pytest-cov"]
+dev = ["ruff", "mypy", "bandit", "pytest-cov==7.1.0"]
 torch-cpu = ["torch==2.6.0+cpu"]  # Minimum safe version post CVE-2025-32434 (weights_only=True RCE bypass in torch<2.6). Always prefer safetensors.
-full = ["torch==2.6.0+cpu", "pytest==9.1.0", "pytest-asyncio==1.4.0", "ruff", "mypy", "bandit", "pytest-cov"]
+full = ["torch==2.6.0+cpu", "pytest==9.1.0", "pytest-asyncio==1.4.0", "ruff", "mypy", "bandit", "pytest-cov==7.1.0"]
 
 [project.scripts]
 cyclaw-server = "gate:main"
