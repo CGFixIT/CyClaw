@@ -377,3 +377,47 @@ class TestRetryBehavior:
         assert exc.value.details.get("status") == 401
         assert len(fake.calls) == 1  # no wasted retries / credits on auth failure
         client.close()
+
+    def test_transient_retry_logs_warning(self, tmp_path, no_sleep, caplog):
+        # A retried transient failure must leave a WARNING breadcrumb tagged with
+        # the service + attempt count — previously the retry was entirely silent.
+        client = LocalLLMClient(_write_config(tmp_path, retry={"max_retries": 1, "backoff_base_sec": 0.5}))
+        fake = _ScriptedPost([_status_response(503), _ok_response("ok")])
+        client._client.post = fake
+        with caplog.at_level("WARNING", logger="llm.client"):
+            assert client.generate("p") == "ok"
+        warnings = [r for r in caplog.records if r.levelname == "WARNING"]
+        assert len(warnings) == 1
+        assert "lm_studio" in warnings[0].message
+        assert "503" in warnings[0].message
+        client.close()
+
+    def test_exhausted_retries_log_error(self, tmp_path, no_sleep, caplog):
+        # When retries are exhausted, the give-up must log an ERROR (not just
+        # raise) so an operator can see the call failed and how many attempts ran.
+        client = LocalLLMClient(_write_config(tmp_path, retry={"max_retries": 1, "backoff_base_sec": 0.5}))
+        fake = _ScriptedPost([_status_response(500)])  # persistent failure
+        client._client.post = fake
+        with caplog.at_level("ERROR", logger="llm.client"):
+            with pytest.raises(LLMServiceError):
+                client.generate("p")
+        errors = [r for r in caplog.records if r.levelname == "ERROR"]
+        assert len(errors) == 1
+        assert "lm_studio" in errors[0].message
+        assert "500" in errors[0].message
+        client.close()
+
+    def test_non_retryable_error_logs_type_not_content(self, tmp_path, no_sleep, caplog):
+        # A malformed-body failure (non-retryable) must log the exception *type*
+        # only — never the response content, which could carry sensitive text.
+        client = LocalLLMClient(_write_config(tmp_path))
+        fake = _ScriptedPost([_ok_response(None)])  # null content -> ValueError in _extract_content
+        client._client.post = fake
+        with caplog.at_level("ERROR", logger="llm.client"):
+            with pytest.raises(LLMServiceError):
+                client.generate("p")
+        errors = [r for r in caplog.records if r.levelname == "ERROR"]
+        assert len(errors) == 1
+        assert "lm_studio" in errors[0].message
+        assert "non-retryable" in errors[0].message
+        client.close()
