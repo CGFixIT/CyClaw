@@ -421,3 +421,40 @@ class TestRetryBehavior:
         assert "lm_studio" in errors[0].message
         assert "non-retryable" in errors[0].message
         client.close()
+
+
+class TestContextManager:
+    """Both clients support ``with`` so the per-instance httpx.Client is closed
+    deterministically (RAII) instead of relying on a manual ``close()`` call."""
+
+    def test_local_client_closes_on_exit(self, tmp_path):
+        client = LocalLLMClient(_write_config(tmp_path))
+        closed = {"n": 0}
+        client._client.close = lambda: closed.__setitem__("n", closed["n"] + 1)
+        with client as c:
+            assert c is client  # __enter__ returns self
+        assert closed["n"] == 1  # __exit__ called close() exactly once
+
+    def test_grok_client_closes_on_exit(self, tmp_path):
+        client = GrokClient(_write_config(tmp_path))
+        closed = {"n": 0}
+        client._client.close = lambda: closed.__setitem__("n", closed["n"] + 1)
+        with client as c:
+            assert c is client
+        assert closed["n"] == 1
+
+    def test_exit_closes_even_on_exception(self, tmp_path):
+        client = LocalLLMClient(_write_config(tmp_path))
+        closed = {"n": 0}
+        client._client.close = lambda: closed.__setitem__("n", closed["n"] + 1)
+        # Explicit try/except (not pytest.raises) so the post-block assertion is
+        # statically reachable — CodeQL can't model pytest.raises suppressing the
+        # exception and flags the following line as unreachable otherwise.
+        raised = False
+        try:
+            with client:
+                raise ValueError("boom")
+        except ValueError:
+            raised = True
+        assert raised  # the exception propagated out of the with block
+        assert closed["n"] == 1  # close() still runs when the block raises
