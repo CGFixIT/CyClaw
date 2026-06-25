@@ -61,7 +61,7 @@ jobs:
       # Run DevSkim
       - name: Run DevSkim scanner
         id: devskim
-        uses: microsoft/DevSkim-Action@v1
+        uses: microsoft/DevSkim-Action@4b5047945a44163b94642a1cecc0d93a3f428cc6  # v1
         with:
           # Scan the whole workspace. The action's default `directory-to-scan` is
           # GITHUB_WORKSPACE, so it is omitted here.
@@ -83,13 +83,13 @@ jobs:
 
       # Upload SARIF to GitHub Security tab
       - name: Publish findings to Security tab
-        uses: github/codeql-action/upload-sarif@v4
+        uses: github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e  # v4
         with:
           sarif_file: devskim-results.sarif
 
       # Also keep the SARIF as a downloadable run artefact (optional)
       - name: Save SARIF artefact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
         with:
           name: devskim-results
           path: devskim-results.sarif
