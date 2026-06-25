@@ -113,16 +113,30 @@ def plan_write(
     return plan
 
 
-def execute_write(plan: dict) -> dict:  # pragma: no cover - intentionally unreachable in v0.1
-    """Placeholder executor. Intentionally not implemented in v0.1.
+def execute_write(plan: dict) -> dict:
+    """Placeholder executor, gated by the ``EXECUTION_ENABLED`` kill switch.
 
-    Enabling real writes is a deliberate future change: implement this behind the
-    same gate, add explicit tests, and only then consider flipping
-    ``EXECUTION_ENABLED``. Until then this refuses loudly.
+    The kill switch is now *enforced* here, not merely documented. While
+    ``EXECUTION_ENABLED`` is ``False`` (its shipped state) this refuses every
+    request with ``AgenticWriteRefused`` and audits it -- even a caller that
+    hand-builds a fully gate-satisfied plan cannot run a write. Flipping the flag
+    to ``True`` is still not sufficient: the executor below remains unimplemented,
+    so enabling real writes stays a deliberate, separately-reviewed change.
     """
-    raise NotImplementedError(
-        "Agentic write execution is intentionally disabled in v0.1. "
-        "plan_write() only produces dry-run plans."
+    if not EXECUTION_ENABLED:
+        op = plan.get("op") if isinstance(plan, dict) else None
+        audit_log({
+            "event": "agentic_write_execution_blocked",
+            "op": op,
+            "gate": "execution_enabled",
+        })
+        raise AgenticWriteRefused(
+            "Agentic write execution is disabled (EXECUTION_ENABLED is False)",
+            details={"failed_gate": "execution_enabled", "op": op},
+        )
+    raise NotImplementedError(  # pragma: no cover - only reachable with the flag flipped
+        "Agentic write execution is intentionally unimplemented even with "
+        "EXECUTION_ENABLED set; wiring it is a separate, reviewed change."
     )
 
 
