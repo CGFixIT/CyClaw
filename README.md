@@ -98,6 +98,142 @@ User Query (HTTP POST /query or MCMC tool call)
 
 ---
 
+## API Key Setup (Soul Mutations)
+
+CyClaw's soul mutation endpoints (`/soul/propose`, `/soul/apply`, `/soul/reload`, `/soul/restore`) require a **Bearer API key**. Without it they return `HTTP 401` immediately — intentional fail-closed behavior.
+
+> **`GET /soul` (read-only) and all other endpoints do not require the key.** Only mutation routes are gated.
+
+### Windows — PowerShell
+
+Set for the current session only (cleared on terminal close):
+
+```powershell
+$env:CYCLAW_API_KEY = "your-strong-local-secret"
+uvicorn gate:app --host 127.0.0.1 --port 8787
+```
+
+Persist across sessions (writes to the current user's environment permanently):
+
+```powershell
+[System.Environment]::SetEnvironmentVariable(
+    "CYCLAW_API_KEY",
+    "your-strong-local-secret",
+    [System.EnvironmentVariableTarget]::User
+)
+# Restart your terminal, then launch normally:
+uvicorn gate:app --host 127.0.0.1 --port 8787
+```
+
+Verify it is set before launching:
+
+```powershell
+echo $env:CYCLAW_API_KEY
+```
+
+### Windows — Command Prompt (cmd.exe)
+
+```cmd
+set CYCLAW_API_KEY=your-strong-local-secret
+uvicorn gate:app --host 127.0.0.1 --port 8787
+```
+
+Persist permanently (takes effect in new sessions):
+
+```cmd
+setx CYCLAW_API_KEY "your-strong-local-secret"
+```
+
+### Windows Server 2022 — System-wide (all users, requires admin)
+
+```powershell
+[System.Environment]::SetEnvironmentVariable(
+    "CYCLAW_API_KEY",
+    "your-strong-local-secret",
+    [System.EnvironmentVariableTarget]::Machine
+)
+```
+
+Or via GUI: **System Properties → Advanced → Environment Variables → System variables → New**.
+
+### Linux / macOS — Bash / Zsh
+
+Set for the current session:
+
+```bash
+export CYCLAW_API_KEY="your-strong-local-secret"
+uvicorn gate:app --host 127.0.0.1 --port 8787
+```
+
+Persist in your shell profile (`~/.bashrc`, `~/.zshrc`, or `~/.profile`):
+
+```bash
+echo 'export CYCLAW_API_KEY="your-strong-local-secret"' >> ~/.bashrc
+source ~/.bashrc
+uvicorn gate:app --host 127.0.0.1 --port 8787
+```
+
+Persist for a **systemd service** (Linux server):
+
+```ini
+# /etc/systemd/system/cyclaw.service
+[Unit]
+Description=CyClaw RAG Gateway
+After=network.target
+
+[Service]
+Type=simple
+User=cyclaw
+WorkingDirectory=/opt/CyClaw
+Environment="CYCLAW_API_KEY=your-strong-local-secret"
+Environment="GROK_API_KEY=offline-dummy-sk-123"
+ExecStart=/opt/CyClaw/.venv/bin/uvicorn gate:app --host 127.0.0.1 --port 8787
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now cyclaw
+```
+
+### All platforms — `.env` file (already in `.gitignore`)
+
+Create `.env` in the repo root:
+
+```
+CYCLAW_API_KEY=your-strong-local-secret
+GROK_API_KEY=offline-dummy-sk-123
+```
+
+Load it before launching:
+
+```bash
+# Bash / Zsh
+export $(grep -v '^#' .env | xargs)
+uvicorn gate:app --host 127.0.0.1 --port 8787
+```
+
+```powershell
+# PowerShell
+Get-Content .env | ForEach-Object {
+    if ($_ -match '^([^#=][^=]*)=(.*)$') {
+        [System.Environment]::SetEnvironmentVariable($Matches[1].Trim(), $Matches[2].Trim())
+    }
+}
+uvicorn gate:app --host 127.0.0.1 --port 8787
+```
+
+### Choosing a key value
+
+CyClaw is loopback-only (`127.0.0.1:8787`) — the key never crosses a network. Still:
+
+- Use at least **20 random characters**: `openssl rand -hex 20` (Linux/macOS) or `[System.Web.Security.Membership]::GeneratePassword(24,4)` (PowerShell)
+- Do **not** reuse a password from elsewhere
+- Do **not** commit the key to Git (`.env` is already in `.gitignore`)
+
 ## Quick Start
 
 ### Prerequisites
