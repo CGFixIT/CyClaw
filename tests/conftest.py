@@ -9,7 +9,6 @@ import json
 import os
 import tempfile
 from pathlib import Path
-from typing import List
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -127,7 +126,7 @@ MOCK_LOW_SCORE_RESULTS = [
                  retrieval_mode="hybrid", rrf_score=0.30, semantic_score=0.30, semantic_rank=0),
 ]
 
-MOCK_EMPTY_RESULTS: List[SearchResult] = []
+MOCK_EMPTY_RESULTS: list[SearchResult] = []
 
 
 class MockRetriever:

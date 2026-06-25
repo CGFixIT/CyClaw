@@ -25,8 +25,8 @@ import sqlite3
 import threading
 import time
 from collections import defaultdict
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -43,13 +43,13 @@ class RateLimiter:
         max_requests: int = 60,
         window_seconds: float = 60,
         clock: Callable[[], float] = time.time,
-        db_path: Optional[str] = None,   # NEW: set to "data/rate_limits.db" for persistence
+        db_path: str | None = None,   # NEW: set to "data/rate_limits.db" for persistence
     ) -> None:
         self.max_requests = max_requests
         self.window_seconds = window_seconds
         self._clock = clock
         self._db_path = db_path
-        self._hits: Dict[str, List[float]] = defaultdict(list)
+        self._hits: dict[str, list[float]] = defaultdict(list)
         self._last_sweep = 0.0
         self._lock = threading.Lock()
 

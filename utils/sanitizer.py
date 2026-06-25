@@ -12,7 +12,7 @@ every chunk at index time) does not recompile regexes on each call.
 import logging
 import re
 from functools import lru_cache
-from typing import Pattern, Tuple
+from re import Pattern
 
 import yaml
 
@@ -25,7 +25,7 @@ _DEFAULT_MAX_INPUT_CHARS = 4000
 
 
 @lru_cache(maxsize=8)
-def _load_filter(config_path: str) -> Tuple[bool, int, Tuple[Pattern, ...]]:
+def _load_filter(config_path: str) -> tuple[bool, int, tuple[Pattern, ...]]:
     """Load and compile the prompt filter from config (cached per path).
 
     Returns ``(enabled, max_input_chars, compiled_patterns)``.

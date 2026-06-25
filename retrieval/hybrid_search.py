@@ -9,7 +9,6 @@ import heapq
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional
 
 import chromadb
 import yaml
@@ -30,15 +29,15 @@ class SearchResult:
     score: float
     source: str
     chunk_id: int
-    stem_tags: List[str]
+    stem_tags: list[str]
     retrieval_mode: str  # "semantic" | "keyword" | "hybrid"
-    semantic_score: Optional[float] = None
-    semantic_rank: Optional[int] = None
-    keyword_score: Optional[float] = None
-    keyword_rank: Optional[int] = None
-    rrf_score: Optional[float] = None
-    rrf_semantic_contrib: Optional[float] = None
-    rrf_keyword_contrib: Optional[float] = None
+    semantic_score: float | None = None
+    semantic_rank: int | None = None
+    keyword_score: float | None = None
+    keyword_rank: int | None = None
+    rrf_score: float | None = None
+    rrf_semantic_contrib: float | None = None
+    rrf_keyword_contrib: float | None = None
     provenance: dict = field(default_factory=dict)
 
 class HybridRetriever:
@@ -77,7 +76,7 @@ class HybridRetriever:
         resolved = Path(bm25_path).resolve()
         if not resolved.is_file():
             raise IndexNotFoundError(f"BM25 index path is not a regular file: {bm25_path}")
-        with open(resolved, "r", encoding="utf-8") as f:  # DevSkim: ignore DS161085 - project-generated index
+        with open(resolved, encoding="utf-8") as f:  # DevSkim: ignore DS161085 - project-generated index
             bm25_data = json.load(f)
             self.bm25 = BM25Okapi(bm25_data["tokenized_corpus"])
             self.bm25_chunks = bm25_data["chunks"]
@@ -87,7 +86,7 @@ class HybridRetriever:
         self.top_k_keyword = self.cfg["retrieval"]["top_k_keyword"]
         self.rrf_k = self.cfg["retrieval"]["rrf_k"]
 
-    def semantic_search(self, query: str, k: Optional[int] = None) -> List[SearchResult]:
+    def semantic_search(self, query: str, k: int | None = None) -> list[SearchResult]:
         if k is None:
             k = self.top_k_semantic
         emb = get_embedding(query, self.config_path)
@@ -107,7 +106,7 @@ class HybridRetriever:
                 ))
         return hits
 
-    def keyword_search(self, query: str, k: Optional[int] = None) -> List[SearchResult]:
+    def keyword_search(self, query: str, k: int | None = None) -> list[SearchResult]:
         if k is None:
             k = self.top_k_keyword
         query_tokens = tokenize_and_stem(query)
@@ -131,7 +130,7 @@ class HybridRetriever:
                 ))
         return hits
 
-    def _normalize_single_path(self, hits: List[SearchResult]) -> List[SearchResult]:
+    def _normalize_single_path(self, hits: list[SearchResult]) -> list[SearchResult]:
         """Re-score a BM25-only fallback result list into the RRF range.
 
         Raw BM25 scores are unbounded positive floats (a hit can score 2.7) and
@@ -151,7 +150,7 @@ class HybridRetriever:
         ``1 - distance`` score is already bounded and is the value the gate is
         tuned to admit, so it is returned unchanged by ``hybrid_search``.
         """
-        normalized: List[SearchResult] = []
+        normalized: list[SearchResult] = []
         for rank, hit in enumerate(hits):
             contrib = 1 / (self.rrf_k + rank)
             hit.score = contrib
@@ -163,9 +162,9 @@ class HybridRetriever:
             normalized.append(hit)
         return normalized
 
-    def hybrid_search(self, query: str) -> List[SearchResult]:
-        semantic_hits: List[SearchResult] = []
-        keyword_hits: List[SearchResult] = []
+    def hybrid_search(self, query: str) -> list[SearchResult]:
+        semantic_hits: list[SearchResult] = []
+        keyword_hits: list[SearchResult] = []
         try:
             semantic_hits = self.semantic_search(query)
         except EmbeddingServiceError as e:

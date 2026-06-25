@@ -19,9 +19,8 @@ import hashlib
 import os
 import re
 import threading
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import List
 
 from utils import personality_db
 from utils.errors import PromptInjectionError
@@ -112,7 +111,7 @@ class PersonalityManager:
             with self._lock:
                 self.conn.execute(
                     self._sql_insert_soul,
-                    (file_hash, _DEFAULT_SOUL, "initial_default", datetime.now(timezone.utc).isoformat())
+                    (file_hash, _DEFAULT_SOUL, "initial_default", datetime.now(UTC).isoformat())
                 )
                 self.conn.commit()
             self.soul_core = _DEFAULT_SOUL
@@ -135,14 +134,14 @@ class PersonalityManager:
                 self.conn.execute(
                     self._sql_insert_soul,
                     (file_hash, content, "DRIFT_RECOVERY: file hash mismatch on startup",
-                     datetime.now(timezone.utc).isoformat())
+                     datetime.now(UTC).isoformat())
                 )
                 self.conn.commit()
         elif not row:
             with self._lock:
                 self.conn.execute(
                     self._sql_insert_soul,
-                    (file_hash, content, "initial_load", datetime.now(timezone.utc).isoformat())
+                    (file_hash, content, "initial_load", datetime.now(UTC).isoformat())
                 )
                 self.conn.commit()
 
@@ -157,7 +156,7 @@ class PersonalityManager:
         ).fetchone()
         return int(row["max_id"]) if row and row["max_id"] is not None else 0
 
-    def _build_enforced_patterns(self) -> List[tuple]:
+    def _build_enforced_patterns(self) -> list[tuple]:
         """Compile critical patterns for soul-write enforcement.
 
         These are memory-poisoning patterns that must never be written to soul.md.
@@ -166,12 +165,12 @@ class PersonalityManager:
         they come from the admin's explicit blocking list. Returns (source, compiled)
         pairs; invalid regexes are skipped.
         """
-        sources: List[str] = list(ENFORCED_SOUL_PATTERNS)
+        sources: list[str] = list(ENFORCED_SOUL_PATTERNS)
         pf = (self.cfg.get("policy") or {}).get("prompt_filter") or {}
         for p in (pf.get("banned_patterns") or []):
             if p not in sources:
                 sources.append(p)
-        compiled: List[tuple] = []
+        compiled: list[tuple] = []
         for p in sources:
             try:
                 compiled.append((p, re.compile(p, re.IGNORECASE)))
@@ -179,7 +178,7 @@ class PersonalityManager:
                 continue
         return compiled
 
-    def _build_advisory_patterns(self) -> List[tuple]:
+    def _build_advisory_patterns(self) -> list[tuple]:
         """Compile advisory patterns for propose_evolution human review.
 
         Broader set: config patterns + OWASP baseline. These are surfaced for
@@ -187,12 +186,12 @@ class PersonalityManager:
         legitimate identity text like "You are now CyClaw; act as...". Returns
         (source, compiled) pairs; invalid regexes are skipped.
         """
-        sources: List[str] = list(OWASP_INJECTION_PATTERNS)
+        sources: list[str] = list(OWASP_INJECTION_PATTERNS)
         pf = (self.cfg.get("policy") or {}).get("prompt_filter") or {}
         for p in (pf.get("banned_patterns") or []):
             if p not in sources:
                 sources.append(p)
-        compiled: List[tuple] = []
+        compiled: list[tuple] = []
         for p in sources:
             try:
                 compiled.append((p, re.compile(p, re.IGNORECASE)))
@@ -200,11 +199,11 @@ class PersonalityManager:
                 continue
         return compiled
 
-    def _scan_enforced(self, text: str) -> List[str]:
+    def _scan_enforced(self, text: str) -> list[str]:
         """Return critical patterns that must not be written to soul.md."""
         return [src for src, pat in self._enforced_patterns if pat.search(text)]
 
-    def _scan_advisory(self, text: str) -> List[str]:
+    def _scan_advisory(self, text: str) -> list[str]:
         """Return advisory patterns for human review (propose_evolution)."""
         return [src for src, pat in self._advisory_patterns if pat.search(text)]
 
@@ -276,7 +275,7 @@ class PersonalityManager:
             os.replace(tmp_path, self.soul_path)
             self.conn.execute(
                 self._sql_insert_soul,
-                (new_hash, new_soul, reason, datetime.now(timezone.utc).isoformat())
+                (new_hash, new_soul, reason, datetime.now(UTC).isoformat())
             )
             self.conn.commit()
         self.soul_core = new_soul
@@ -311,7 +310,7 @@ class PersonalityManager:
         with self._lock:
             self.conn.execute(
                 self._sql_insert_interaction,
-                (query_hash, outcome, datetime.now(timezone.utc).isoformat())
+                (query_hash, outcome, datetime.now(UTC).isoformat())
             )
             # Amortize the TTL prune. The previous code ran a full
             # `DELETE FROM interactions WHERE timestamp < cutoff` on *every*
@@ -326,7 +325,7 @@ class PersonalityManager:
             # DELETE cost on each request.
             self._inserts_since_prune += 1
             if self._inserts_since_prune >= self._prune_every:
-                cutoff = (datetime.now(timezone.utc) - timedelta(days=self.ttl_days)).isoformat()
+                cutoff = (datetime.now(UTC) - timedelta(days=self.ttl_days)).isoformat()
                 self.conn.execute(self._sql_delete_old_interactions, (cutoff,))
                 self._inserts_since_prune = 0
             self.conn.commit()
@@ -334,7 +333,7 @@ class PersonalityManager:
     def maintenance(self, ttl_days: int | None = None) -> int:
         if ttl_days is None:
             ttl_days = self.ttl_days
-        cutoff = (datetime.now(timezone.utc) - timedelta(days=ttl_days)).isoformat()
+        cutoff = (datetime.now(UTC) - timedelta(days=ttl_days)).isoformat()
         with self._lock:
             cursor = self.conn.execute(self._sql_delete_old_interactions, (cutoff,))
             self.conn.commit()

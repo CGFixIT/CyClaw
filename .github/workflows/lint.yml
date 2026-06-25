@@ -2,9 +2,8 @@
 # Runs ruff only — no project deps, no torch, no ChromaDB.
 # Full CI (tests + coverage) runs separately on push to main/cc.
 #
-# Rule scope: E,F,I,B,C4,S matches the most impactful rules from
-# pyproject.toml [tool.ruff.lint] and flags new issues without failing
-# on the existing UP (pyupgrade) backlog. See cleanup PR to widen scope.
+# Rule scope: E,F,I,B,C4,UP,S matches pyproject.toml [tool.ruff.lint] exactly.
+# UP (pyupgrade) backlog was cleared in the ruff-up-alignment PR.
 
 name: Lint
 
@@ -40,4 +39,4 @@ jobs:
         run: pip install ruff
 
       - name: ruff check
-        run: ruff check --select E,F,I,B,C4,S .
+        run: ruff check --select E,F,I,B,C4,UP,S .

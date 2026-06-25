@@ -15,7 +15,7 @@ import json
 import logging
 import os
 import time
-from typing import Callable, Optional
+from collections.abc import Callable
 
 import httpx
 import yaml
@@ -164,7 +164,7 @@ def _post_with_retry(
 
 
 class LocalLLMClient:
-    def __init__(self, config_path: str = "config.yaml", cfg: Optional[dict] = None):
+    def __init__(self, config_path: str = "config.yaml", cfg: dict | None = None):
         if cfg is None:
             with open(config_path, encoding="utf-8") as f:
                 cfg = yaml.safe_load(f)
@@ -209,7 +209,7 @@ class LocalLLMClient:
         )
 
 class GrokClient:
-    def __init__(self, config_path: str = "config.yaml", cfg: Optional[dict] = None):
+    def __init__(self, config_path: str = "config.yaml", cfg: dict | None = None):
         if cfg is None:
             with open(config_path, encoding="utf-8") as f:
                 cfg = yaml.safe_load(f)

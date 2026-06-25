@@ -14,7 +14,6 @@ Security note (2026-06):
 
 import os
 from functools import lru_cache
-from typing import List
 
 import yaml
 
@@ -56,7 +55,7 @@ def _cached_embedding(text: str, config_path: str) -> tuple:
     model = _load_model(model_name, cache_dir)
     return tuple(model.encode(text, normalize_embeddings=True).tolist())
 
-def get_embedding(text: str, config_path: str = "config.yaml") -> List[float]:
+def get_embedding(text: str, config_path: str = "config.yaml") -> list[float]:
     return list(_cached_embedding(text, config_path))
 
 def reset_embedding_cache() -> None:
@@ -77,7 +76,7 @@ def reset_embedding_cache() -> None:
         if clear is not None:
             clear()
 
-def get_embeddings_batch(texts: List[str], config_path: str = "config.yaml") -> List[List[float]]:
+def get_embeddings_batch(texts: list[str], config_path: str = "config.yaml") -> list[list[float]]:
     model_name, cache_dir = _embeddings_cfg(config_path)
     model = _load_model(model_name, cache_dir)
     return model.encode(texts, normalize_embeddings=True, show_progress_bar=True).tolist()

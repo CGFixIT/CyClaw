@@ -9,7 +9,6 @@ Extends NLTK PorterStemmer with custom rules for:
 
 import re
 from functools import lru_cache
-from typing import List
 
 from nltk.stem import PorterStemmer
 
@@ -42,7 +41,7 @@ def stem_token(token: str) -> str:
         return _CUSTOM_STEMS[lower]
     return _stemmer.stem(lower)
 
-def tokenize_and_stem(text: str) -> List[str]:
+def tokenize_and_stem(text: str) -> list[str]:
     # _WORD_RE.findall() already guarantees each token matches [a-z][a-z0-9_-]+
     # (letter-led, length >= 2). The previous `if _TOKEN_RE.match(t)` filter
     # re-validated that exact same shape and therefore always returned True —

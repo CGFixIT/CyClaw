@@ -10,17 +10,16 @@ import hashlib
 import json
 import logging
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
-from typing import Optional, Tuple
 
 import yaml
 
 _logging_initialized = False
 
 
-def setup_logging(cfg: Optional[dict] = None) -> None:
+def setup_logging(cfg: dict | None = None) -> None:
     global _logging_initialized
     if _logging_initialized:
         return
@@ -50,7 +49,7 @@ def setup_logging(cfg: Optional[dict] = None) -> None:
 
     _logging_initialized = True
 
-_config_cache: Optional[dict] = None
+_config_cache: dict | None = None
 
 def _get_config(config_path: str = "config.yaml") -> dict:
     global _config_cache
@@ -68,8 +67,8 @@ def hash_query(query: str) -> str:
 
 @lru_cache(maxsize=8)
 def _compiled_redactors(
-    redact_emails: bool, redact_ips: bool, secret_patterns: Tuple[str, ...]
-) -> Tuple[Tuple[re.Pattern, str], ...]:
+    redact_emails: bool, redact_ips: bool, secret_patterns: tuple[str, ...]
+) -> tuple[tuple[re.Pattern, str], ...]:
     """Compile the active redaction patterns once per privacy configuration.
 
     redact_sensitive runs on every audited field of every query; recompiling
@@ -90,7 +89,7 @@ def _compiled_redactors(
             pass
     return tuple(compiled)
 
-def redact_sensitive(text: str, cfg: Optional[dict] = None) -> str:
+def redact_sensitive(text: str, cfg: dict | None = None) -> str:
     if cfg is None:
         cfg = _get_config()
     privacy = cfg.get("policy", {}).get("privacy", {})
@@ -115,6 +114,6 @@ def audit_log(event: dict, config_path: str = "config.yaml") -> None:
     for key, value in list(record.items()):
         if isinstance(value, str) and key not in ("query_hash", "timestamp", "event"):
             record[key] = redact_sensitive(value, cfg)
-    record["timestamp"] = datetime.now(timezone.utc).isoformat()
+    record["timestamp"] = datetime.now(UTC).isoformat()
     with open(log_path, "a", encoding="utf-8") as f:
         f.write(json.dumps(record) + "\n")

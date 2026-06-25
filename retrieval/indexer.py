@@ -7,7 +7,6 @@ Sanitizes chunks at ingestion time via prompt filter.
 import json
 import logging
 from pathlib import Path
-from typing import List, Tuple
 
 import chromadb
 import yaml
@@ -26,7 +25,7 @@ def load_config(config_path: str = "config.yaml") -> dict:
     with open(config_path, encoding="utf-8") as f:
         return yaml.safe_load(f)
 
-def load_corpus(corpus_path: str, extensions: List[str]) -> List[Tuple[str, str]]:
+def load_corpus(corpus_path: str, extensions: list[str]) -> list[tuple[str, str]]:
     docs = []
     corpus_dir = Path(corpus_path)
     if not corpus_dir.exists():
@@ -54,7 +53,7 @@ def load_corpus(corpus_path: str, extensions: List[str]) -> List[Tuple[str, str]
         raise CorpusEmptyError(f"No documents found in {corpus_path} with extensions {extensions}")
     return docs
 
-def chunk_document(text: str, chunk_size: int = 512, overlap: int = 50) -> List[str]:
+def chunk_document(text: str, chunk_size: int = 512, overlap: int = 50) -> list[str]:
     # The stride must advance by at least one word per iteration. If a
     # misconfiguration sets overlap >= chunk_size, ``chunk_size - overlap`` is
     # <= 0 and ``start`` never moves forward — the loop spins forever, appending

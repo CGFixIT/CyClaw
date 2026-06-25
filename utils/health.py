@@ -7,14 +7,13 @@ embeddings are local sentence-transformers.
 import os
 import re
 import time
-from typing import Dict, List, Optional, Tuple
 
 import httpx
 import yaml
 
 from .errors import HealthStatus, LLMServiceError
 
-_cfg_cache: Dict[str, Tuple[dict, float]] = {}
+_cfg_cache: dict[str, tuple[dict, float]] = {}
 _cfg_ttl_sec = 60
 
 
@@ -34,7 +33,7 @@ def _health_cfg(config_path: str) -> dict:
     _cfg_cache[config_path] = (cfg, now)
     return cfg
 
-def check_all(config_path: str = "config.yaml") -> List[HealthStatus]:
+def check_all(config_path: str = "config.yaml") -> list[HealthStatus]:
     cfg = _health_cfg(config_path)
     results = []
     llm_base = cfg["models"]["local_llm"]["base_url"]
@@ -71,7 +70,7 @@ def require_healthy(config_path: str = "config.yaml") -> None:
                 details={"endpoint": s.name}
             )
 
-def _ping(url: str, name: str, headers: Optional[dict] = None) -> HealthStatus:
+def _ping(url: str, name: str, headers: dict | None = None) -> HealthStatus:
     try:
         start = time.monotonic()
         resp = httpx.get(url, timeout=5.0, headers=headers or {})
