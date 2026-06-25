@@ -4,6 +4,7 @@ Mocks: LLM services, embedding model, retriever, test config.
 No live services required — all external deps are mocked.
 """
 
+import copy
 import json
 import os
 import tempfile
@@ -55,11 +56,17 @@ TEST_CONFIG = {
 
 @pytest.fixture
 def test_config(tmp_path):
-    cfg = TEST_CONFIG.copy()
-    cfg["indexing"] = cfg["indexing"].copy()
+    # Deep-copy so each test gets a fully independent config tree. The old
+    # ``TEST_CONFIG.copy()`` was a SHALLOW copy that only hand-cloned the
+    # ``indexing`` and ``logging`` sub-dicts; every other nested dict (models,
+    # policy, retrieval, security, ...) was a shared reference to the module-level
+    # TEST_CONFIG. A test mutating e.g. ``cfg["models"]["grok"]["enabled"]`` or
+    # appending to ``cfg["policy"]["prompt_filter"]["banned_patterns"]`` would
+    # poison the global and leak into every later test (order-dependent flakes,
+    # amplified under pytest-xdist). deepcopy removes that whole class of bug.
+    cfg = copy.deepcopy(TEST_CONFIG)
     cfg["indexing"]["chroma_path"] = str(tmp_path / "chroma_db")
     cfg["indexing"]["bm25_path"] = str(tmp_path / "bm25.json")
-    cfg["logging"] = cfg["logging"].copy()
     cfg["logging"]["log_file"] = str(tmp_path / "cyclaw.log")
     cfg["logging"]["audit_file"] = str(tmp_path / "audit.jsonl")
     config_file = tmp_path / "config.yaml"
