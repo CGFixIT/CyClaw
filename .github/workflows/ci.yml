@@ -135,6 +135,7 @@ jobs:
             tests/test_agentic_context.py \
             tests/test_rag_integration.py \
             tests/test_startup_robustness.py \
+            tests/test_clear_cache.py \
             -q --tb=short \
             --cov=gate \
             --cov=utils.sanitizer \
@@ -151,6 +152,7 @@ jobs:
             --cov=retrieval.hybrid_search \
             --cov=retrieval.indexer \
             --cov=retrieval.stemmer \
+            --cov=retrieval.clear_cache \
             --cov=mcp_hybrid_server \
             --cov=metrics \
             --cov=sync.selftest \
