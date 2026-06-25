@@ -7,22 +7,32 @@ embeddings are local sentence-transformers.
 import os
 import re
 import time
-from functools import lru_cache
-from typing import List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import httpx
 import yaml
 
 from .errors import HealthStatus, LLMServiceError
 
+_cfg_cache: Dict[str, Tuple[dict, float]] = {}
+_cfg_ttl_sec = 60
 
-@lru_cache(maxsize=8)
+
 def _health_cfg(config_path: str) -> dict:
-    """Parse config once per path. check_all runs on every /health request, so
-    re-reading and re-parsing the YAML each time was avoidable disk + parse I/O.
+    """Parse config with 60-second TTL to balance performance and hot-reload responsiveness.
+
+    If config.yaml is edited post-startup, the cache expires within 60 seconds,
+    allowing operators to toggle settings (e.g. Grok) without restarting.
     """
+    now = time.monotonic()
+    if config_path in _cfg_cache:
+        cached_cfg, cached_at = _cfg_cache[config_path]
+        if now - cached_at < _cfg_ttl_sec:
+            return cached_cfg
     with open(config_path, encoding="utf-8") as f:
-        return yaml.safe_load(f)
+        cfg = yaml.safe_load(f)
+    _cfg_cache[config_path] = (cfg, now)
+    return cfg
 
 def check_all(config_path: str = "config.yaml") -> List[HealthStatus]:
     cfg = _health_cfg(config_path)

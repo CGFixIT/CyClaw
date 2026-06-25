@@ -51,10 +51,11 @@ class _OKResp:
 
 @pytest.fixture(autouse=True)
 def _clear_health_cfg_cache():
-    # _health_cfg is module-level lru_cache; isolate every test from cached parses.
-    health._health_cfg.cache_clear()
+    # _health_cfg uses a module-level TTL dict cache; isolate every test from
+    # cached parses by emptying it before and after each test.
+    health._cfg_cache.clear()
     yield
-    health._health_cfg.cache_clear()
+    health._cfg_cache.clear()
 
 
 class TestPing:
@@ -150,5 +151,22 @@ class TestHealthCfgCache:
         cfg_path = _write_cfg(tmp_path)
         first = health._health_cfg(cfg_path)
         second = health._health_cfg(cfg_path)
-        # Same object identity -> the second call was served from the cache.
+        # Same object identity -> the second call was served from the cache
+        # (both calls fall inside the TTL window).
         assert first is second
+
+    def test_cfg_reparsed_after_ttl_expiry(self, tmp_path, monkeypatch):
+        # The TTL cache must serve a *fresh* parse once the entry ages past the
+        # TTL, so an operator editing config.yaml post-startup is picked up
+        # without a process restart (the foot-gun the unbounded lru_cache had).
+        cfg_path = _write_cfg(tmp_path)
+        clock = {"now": 1000.0}
+        monkeypatch.setattr(health.time, "monotonic", lambda: clock["now"])
+
+        first = health._health_cfg(cfg_path)
+        # Advance the clock just past the TTL so the cached entry is stale.
+        clock["now"] += health._cfg_ttl_sec + 1
+        second = health._health_cfg(cfg_path)
+        # Different object identity -> the file was re-read and re-parsed.
+        assert first is not second
+        assert second == first  # same content, freshly parsed
