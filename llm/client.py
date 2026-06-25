@@ -12,6 +12,7 @@ preserving the original single-attempt behavior.
 """
 
 import json
+import logging
 import os
 import time
 from typing import Callable, Optional
@@ -20,6 +21,8 @@ import httpx
 import yaml
 
 from utils.errors import GrokServiceError, LLMServiceError, RAGError
+
+log = logging.getLogger(__name__)
 
 _RETRYABLE_STATUS_FLOOR = 500
 _RETRYABLE_EXTRA_STATUS = frozenset({429})
@@ -78,6 +81,7 @@ def _read_retry(model_cfg: dict) -> tuple[int, float, float]:
 
 def _post_with_retry(
     *,
+    service: str,
     do_post: Callable[[], httpx.Response],
     max_retries: int,
     backoff_base: float,
@@ -96,32 +100,65 @@ def _post_with_retry(
     ``max_retries == 0`` reproduces the original single-attempt behavior. The
     ``on_*`` callables map the terminal failure to the caller's typed error so
     messages/codes stay unchanged.
+
+    Each transient retry logs a WARNING and each terminal give-up / fail-fast a
+    ERROR, tagged with ``service`` (e.g. ``lm_studio`` / ``grok``), the attempt
+    count, and the failure category. Only network/HTTP metadata is logged —
+    never the prompt or response body — so the breadcrumb is safe for the audit
+    trail. This turns previously-silent retries (a 12-minute LM Studio stall would
+    leave no trace) into an observable signal.
     """
     def _delay(attempt: int) -> float:
         return min(backoff_base * (2 ** attempt), backoff_max)
 
+    total = max_retries + 1
     for attempt in range(max_retries + 1):
         try:
             resp = do_post()
             resp.raise_for_status()
             return _extract_content(resp)
         except httpx.HTTPStatusError as e:
-            if attempt < max_retries and _is_retryable_status(e.response.status_code):
-                time.sleep(_delay(attempt))
+            status = e.response.status_code
+            if attempt < max_retries and _is_retryable_status(status):
+                delay = _delay(attempt)
+                log.warning(
+                    "%s call HTTP %s (attempt %d/%d); retrying in %.1fs",
+                    service, status, attempt + 1, total, delay,
+                )
+                time.sleep(delay)
                 continue
+            log.error("%s call failed: HTTP %s after %d attempt(s)", service, status, attempt + 1)
             raise on_http(e) from e
         except httpx.TimeoutException as e:
             if attempt < max_retries:
-                time.sleep(_delay(attempt))
+                delay = _delay(attempt)
+                log.warning(
+                    "%s call timed out (attempt %d/%d); retrying in %.1fs",
+                    service, attempt + 1, total, delay,
+                )
+                time.sleep(delay)
                 continue
+            log.error("%s call failed: timeout after %d attempt(s)", service, attempt + 1)
             raise on_timeout(e) from e
         except httpx.TransportError as e:
             # Connection/read/write/protocol errors below the HTTP layer.
             if attempt < max_retries:
-                time.sleep(_delay(attempt))
+                delay = _delay(attempt)
+                log.warning(
+                    "%s transport error %s (attempt %d/%d); retrying in %.1fs",
+                    service, type(e).__name__, attempt + 1, total, delay,
+                )
+                time.sleep(delay)
                 continue
+            log.error(
+                "%s call failed: transport error %s after %d attempt(s)",
+                service, type(e).__name__, attempt + 1,
+            )
             raise on_other(e) from e
         except Exception as e:
+            # Non-transient (e.g. malformed response body); fail fast, no retry.
+            # Log only the exception *type* — its message can echo response content.
+            log.error("%s call failed: non-retryable %s", service, type(e).__name__)
             raise on_other(e) from e
     raise AssertionError("unreachable: retry loop exited without return/raise")  # pragma: no cover
 
@@ -156,6 +193,7 @@ class LocalLLMClient:
             )
 
         return _post_with_retry(
+            service="lm_studio",
             do_post=do_post,
             max_retries=self.retry_max,
             backoff_base=self.retry_backoff,
@@ -209,6 +247,7 @@ class GrokClient:
             )
 
         return _post_with_retry(
+            service="grok",
             do_post=do_post,
             max_retries=self.retry_max,
             backoff_base=self.retry_backoff,
