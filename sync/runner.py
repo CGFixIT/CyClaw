@@ -249,7 +249,21 @@ def parse_log(log_path: str) -> tuple[list[FileEvent], list[str]]:
         # No log file == nothing happened. Caller decides whether that is an error.
         pass
 
-    return events, errors
+    # Dedupe by (kind, path), preserving first-seen order. With --checksum on the
+    # default pull path, rclone can emit both a "Copied (replaced existing)" line
+    # and a separate "Updated modification time" line for the same file -- both
+    # match _LOG_MODIFIED_RE. Without dedup that double-counts `modified` in
+    # event_counts() and makes hash_changed_files() SHA the same path twice.
+    seen: set[tuple[str, str]] = set()
+    deduped: list[FileEvent] = []
+    for ev in events:
+        key = (ev.kind, ev.path)
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(ev)
+
+    return deduped, errors
 
 
 def hash_changed_files(events: Sequence[FileEvent], local_root: str) -> list[FileEvent]:
