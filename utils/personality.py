@@ -119,26 +119,28 @@ class PersonalityManager:
 
         content = self.soul_path.read_text(encoding="utf-8")
         file_hash = self._sha256(content)
-        row = self.conn.execute(
-            "SELECT sha256 FROM soul_versions ORDER BY id DESC LIMIT 1"
-        ).fetchone()
-
-        if row and row["sha256"] != file_hash:
-            audit_log({
-                "event": "soul_drift_detected",
-                "expected": row["sha256"],
-                "actual": file_hash,
-                "path": str(self.soul_path),
-            })
-            with self._lock:
+        # Hold the lock across the read-then-conditional-write so a concurrent
+        # apply_evolution()/reload() on another thread cannot interleave with
+        # this check-and-insert on the shared connection (opened
+        # check_same_thread=False and shared across FastAPI's threadpool). The
+        # SELECT was previously unlocked, leaving a TOCTOU between reading the
+        # latest hash and writing the recovery row. audit_log() writes to a
+        # separate file, so the drift event is emitted after the lock is
+        # released to keep the critical section tight.
+        drift_expected: str | None = None
+        with self._lock:
+            row = self.conn.execute(
+                "SELECT sha256 FROM soul_versions ORDER BY id DESC LIMIT 1"
+            ).fetchone()
+            if row and row["sha256"] != file_hash:
+                drift_expected = row["sha256"]
                 self.conn.execute(
                     self._sql_insert_soul,
                     (file_hash, content, "DRIFT_RECOVERY: file hash mismatch on startup",
                      datetime.now(UTC).isoformat())
                 )
                 self.conn.commit()
-        elif not row:
-            with self._lock:
+            elif not row:
                 self.conn.execute(
                     self._sql_insert_soul,
                     (file_hash, content, "initial_load", datetime.now(UTC).isoformat())
@@ -146,14 +148,28 @@ class PersonalityManager:
                 self.conn.commit()
 
         self.soul_core = content
+        if drift_expected is not None:
+            audit_log({
+                "event": "soul_drift_detected",
+                "expected": drift_expected,
+                "actual": file_hash,
+                "path": str(self.soul_path),
+            })
 
     def get_system_prompt_additive(self) -> str:
         return self.soul_core
 
     def get_version(self) -> int:
-        row = self.conn.execute(
-            "SELECT MAX(id) AS max_id FROM soul_versions"
-        ).fetchone()
+        # Serialize this read through the same lock the writers hold: the
+        # connection is shared across threads (check_same_thread=False), and
+        # GET /soul reads the version on the event-loop thread while
+        # /soul/apply writes from a threadpool thread. An unlocked read on the
+        # shared connection can race a concurrent write (e.g. "recursive use of
+        # cursors not allowed"); taking the lock keeps connection access uniform.
+        with self._lock:
+            row = self.conn.execute(
+                "SELECT MAX(id) AS max_id FROM soul_versions"
+            ).fetchone()
         return int(row["max_id"]) if row and row["max_id"] is not None else 0
 
     def _build_enforced_patterns(self) -> list[tuple]:

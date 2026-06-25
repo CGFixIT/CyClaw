@@ -10,6 +10,7 @@ Run: pytest tests/test_personality.py -v
 
 import os
 import tempfile
+import threading
 import pytest
 from pathlib import Path
 from unittest.mock import patch
@@ -381,3 +382,60 @@ class TestScannerUnification:
         assert "soul_restore_scan_flags" in events
         assert "soul_restored_from_backup" in events
         assert result["status"] == "applied"
+
+
+class TestPersonalityConcurrency:
+    """Concurrent access to the shared sqlite connection must not raise.
+
+    PersonalityManager opens its connection with check_same_thread=False and
+    shares it across threads (FastAPI runs the soul endpoints in a threadpool;
+    GET /soul reads the version on the event-loop thread while /soul/apply
+    writes from a worker thread). Reads must serialize through the same lock the
+    writers hold, or an unlocked read can race a concurrent write on the shared
+    connection. This test hammers get_version() (read) alongside apply_evolution()
+    (write) from many threads and asserts no thread raised and the final version
+    count is exactly right.
+    """
+
+    def test_concurrent_get_version_and_apply_do_not_raise(self, cfg, tmp_paths):
+        soul_path, _, _ = tmp_paths
+        soul_path.parent.mkdir(parents=True, exist_ok=True)
+        soul_path.write_text("# Soul\n\nInitial identity.\n", encoding="utf-8")
+
+        with patch("utils.personality.audit_log"):
+            from utils.personality import PersonalityManager
+            pm = PersonalityManager(cfg)
+
+            # Existing soul + empty DB → one "initial_load" version row.
+            assert pm.get_version() == 1
+
+            errors: list[Exception] = []
+            n_apply = 20
+            start = threading.Barrier(4 + n_apply)  # release all threads together
+
+            def reader() -> None:
+                start.wait()
+                try:
+                    for _ in range(50):
+                        pm.get_version()
+                except Exception as exc:  # noqa: BLE001 - capture any error off-thread
+                    errors.append(exc)
+
+            def writer(i: int) -> None:
+                start.wait()
+                try:
+                    pm.apply_evolution(f"# Soul\n\nIdentity revision {i}.\n", reason=f"rev {i}")
+                except Exception as exc:  # noqa: BLE001
+                    errors.append(exc)
+
+            threads = [threading.Thread(target=reader) for _ in range(4)]
+            threads += [threading.Thread(target=writer, args=(i,)) for i in range(n_apply)]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join()
+
+            assert not errors, f"concurrent access raised: {errors!r}"
+            # Each apply commits exactly one version row (writes are serialized by
+            # the lock); reads never write. 1 initial + n_apply applied.
+            assert pm.get_version() == 1 + n_apply
