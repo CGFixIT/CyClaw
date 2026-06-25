@@ -151,6 +151,86 @@ class SkillRegistryError(AgenticError):
         super().__init__(message, code="SKILL_REGISTRY_ERROR", details=details)
 
 
+class FsConnectError(RAGError):
+    """Base error for the out-of-band filesystem connector (agentic/fsconnect).
+
+    Mirrors the AgenticError / SyncError convention: a dedicated hierarchy for a
+    strictly out-of-band feature that is never imported by gate.py / graph.py /
+    mcp_hybrid_server.py.
+    """
+
+    def __init__(self, message: str, code: str = "FSCONNECT_ERROR", details: dict | None = None):
+        super().__init__(message, code=code, details=details)
+
+
+class FsConnectConfigError(FsConnectError):
+    """The fsconnect: block in config.yaml is missing or invalid."""
+
+    def __init__(self, message: str, details: dict | None = None):
+        super().__init__(message, code="FSCONNECT_CONFIG_INVALID", details=details)
+
+
+class FsPathError(FsConnectError):
+    """A path failed the pathsafe containment check (escape, reparse point, ADS, etc.).
+
+    Raised by the security core whenever a requested target cannot be proven to
+    resolve inside an allow-listed root. Always fail-closed.
+    """
+
+    def __init__(self, message: str, details: dict | None = None):
+        super().__init__(message, code="FSCONNECT_PATH_DENIED", details=details)
+
+
+class FsWriteRefused(FsConnectError):
+    """A write was refused because a gate (writes_enabled / reason / confirm) failed.
+
+    The connector is content-agnostic and confined to writable_roots; this is the
+    out-of-band analogue of the agentic write gate, applied to the local filesystem.
+    """
+
+    def __init__(self, message: str, details: dict | None = None):
+        super().__init__(message, code="FSCONNECT_WRITE_REFUSED", details=details)
+
+
+class FsConnectRuntimeError(FsConnectError):
+    """A read/write/index filesystem operation failed at runtime (I/O error, cap, etc.)."""
+
+    def __init__(self, message: str, details: dict | None = None):
+        super().__init__(message, code="FSCONNECT_RUNTIME_ERROR", details=details)
+
+
+class SqlConnectError(RAGError):
+    """Base error for the out-of-band read-only SQL connector (agentic/sqlconnect).
+
+    Disabled-by-default scaffold; never imported by gate.py / graph.py /
+    mcp_hybrid_server.py.
+    """
+
+    def __init__(self, message: str, code: str = "SQLCONNECT_ERROR", details: dict | None = None):
+        super().__init__(message, code=code, details=details)
+
+
+class SqlConnectConfigError(SqlConnectError):
+    """The sqlconnect: block in config.yaml is missing or invalid."""
+
+    def __init__(self, message: str, details: dict | None = None):
+        super().__init__(message, code="SQLCONNECT_CONFIG_INVALID", details=details)
+
+
+class SqlDriverNotInstalledError(SqlConnectError):
+    """The configured SQL driver (psycopg / pyodbc) is not importable."""
+
+    def __init__(self, message: str, details: dict | None = None):
+        super().__init__(message, code="SQL_DRIVER_NOT_INSTALLED", details=details)
+
+
+class SqlConnectRuntimeError(SqlConnectError):
+    """A SQL operation failed at runtime (connection error, query error, timeout)."""
+
+    def __init__(self, message: str, details: dict | None = None):
+        super().__init__(message, code="SQLCONNECT_RUNTIME_ERROR", details=details)
+
+
 @dataclass
 class HealthStatus:
     name: str

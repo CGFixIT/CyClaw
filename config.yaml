@@ -273,3 +273,63 @@ agentic:
     - issue_view
     - issue_list
     - repo_view
+
+# ===========================
+# Filesystem connector (out-of-band)  [v0.1 — experimental]
+# ===========================
+# Absence of this block, or enabled: false, disables the filesystem connector
+# entirely. It runs strictly via `python -m agentic.fsconnect.cli` — never imported
+# by gate.py, graph.py, or the MCP server. READS are scoped to allow_roots
+# (read-only). WRITES go ONLY to writable_roots (a separate list), are gated
+# (writes_enabled + human reason + confirm), and are disabled by default. The
+# connector is content-agnostic: it never calls the LLM; write content is supplied
+# via --body-file/stdin (an operator pipes local-LLM/QWEN output in).
+fsconnect:
+  enabled: false                 # off by default; CLI no-ops (exit 0) while false
+  # --- READ scope (read-only) ---
+  allowed_roots: []              # REQUIRED when enabled; each must resolve to an existing dir
+  allowed_fs_ops:                # operator-configurable read subset
+    - fs_list
+    - fs_stat
+    - fs_read
+    - fs_grep
+  allow_unc_roots: false         # UNC \\server\share roots opt-in (egress risk); default refuse
+  max_file_bytes: 5242880        # 5 MiB read cap (enforced via fstat on the open handle)
+  follow_symlinks: false         # hard default; ANY symlink/reparse point under a root is DENIED
+  scan_content: true             # advisory OWASP∪banned_patterns flagging on read content
+  # --- WRITE scope (separate, gated, default-disabled) ---
+  writes_enabled: false          # master write switch; false => write ops return DRY-RUN plans only
+  writable_roots:                # the ONLY paths writes may touch; created at startup if missing
+    - null                       # null => OS default: C:\CyClaw-FS (Win) | /var/lib/cyclaw-fs (Linux, ~/CyClaw-FS fallback)
+  max_write_bytes: 10485760      # 10 MiB write cap
+  require_confirm_destructive: true   # overwrite-existing / move need --confirm AND --reason
+  # --- secondary RAG-indexing of the file-share ---
+  index_enabled: false           # toggle RAG-corpus indexing of index_root on/off
+  index_root: null               # null => defaults to the first writable_root (generate→write→index loop)
+  index_extensions:
+    - ".md"
+    - ".txt"
+    - ".pdf"
+    - ".docx"
+    - ".csv"
+  index_max_file_bytes: 10485760
+
+# ===========================
+# SQL connector (out-of-band, READ-ONLY)  [v0.1 — disabled scaffold]
+# ===========================
+# Disabled-by-default scaffold for read-only on-prem SQL (Postgres / MSSQL). Absence
+# of this block, or enabled: false, is a pure no-op with no effect on existing
+# functionality. Runs only via `python -m agentic.sqlconnect.cli`. Read-only is
+# enforced at the session level; the DSN is read from an environment variable only.
+sqlconnect:
+  enabled: false                 # off by default; disabled scaffold
+  driver: "postgres"             # "postgres" | "mssql"
+  dsn_env: "CYCLAW_SQL_DSN"      # DSN read from this env var only (never hardcoded)
+  allowed_sql_ops:               # operator-configurable read subset
+    - schema_list
+    - table_preview
+    - run_select
+  read_only: true                # hard: SET TRANSACTION READ ONLY / ApplicationIntent=ReadOnly
+  statement_timeout_ms: 5000
+  max_rows: 1000
+  allow_write: false             # reserved; v0.1 cannot write regardless

@@ -42,9 +42,23 @@ def test_request_path_does_not_import_agentic(module_file):
 
 
 def test_agentic_does_not_import_request_path():
-    # Symmetric guard: agentic must not pull in gate/graph/mcp either.
+    # Symmetric guard: agentic must not pull in gate/graph/mcp either. rglob so the
+    # out-of-band sub-packages (agentic/fsconnect, agentic/sqlconnect) are covered too.
     forbidden = {"gate", "graph", "mcp_hybrid_server"}
-    for py in (REPO_ROOT / "agentic").glob("*.py"):
+    scanned = 0
+    for py in (REPO_ROOT / "agentic").rglob("*.py"):
+        scanned += 1
         imported = _imports(py.read_text(encoding="utf-8"))
         leaked = forbidden & imported
-        assert not leaked, f"agentic/{py.name} imports request-path module(s): {leaked}"
+        rel = py.relative_to(REPO_ROOT)
+        assert not leaked, f"{rel} imports request-path module(s): {leaked}"
+    # Guard against a silently-empty glob masking a regression.
+    assert scanned >= 1
+
+
+def test_subpackages_are_covered_by_isolation_scan():
+    # Explicitly assert the new connectors exist and would be scanned above.
+    for sub in ("fsconnect", "sqlconnect"):
+        pkg = REPO_ROOT / "agentic" / sub
+        assert pkg.is_dir(), f"expected out-of-band sub-package agentic/{sub}"
+        assert list(pkg.rglob("*.py")), f"agentic/{sub} has no modules"
