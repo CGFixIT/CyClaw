@@ -331,7 +331,7 @@ GROK_API_KEY=dummy python tests/ci_rag_smoke.py
 - Coverage target: 80% (`pyproject.toml`); sources include `gate`, `graph`, `mcp_hybrid_server`, `metrics`, `llm`, `retrieval`, `utils`, `sync`, `agentic`.
 - `tests/conftest.py` provides shared fixtures: `test_config`, `mock_retriever`, `mock_llm`, `MockRetriever`, `MockLocalLLM`, `MockGrokClient`, `bm25_index`. No live services required — all external deps are mocked.
 
-**Test files (complete):** `test_gate`, `test_graph`, `test_hybrid_search`, `test_personality`, `test_personality_changes`, `test_sanitizer`, `test_audit`, `test_rate_limit`, `test_mcp_server`, `test_security`, `test_telemetry_kill`, `test_client`, `test_embeddings`, `test_health`, `test_indexer`, `test_metrics`, `test_rag_integration`, `test_stemmer`, `test_conftest_fixtures`, `test_startup_robustness`, `test_agentic_cli`, `test_agentic_config`, `test_agentic_gh_client`, `test_agentic_registry`, `test_agentic_selftest`, `test_agentic_writer`, `test_agentic_isolation`, `test_agentic_context`, `test_sync_cli`, `test_sync_config`, `test_sync_filters`, `test_sync_runner`, `test_sync_scheduler`, `test_sync_selftest`.
+**Test files (complete):** `test_gate`, `test_graph`, `test_hybrid_search`, `test_personality`, `test_personality_changes`, `test_sanitizer`, `test_audit`, `test_rate_limit`, `test_mcp_server`, `test_security`, `test_telemetry_kill`, `test_client`, `test_embeddings`, `test_health`, `test_indexer`, `test_metrics`, `test_rag_integration`, `test_stemmer`, `test_conftest_fixtures`, `test_startup_robustness`, `test_agentic_cli`, `test_agentic_config`, `test_agentic_gh_client`, `test_agentic_registry`, `test_agentic_selftest`, `test_agentic_writer`, `test_agentic_isolation`, `test_agentic_context`, `test_sync_cli`, `test_sync_config`, `test_sync_filters`, `test_sync_runner`, `test_sync_scheduler`, `test_sync_selftest`, `test_clear_cache`.
 
 ---
 
@@ -410,4 +410,5 @@ Utility prompts live in `.claude/utility-prompts/`. Reference by path when neede
 - `status: degraded` in `/health` is normal without LM Studio running.
 - `TELEMETRY KILL` messages on startup are intentional (LangChain/Chroma/OTel env vars blocked).
 - Soul file must exist at `data/personality/soul.md` before server start.
-- Entry points (`pyproject.toml`): `cyclaw-server`, `cyclaw-index`, `cyclaw-mcp`, `cyclaw-metrics`.
+- Entry points (`pyproject.toml`): `cyclaw-server`, `cyclaw-index`, `cyclaw-mcp`, `cyclaw-metrics`, `cyclaw-clear-cache`.
+- `cyclaw-clear-cache` (`python -m retrieval.clear_cache`) clears the local embedding cache (`models.embeddings.cache_dir`, default `.emb_cache`) — a regenerable artifact. Safe dry-run by default; pass `--apply` to delete. Exit codes: `0` ok · `2` deletion failed · `3` config/env error.

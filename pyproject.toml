@@ -45,6 +45,7 @@ cyclaw-server = "gate:main"
 cyclaw-index = "retrieval.indexer:main"
 cyclaw-mcp = "mcp_hybrid_server:main"
 cyclaw-metrics = "metrics:main"
+cyclaw-clear-cache = "retrieval.clear_cache:main"
 
 [project.urls]
 Homepage = "https://github.com/CGFixIT/CyClaw"
