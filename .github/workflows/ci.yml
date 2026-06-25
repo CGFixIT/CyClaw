@@ -133,6 +133,16 @@ jobs:
             tests/test_agentic_writer.py \
             tests/test_agentic_gh_client.py \
             tests/test_agentic_context.py \
+            tests/test_fsconnect_config.py \
+            tests/test_fsconnect_pathsafe.py \
+            tests/test_fsconnect_client.py \
+            tests/test_fsconnect_writer.py \
+            tests/test_fsconnect_indexer.py \
+            tests/test_fsconnect_selftest.py \
+            tests/test_fsconnect_cli.py \
+            tests/test_sqlconnect_config.py \
+            tests/test_sqlconnect_client.py \
+            tests/test_sqlconnect_cli.py \
             tests/test_rag_integration.py \
             tests/test_startup_robustness.py \
             tests/test_clear_cache.py \

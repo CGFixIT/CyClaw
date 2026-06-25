@@ -76,8 +76,7 @@ def test_unc_target_denied(root):
         sr.read_bytes("//server/share/x", max_bytes=1024)
 
 
-def test_device_namespace_denied(root):
-    sr, _base, _tmp = root
+def test_device_namespace_denied():
     with pytest.raises(FsPathError):
         split_components("\\\\?\\C:\\x")
 
@@ -88,14 +87,14 @@ def test_ads_colon_denied(root):
         sr.read_bytes("hello.txt::$DATA", max_bytes=1024)
 
 
-def test_trailing_dot_space_denied(root):
+def test_trailing_dot_space_denied():
     with pytest.raises(FsPathError):
         split_components("hello.txt.")
     with pytest.raises(FsPathError):
         split_components("hello.txt ")
 
 
-def test_nul_denied(root):
+def test_nul_denied():
     with pytest.raises(FsPathError):
         split_components("hel\x00lo")
 
@@ -137,13 +136,9 @@ def test_sibling_prefix_root_not_contained(tmp_path):
     sibling = tmp_path / "allow_sensitive"
     sibling.mkdir()
     (sibling / "secret.txt").write_text("secret", encoding="utf-8")
-    sr = ScopedRoots([str(base)], create=False)
-    try:
-        # No '..' path can reach the sibling; '..' is rejected outright.
-        with pytest.raises(FsPathError):
-            sr.read_bytes("../allow_sensitive/secret.txt", max_bytes=1024)
-    finally:
-        sr.close()
+    # No '..' path can reach the sibling; '..' is rejected outright.
+    with ScopedRoots([str(base)], create=False) as sr, pytest.raises(FsPathError):
+        sr.read_bytes("../allow_sensitive/secret.txt", max_bytes=1024)
 
 
 def test_overlapping_roots_rejected(tmp_path):
@@ -160,8 +155,7 @@ def test_root_replaced_by_symlink_uses_held_fd(tmp_path):
     evil = tmp_path / "evil"
     evil.mkdir()
     (evil / "evil.txt").write_text("attacker", encoding="utf-8")
-    sr = ScopedRoots([str(realroot)], create=False)
-    try:
+    with ScopedRoots([str(realroot)], create=False) as sr:
         # Swap the root path out for a symlink to the attacker dir AFTER fd is held.
         os.rename(realroot, tmp_path / "moved")
         os.symlink(evil, realroot)
@@ -169,8 +163,6 @@ def test_root_replaced_by_symlink_uses_held_fd(tmp_path):
         # The held fd still points at the original inode, not the attacker's dir.
         assert "a.txt" in names
         assert "evil.txt" not in names
-    finally:
-        sr.close()
 
 
 def test_max_bytes_enforced(root):
@@ -256,12 +248,9 @@ def test_multiple_roots_require_selection(tmp_path):
     a.mkdir()
     b.mkdir()
     (a / "f.txt").write_text("A", encoding="utf-8")
-    sr = ScopedRoots([str(a), str(b)], create=False)
-    try:
+    with ScopedRoots([str(a), str(b)], create=False) as sr:
         with pytest.raises(FsPathError):
             sr.read_bytes("f.txt", max_bytes=16)  # ambiguous
         assert sr.read_bytes("f.txt", root=str(a), max_bytes=16) == b"A"
         with pytest.raises(FsPathError):
             sr.pick_root("/not/a/configured/root")
-    finally:
-        sr.close()

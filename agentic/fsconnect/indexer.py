@@ -73,12 +73,9 @@ class FsIndexer:
 
     def scan(self) -> dict:
         """Dry-run: enumerate eligible files under index_root (no copy, no reindex)."""
-        roots = ScopedRoots([self.index_root], create=True, allow_unc=self.fs_cfg.allow_unc_roots)
-        try:
-            manifest: list[dict] = []
+        manifest: list[dict] = []
+        with ScopedRoots([self.index_root], create=True, allow_unc=self.fs_cfg.allow_unc_roots) as roots:
             self._walk(roots, "", manifest)
-        finally:
-            roots.close()
         eligible = [m for m in manifest if "skipped" not in m]
         audit_log({"event": "fsconnect_index_scan", "index_root": self.index_root,
                    "eligible": len(eligible)}, self.config_path)
@@ -89,10 +86,9 @@ class FsIndexer:
         """Stage eligible files into the corpus; optionally trigger a reindex subprocess."""
         staging = Path(staging_dir) if staging_dir else _DEFAULT_STAGING
         staging.mkdir(parents=True, exist_ok=True)
-        roots = ScopedRoots([self.index_root], create=True, allow_unc=self.fs_cfg.allow_unc_roots)
         copied: list[str] = []
-        try:
-            manifest: list[dict] = []
+        manifest: list[dict] = []
+        with ScopedRoots([self.index_root], create=True, allow_unc=self.fs_cfg.allow_unc_roots) as roots:
             self._walk(roots, "", manifest)
             for m in manifest:
                 if "skipped" in m:
@@ -103,8 +99,6 @@ class FsIndexer:
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 dest.write_bytes(data)
                 copied.append(rel)
-        finally:
-            roots.close()
         audit_log({"event": "fsconnect_index_apply", "index_root": self.index_root,
                    "staged": len(copied), "reindex": reindex}, self.config_path)
         result = {"op": "index_apply", "index_root": self.index_root,

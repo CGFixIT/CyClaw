@@ -47,19 +47,20 @@ def run_self_test(config_path: str = "config.yaml") -> tuple[int, int, list[str]
 
     cfg = _get_config(config_path)
 
-    # 2. path guard denies traversal / absolute / nested escape.
+    # 2. path guard denies traversal / absolute / nested escape. split_components is
+    # a pure guard that raises FsPathError for these fixed inputs (and nothing else),
+    # so no broad except/pass is needed -- count the FsPathError denials directly.
+    bad_inputs = ("../escape", "/etc/passwd", "a/../../b")
     denied = 0
-    for bad in ("../escape", "/etc/passwd", "a/../../b"):
+    for bad in bad_inputs:
         try:
             split_components(bad)
         except FsPathError:
             denied += 1
-        except Exception:  # noqa: BLE001, S110 -- any other error is not a clean deny
-            pass
-    if denied == 3:
-        results.append(_ok("02. path guard denies traversal/absolute (3/3)"))
+    if denied == len(bad_inputs):
+        results.append(_ok(f"02. path guard denies traversal/absolute ({denied}/{len(bad_inputs)})"))
     else:
-        results.append(_fail("02. path guard denies escapes", f"only {denied}/3 denied"))
+        results.append(_fail("02. path guard denies escapes", f"only {denied}/{len(bad_inputs)} denied"))
 
     # 3. injection scanner present.
     if build_injection_patterns(cfg):
