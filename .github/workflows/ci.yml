@@ -136,6 +136,7 @@ jobs:
             tests/test_rag_integration.py \
             tests/test_startup_robustness.py \
             tests/test_clear_cache.py \
+            tests/test_ops_runner.py \
             -q --tb=short \
             --cov=gate \
             --cov=utils.sanitizer \
@@ -146,6 +147,7 @@ jobs:
             --cov=utils.personality_db \
             --cov=utils.ratelimit \
             --cov=utils.health \
+            --cov=utils.ops_runner \
             --cov=llm.client \
             --cov=graph \
             --cov=retrieval.embeddings \
