@@ -101,23 +101,26 @@ def get_cyclaw_guardrails(cfg: GuardrailsConfig | None = None) -> Any:
     return rails
 
 
-def _offline_checks(
-    query: str, context: str, cfg: GuardrailsConfig
-) -> tuple[bool, list[str], float]:
+def _offline_checks(query: str, cfg: GuardrailsConfig) -> tuple[bool, list[str]]:
     """Run the model-free heuristic rails.
 
-    Returns ``(blocked, rails_triggered, grounding)``. These are the offline
-    floor that runs whether or not ``nemoguardrails`` is present, so the soul /
-    personality and injection protections never depend on the heavy dependency.
+    Returns ``(blocked, rails_triggered)``. These are the offline floor that runs
+    whether or not ``nemoguardrails`` is present, so the soul / personality and
+    injection protections never depend on the heavy dependency.
+
+    Grounding is intentionally NOT computed here: it is an *output*-side check that
+    compares the model response against the retrieved context, and is evaluated
+    later in ``safe_generate`` via ``grounding_score(response, context)``. The
+    previous ``grounding_score(context, context)`` compared the context to itself
+    (always ~1.0) and its result was discarded by the caller -- dead, misleading work.
     """
     triggered: list[str] = []
     if scan_injection(query):
         triggered.append("check_injection")
     if detect_soul_mutation_intent(query):
         triggered.append("check_soul_mutation")
-    grounding = grounding_score(context, context) if context else 1.0
     blocked = bool(triggered)
-    return blocked, triggered, grounding
+    return blocked, triggered
 
 
 async def safe_generate(
@@ -149,7 +152,7 @@ async def safe_generate(
     if soul:
         metrics.record_soul_topic(query=prompt)
 
-    blocked, triggered, _ = _offline_checks(prompt, context, cfg)
+    blocked, triggered = _offline_checks(prompt, cfg)
     if blocked:
         rail = triggered[0]
         metrics.record_blocked(stage="input", rail=rail, reason="offline heuristic", query=prompt)
