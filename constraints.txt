@@ -37,6 +37,16 @@ nltk==3.9.4
 # torch-cpu extra / embedding backend (minimum safe post CVE, CPU index via pyproject [tool.uv.sources])
 torch==2.12.1+cpu
 
+# Optional Postgres / pgvector backends (pyproject extras: postgres, pgvector).
+# These are NOT installed by the default path; constraints only cap a version when
+# the package IS pulled in (via `pip install 'cyclaw[postgres]'` / the postgres CI
+# job), keeping that resolve reproducible without forcing the dep on SQLite installs.
+# NB: a -c constraints file cannot carry the [binary] extra (pip >= 26.1.2 rejects
+# extras in constraints), so the binary wheel package is pinned by its own name.
+psycopg==3.2.13
+psycopg-binary==3.2.13
+pgvector==0.4.2
+
 # Test optional-dependencies (for CI / dev)
 pytest==9.1.1
 pytest-asyncio==1.4.0

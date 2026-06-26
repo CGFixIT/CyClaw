@@ -8,15 +8,14 @@ import json
 import logging
 from pathlib import Path
 
-import chromadb
 import yaml
-from chromadb.config import Settings
 
 from utils.errors import CorpusEmptyError
 from utils.sanitizer import sanitize_chunk
 
 from .embeddings import get_embeddings_batch
 from .stemmer import tokenize_and_stem
+from .vector_store import get_vector_writer, vector_backend
 
 logger = logging.getLogger(__name__)
 
@@ -73,9 +72,7 @@ def build_index(config_path: str = "config.yaml") -> None:
     cfg = load_config(config_path)
     corpus_path = cfg["corpus"]["path"]
     extensions = cfg["corpus"]["extensions"]
-    chroma_path = cfg["indexing"]["chroma_path"]
     bm25_path = cfg["indexing"]["bm25_path"]
-    collection_name = cfg["indexing"]["collection_name"]
     chunk_size = cfg["indexing"]["chunk_size"]
     chunk_overlap = cfg["indexing"]["chunk_overlap"]
     batch_size = cfg["indexing"]["batch_size"]
@@ -120,42 +117,27 @@ def build_index(config_path: str = "config.yaml") -> None:
 
     logger.info("Total chunks: %d", len(all_chunks))
 
-    Path(chroma_path).mkdir(parents=True, exist_ok=True)
-    client = chromadb.PersistentClient(
-        path=chroma_path,
-        settings=Settings(anonymized_telemetry=False)
-    )
+    # Semantic (vector) index. The backend is pluggable — ChromaDB by default
+    # (embedded, offline-first), or pgvector when indexing.vector_backend=pgvector.
+    # Cosine space / `1 - distance` scoring and the per-chunk metadata are identical
+    # across backends, so RRF order and the min_score gate are unaffected (PR #99
+    # #1/#6); only where the vectors live changes.
+    backend = vector_backend(cfg)
+    writer = get_vector_writer(cfg)
+    writer.reset()
+    logger.info("Building semantic (vector) index [%s]...", backend)
     try:
-        client.delete_collection(collection_name)
-    except Exception:  # noqa: S110  # nosec B110 — delete-if-exists; collection may not exist yet
-        pass
-    # Embeddings are L2-normalized (retrieval/embeddings.py), so the collection
-    # must use the cosine space: with unit vectors ChromaDB's default `l2` returns
-    # squared-Euclidean distance in [0,4], and hybrid_search does `score = 1 -
-    # distance`, yielding a non-cosine, partly-negative scale. With `cosine`,
-    # distance = 1 - cos in [0,2] and `1 - distance` is genuine cosine similarity
-    # (PR #99 #1). Ranking is unchanged for unit vectors (L2 is monotonic in cos),
-    # so RRF order and the fused-path gate are unaffected; only the surfaced
-    # semantic scores and the single-path gate (PR #99 #6) become correct.
-    collection = client.create_collection(
-        collection_name,
-        metadata={"hnsw:space": "cosine"},
-    )
-
-    logger.info("Building ChromaDB (semantic) index...")
-    for batch_start in range(0, len(all_chunks), batch_size):
-        batch_end = min(batch_start + batch_size, len(all_chunks))
-        batch_chunks = all_chunks[batch_start:batch_end]
-        batch_meta = all_metadata[batch_start:batch_end]
-        batch_embeddings = get_embeddings_batch(batch_chunks, config_path)
-        batch_ids = [f"chunk_{batch_start + i}" for i in range(len(batch_chunks))]
-        collection.add(
-            documents=batch_chunks,
-            embeddings=batch_embeddings,
-            metadatas=batch_meta,
-            ids=batch_ids
-        )
-        logger.info("Indexed %d/%d chunks", batch_end, len(all_chunks))
+        for batch_start in range(0, len(all_chunks), batch_size):
+            batch_end = min(batch_start + batch_size, len(all_chunks))
+            batch_chunks = all_chunks[batch_start:batch_end]
+            batch_meta = all_metadata[batch_start:batch_end]
+            batch_embeddings = get_embeddings_batch(batch_chunks, config_path)
+            batch_ids = [f"chunk_{batch_start + i}" for i in range(len(batch_chunks))]
+            writer.add(batch_ids, batch_chunks, batch_embeddings, batch_meta)
+            logger.info("Indexed %d/%d chunks", batch_end, len(all_chunks))
+        writer.finalize()
+    finally:
+        writer.close()
 
     logger.info("Building BM25 (keyword) index...")
     # tokenized_corpus was built alongside all_chunks above (single tokenization pass).
@@ -167,7 +149,7 @@ def build_index(config_path: str = "config.yaml") -> None:
             "metadata": all_metadata,
         }, f)
 
-    logger.info("Done. ChromaDB: %s, BM25: %s", chroma_path, bm25_path)
+    logger.info("Done. Semantic backend: %s, BM25: %s", backend, bm25_path)
 
 def main() -> None:
     """Console entry point for ``cyclaw-index`` (see pyproject [project.scripts]).

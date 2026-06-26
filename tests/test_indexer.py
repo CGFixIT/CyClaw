@@ -103,11 +103,11 @@ class TestBuildIndexConfigPropagation:
             yaml.dump(cfg, f)
 
         fake_embeddings = MagicMock(return_value=[[0.1, 0.2, 0.3]])
+        # Stub the vector writer so build_index runs without a real ChromaDB/pgvector
+        # store; the assertion below verifies config_path forwarding to embeddings.
         with patch("retrieval.indexer.get_embeddings_batch", fake_embeddings), \
-                patch("retrieval.indexer.chromadb") as mock_chromadb:
-            mock_client = MagicMock()
-            mock_client.create_collection.return_value = MagicMock()
-            mock_chromadb.PersistentClient.return_value = mock_client
+                patch("retrieval.indexer.get_vector_writer") as mock_get_writer:
+            mock_get_writer.return_value = MagicMock()
             build_index(str(config_path))
 
         assert fake_embeddings.called, "get_embeddings_batch was never called"

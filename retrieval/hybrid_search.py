@@ -10,9 +10,7 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
-import chromadb
 import yaml
-from chromadb.config import Settings
 from rank_bm25 import BM25Okapi
 
 from utils.errors import EmbeddingServiceError, IndexNotFoundError
@@ -20,6 +18,7 @@ from utils.logger import audit_log
 
 from .embeddings import get_embedding
 from .stemmer import tokenize_and_stem
+from .vector_store import get_vector_reader
 
 
 @dataclass
@@ -46,29 +45,17 @@ class HybridRetriever:
             self.cfg = yaml.safe_load(f)
 
         self.config_path = config_path
-        chroma_path = self.cfg["indexing"]["chroma_path"]
-        collection_name = self.cfg["indexing"]["collection_name"]
         bm25_path = self.cfg["indexing"]["bm25_path"]
 
-        if not Path(chroma_path).exists():
-            raise IndexNotFoundError(
-                f"ChromaDB index not found at {chroma_path}. Run: python -m retrieval.indexer"
-            )
+        # Semantic backend is pluggable (ChromaDB default, or pgvector). The reader
+        # validates its own index/collection existence and raises IndexNotFoundError.
+        # BM25 stays file-based regardless of the vector backend.
         if not Path(bm25_path).exists():
             raise IndexNotFoundError(
                 f"BM25 index not found at {bm25_path}. Run: python -m retrieval.indexer"
             )
 
-        client = chromadb.PersistentClient(
-            path=chroma_path,
-            settings=Settings(anonymized_telemetry=False)
-        )
-        try:
-            self.collection = client.get_collection(collection_name)
-        except Exception as e:
-            raise IndexNotFoundError(
-                f"Collection '{collection_name}' not found in ChromaDB: {e}"
-            ) from e
+        self._vector_reader = get_vector_reader(self.cfg)
 
         # Validate path is a regular file before deserializing. The BM25 index is
         # project-generated (retrieval/indexer.py) and read from a config-controlled
@@ -90,20 +77,19 @@ class HybridRetriever:
         if k is None:
             k = self.top_k_semantic
         emb = get_embedding(query, self.config_path)
-        results = self.collection.query(query_embeddings=[emb], n_results=k)
+        # The vector reader returns normalized hits (text/score/source/chunk_id/
+        # stem_tags) for whichever backend is configured; score is already the
+        # cosine similarity (1 - distance), identical across ChromaDB and pgvector.
+        raw = self._vector_reader.query(emb, k)
         hits = []
-        if results["documents"] and results["documents"][0]:
-            for i, doc in enumerate(results["documents"][0]):
-                score = 1 - results["distances"][0][i]
-                meta = results["metadatas"][0][i]
-                stem_raw = meta.get("stem_tags", "[]")
-                stem_tags = json.loads(stem_raw) if isinstance(stem_raw, str) else stem_raw
-                hits.append(SearchResult(
-                    text=doc, score=score, source=meta["source"],
-                    chunk_id=meta["chunk_id"], stem_tags=stem_tags,
-                    retrieval_mode="semantic", semantic_score=score, semantic_rank=i,
-                    provenance={"semantic": {"rank": i, "score": score}}
-                ))
+        for i, r in enumerate(raw):
+            score = r["score"]
+            hits.append(SearchResult(
+                text=r["text"], score=score, source=r["source"],
+                chunk_id=r["chunk_id"], stem_tags=r["stem_tags"],
+                retrieval_mode="semantic", semantic_score=score, semantic_rank=i,
+                provenance={"semantic": {"rank": i, "score": score}}
+            ))
         return hits
 
     def keyword_search(self, query: str, k: int | None = None) -> list[SearchResult]:

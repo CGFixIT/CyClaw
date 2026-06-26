@@ -41,9 +41,10 @@ class TestBM25PickleRejection:
 
         (tmp_path / "chroma_db").mkdir()
 
-        with patch("retrieval.hybrid_search.chromadb.PersistentClient") as mock_client:
-            mock_collection = MagicMock()
-            mock_client.return_value.get_collection.return_value = mock_collection
+        # Stub the semantic vector backend so init reaches the BM25 loader (the
+        # path under test) without a real ChromaDB/pgvector store.
+        with patch("retrieval.hybrid_search.get_vector_reader") as mock_reader:
+            mock_reader.return_value = MagicMock()
 
             from retrieval.hybrid_search import HybridRetriever
             with pytest.raises((json.JSONDecodeError, ValueError, UnicodeDecodeError)):
@@ -71,9 +72,10 @@ class TestBM25PickleRejection:
 
         (tmp_path / "chroma_db").mkdir()
 
-        with patch("retrieval.hybrid_search.chromadb.PersistentClient") as mock_client:
-            mock_collection = MagicMock()
-            mock_client.return_value.get_collection.return_value = mock_collection
+        # Stub the semantic vector backend so init reaches the BM25 loader (the
+        # path under test) without a real ChromaDB/pgvector store.
+        with patch("retrieval.hybrid_search.get_vector_reader") as mock_reader:
+            mock_reader.return_value = MagicMock()
 
             from retrieval.hybrid_search import HybridRetriever
             retriever = HybridRetriever(config_path=str(config_file))

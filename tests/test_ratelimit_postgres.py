@@ -1,0 +1,109 @@
+"""Live Postgres-backend tests for utils.ratelimit.RateLimiter.
+
+These exercise the Postgres write-through persistence path (the `# pragma`-style
+branches that need a real server). They are SKIPPED unless CYCLAW_DB_URL points at
+a reachable Postgres — so the default offline suite stays green with zero extra
+deps, and the dedicated `postgres-backend` CI job runs them for real.
+
+Imports only utils.ratelimit (no gate/fastapi) so the file collects in a minimal
+Postgres CI environment.
+"""
+
+import json
+import os
+
+import pytest
+
+from utils.ratelimit import RateLimiter
+
+DSN = os.environ.get("CYCLAW_DB_URL")
+pytestmark = pytest.mark.skipif(
+    not (DSN and DSN.startswith("postgres")),
+    reason="CYCLAW_DB_URL not set to a Postgres DSN; skipping live Postgres rate-limit tests",
+)
+
+
+@pytest.fixture
+def clean_table():
+    """Drop rate_hits before each test so cases are isolated."""
+    import psycopg
+
+    from utils.personality_db import _harden_pg_conninfo
+
+    with psycopg.connect(_harden_pg_conninfo(DSN), autocommit=True) as conn:
+        conn.execute("DROP TABLE IF EXISTS rate_hits")
+    yield
+    with psycopg.connect(_harden_pg_conninfo(DSN), autocommit=True) as conn:
+        conn.execute("DROP TABLE IF EXISTS rate_hits")
+
+
+def test_pg_backend_selected_and_window(clean_table):
+    t = [1000.0]
+    rl = RateLimiter(max_requests=3, window_seconds=60, clock=lambda: t[0], db_url=DSN)
+    try:
+        assert rl._backend == "postgres"
+        assert rl._ph == "%s"
+        assert [rl.allow("1.2.3.4") for _ in range(4)] == [True, True, True, False]
+    finally:
+        rl.close()
+
+
+def test_pg_restart_survival(clean_table):
+    """A fresh limiter loads persisted per-IP windows from Postgres."""
+    t = [2000.0]
+    rl1 = RateLimiter(max_requests=2, window_seconds=60, clock=lambda: t[0], db_url=DSN)
+    try:
+        assert rl1.allow("9.9.9.9") is True
+        assert rl1.allow("9.9.9.9") is True
+        assert rl1.allow("9.9.9.9") is False  # limit reached, persisted
+    finally:
+        rl1.close()
+
+    rl2 = RateLimiter(max_requests=2, window_seconds=60, clock=lambda: t[0], db_url=DSN)
+    try:
+        # State survived the "restart": IP is still at the cap.
+        assert rl2.allow("9.9.9.9") is False
+    finally:
+        rl2.close()
+
+
+def test_pg_corrupt_row_recovery(clean_table):
+    """A garbled timestamps cell resets just that IP's window, with a warning."""
+    import psycopg
+
+    from utils.personality_db import _harden_pg_conninfo
+
+    # Seed the table via a limiter so the schema exists, then corrupt one row.
+    seed = RateLimiter(max_requests=2, window_seconds=60, clock=lambda: 3000.0, db_url=DSN)
+    seed.close()
+    with psycopg.connect(_harden_pg_conninfo(DSN), autocommit=True) as conn:
+        conn.execute(
+            "INSERT INTO rate_hits (ip, timestamps, last_sweep) VALUES (%s, %s, %s) "
+            "ON CONFLICT (ip) DO UPDATE SET timestamps = EXCLUDED.timestamps",
+            ("7.7.7.7", "{not valid json", 3000.0),
+        )
+
+    rl = RateLimiter(max_requests=2, window_seconds=60, clock=lambda: 3000.0, db_url=DSN)
+    try:
+        # Corrupt window was reset to empty on load → request is allowed again.
+        assert rl.allow("7.7.7.7") is True
+    finally:
+        rl.close()
+
+
+def test_pg_hardening_applied(clean_table):
+    """The held Postgres connection carries the hardened session settings (WS1)."""
+    rl = RateLimiter(max_requests=2, window_seconds=60, clock=lambda: 4000.0, db_url=DSN)
+    try:
+        conn = rl._pg_connection()
+        app_name = conn.execute("SELECT current_setting('application_name')").fetchone()[0]
+        assert app_name == "cyclaw"
+        stmt_timeout = conn.execute("SHOW statement_timeout").fetchone()[0]
+        # 5000ms server-side statement_timeout, rendered as "5s" by Postgres.
+        assert stmt_timeout in ("5000ms", "5s")
+        # sanity: persisted JSON round-trips
+        rl.allow("5.5.5.5")
+        row = conn.execute("SELECT timestamps FROM rate_hits WHERE ip = %s", ("5.5.5.5",)).fetchone()
+        assert isinstance(json.loads(row[0]), list)
+    finally:
+        rl.close()

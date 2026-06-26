@@ -144,10 +144,20 @@ _rl_cfg = ((cfg.get("api", {}) or {}).get("rate_limit", {})) or {}
 RATE_LIMIT_REQUESTS = _rl_cfg.get("max_requests", 60)
 RATE_LIMIT_WINDOW = _rl_cfg.get("window_seconds", 60)  # seconds
 RATE_LIMIT_DB_PATH = _rl_cfg.get("persist_path") or None
+# Optional Postgres persistence for rate-limit state (opt-in; defaults to None →
+# sqlite persist_path if set, else in-memory). Resolution order: explicit
+# api.rate_limit.database_url → CYCLAW_RATELIMIT_DB_URL → shared CYCLAW_DB_URL.
+RATE_LIMIT_DB_URL = (
+    _rl_cfg.get("database_url")
+    or os.environ.get("CYCLAW_RATELIMIT_DB_URL")
+    or os.environ.get("CYCLAW_DB_URL")
+    or None
+)
 _rate_limiter = RateLimiter(
     max_requests=RATE_LIMIT_REQUESTS,
     window_seconds=RATE_LIMIT_WINDOW,
     db_path=RATE_LIMIT_DB_PATH,
+    db_url=RATE_LIMIT_DB_URL,
 )
 
 def check_rate_limit(client_ip: str) -> bool:
