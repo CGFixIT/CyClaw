@@ -16,7 +16,8 @@ models:
     engine: openai
     model: qwen2.5-7b-instruct          # match LM Studio loaded model
     parameters:
-      base_url: http://127.0.0.1:1234/v1  # LM Studio loopback (offline)
+      # Intentional loopback binding to local LM Studio (offline-first)
+      base_url: http://127.0.0.1:1234/v1
       api_key: "not-needed-for-local"
 
   # Optional: a smaller/faster local model dedicated to guardrail checks keeps
@@ -26,7 +27,8 @@ models:
     engine: openai
     model: qwen2.5-7b-instruct
     parameters:
-      base_url: http://127.0.0.1:1234/v1  # LM Studio loopback (offline)
+      # Intentional loopback binding to local LM Studio (offline-first)
+      base_url: http://127.0.0.1:1234/v1
       api_key: "not-needed-for-local"
 
 # Instructions injected as the bot's general system framing. The soul/identity

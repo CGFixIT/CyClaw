@@ -36,16 +36,6 @@ EVENT_ALLOWED = "generation_allowed"
 EVENT_SKIPPED = "guardrail_skipped"
 EVENT_SOUL_TOPIC = "soul_topic"
 
-_KNOWN_EVENTS = (
-    EVENT_TOOL_CALL,
-    EVENT_BLOCKED,
-    EVENT_HALLUCINATION,
-    EVENT_RAIL_TRIGGERED,
-    EVENT_ALLOWED,
-    EVENT_SKIPPED,
-    EVENT_SOUL_TOPIC,
-)
-
 
 class GuardrailMetrics:
     """Append-only recorder for guardrail events.
@@ -133,6 +123,8 @@ def load_events(metrics_path: str | Path) -> list[dict]:
             try:
                 events.append(json.loads(line))
             except json.JSONDecodeError:
+                # Gracefully skip malformed JSONL lines to allow partial metrics
+                # analysis even when the stream contains bad entries.
                 pass
     return events
 

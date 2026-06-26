@@ -10,7 +10,7 @@ Hardened defaults (conservative, matching CyClaw's offline-first posture):
 
   - enabled:       False     the whole layer is opt-in; absent key => disabled
   - engine:        "openai"  LM Studio exposes an OpenAI-compatible endpoint
-  - base_url:      127.0.0.1:1234/v1   loopback LM Studio, never off-box
+  - base_url:      http://127.0.0.1:1234/v1   intentional loopback (offline-first)
   - metrics_path:  logs/guardrails.jsonl   SEPARATE from logs/audit.jsonl
 
 This module is part of a package that is NEVER imported by gate.py, graph.py, or
@@ -29,7 +29,8 @@ from utils.logger import _get_config
 
 # Defaults -- every key here can be overridden by config.yaml.
 DEFAULT_ENGINE = "openai"  # LM Studio / Ollama expose OpenAI-compatible APIs
-DEFAULT_BASE_URL = "http://127.0.0.1:1234/v1"  # noqa: S104 -- loopback LM Studio
+# Intentional loopback binding to local LM Studio (offline-first, no cloud dependency)
+DEFAULT_BASE_URL = "http://127.0.0.1:1234/v1"  # noqa: S104
 DEFAULT_MODEL = "qwen2.5-7b-instruct"
 DEFAULT_NEMO_CONFIG_DIR = "guardrails/config"
 DEFAULT_METRICS_PATH = "logs/guardrails.jsonl"

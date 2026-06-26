@@ -57,6 +57,7 @@ class GuardResult(TypedDict, total=False):
 
 
 # Singleton so we don't recompile the rails config on every call.
+# Referenced in reset_rails_singleton() and get_cyclaw_guardrails().
 _rails_singleton: Any | None = None
 
 
