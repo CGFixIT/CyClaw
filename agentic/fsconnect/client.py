@@ -15,6 +15,7 @@ Never imported by gate.py / graph.py / mcp_hybrid_server.py.
 from __future__ import annotations
 
 import re
+from functools import lru_cache
 
 from agentic.fsconnect.config import FsConnectConfig
 from agentic.fsconnect.pathsafe import ScopedRoots
@@ -27,6 +28,23 @@ from utils.personality import OWASP_INJECTION_PATTERNS
 _MAX_GREP_MATCHES = 200
 
 
+@lru_cache(maxsize=8)
+def _compile_injection_patterns(sources: tuple[str, ...]) -> tuple[tuple[str, re.Pattern[str]], ...]:
+    """Compile (and memoize) a pattern-source tuple. Pure: same sources -> same result.
+
+    Memoized because the CLI builds short-lived clients per op and each rebuild
+    otherwise recompiles ~46 regexes (13 OWASP + 33 banned). Keyed on the source
+    tuple, so a config change with different patterns produces a fresh entry.
+    """
+    compiled: list[tuple[str, re.Pattern[str]]] = []
+    for p in sources:
+        try:
+            compiled.append((p, re.compile(p, re.IGNORECASE)))
+        except re.error:
+            continue
+    return tuple(compiled)
+
+
 def build_injection_patterns(cfg: dict) -> list[tuple[str, re.Pattern[str]]]:
     """Compile ``OWASP ∪ policy.prompt_filter.banned_patterns`` (advisory scanner)."""
     sources: list[str] = list(OWASP_INJECTION_PATTERNS)
@@ -34,13 +52,7 @@ def build_injection_patterns(cfg: dict) -> list[tuple[str, re.Pattern[str]]]:
     for p in pf.get("banned_patterns") or []:
         if p not in sources:
             sources.append(p)
-    compiled: list[tuple[str, re.Pattern[str]]] = []
-    for p in sources:
-        try:
-            compiled.append((p, re.compile(p, re.IGNORECASE)))
-        except re.error:
-            continue
-    return compiled
+    return list(_compile_injection_patterns(tuple(sources)))
 
 
 def _looks_binary(data: bytes) -> bool:
