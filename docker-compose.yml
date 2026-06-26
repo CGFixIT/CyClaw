@@ -1,4 +1,13 @@
 # Compose Spec (v2+) — the top-level `version:` key is obsolete and intentionally omitted.
+#
+# Hardening posture (see docs/THREAT_MODEL.md for the full scope):
+#   - loopback-only port publish (127.0.0.1) — never 0.0.0.0
+#   - non-root user, no-new-privileges, all Linux capabilities dropped
+#   - read-only root filesystem with explicit writable carve-outs (tmpfs + the
+#     rw bind mounts the app actually needs)
+#   - seccomp profile applied; pid/mem/cpu limits cap blast radius / DoS
+#   - optional Falco/eBPF detection sidecar behind the `monitoring` profile
+#     (disabled by default — `docker compose --profile monitoring up`)
 
 services:
   cyclaw:
@@ -11,15 +20,38 @@ services:
       - ./checkpoints:/app/checkpoints:rw
       - ./logs:/app/logs:rw
       - ./config.yaml:/app/config.yaml:ro
+      # Regenerable embedding query/LRU cache (models.embeddings.cache_dir).
+      # A named volume keeps the root fs read-only without re-downloading on boot.
+      - emb-cache:/app/.emb_cache:rw
     environment:
       - CYCLAW_CONFIG=/app/config.yaml
       - CYCLAW_TELEMETRY_KILL=1
       - PYTHONPATH=/app
+      # Redirect model/framework caches under the already-rw ./data mount so a
+      # read-only root fs (and read-only $HOME) does not break sentence-transformers.
+      - HF_HOME=/app/data/.hf_cache
+      - HUGGINGFACE_HUB_CACHE=/app/data/.hf_cache
+      - SENTENCE_TRANSFORMERS_HOME=/app/data/.st_cache
+    # Read-only root filesystem. Everything the app writes is carved out above
+    # (data/logs/checkpoints/emb-cache) or via tmpfs below.
+    read_only: true
+    tmpfs:
+      - /tmp
     security_opt:
       - no-new-privileges:true
-      # seccomp for sync/rclone if enabled (zero-trust out-of-band)
+      # seccomp profile (allows the rclone/agentic out-of-band subprocess set).
+      # NOTE: deploy/seccomp/gate-seccomp.json is intentionally NOT used here — it
+      # is a 16-syscall aspirational floor that cannot boot uvicorn+torch+chromadb.
+      # Tighten only after eBPF profiling (see docs/SECCOMP_EBPF_HARDENING.md).
       - seccomp:./deploy/seccomp/sync-rclone.json
+    # A loopback web server needs no Linux capabilities. Drop them all.
+    cap_drop:
+      - ALL
     user: "1000:1000"
+    # Resource ceilings (Compose v2, non-swarm) — contain runaway/DoS blast radius.
+    mem_limit: 4g
+    pids_limit: 256
+    cpus: "2.0"
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import httpx; httpx.get('http://127.0.0.1:8787/health', timeout=3)"]
@@ -27,7 +59,25 @@ services:
       timeout: 5s
       retries: 3
       start_period: 20s
-    # For future: add tmpfs for /tmp if needed
+
+  # --- Optional eBPF runtime monitoring (DETECTION ONLY, disabled by default) ---
+  # Observes syscalls / file-writes / egress on the out-of-band agentic & sync
+  # paths and the gate. It LOGS, never blocks — defense-in-depth observability,
+  # not a containment boundary. Requires a privileged sidecar, so it ships off:
+  #   enable with:  docker compose --profile monitoring up
+  # Rules + rationale: deploy/falco/README.md, deploy/falco/falco_rules.yaml.
+  falco:
+    image: falcosecurity/falco:0.39.2
+    container_name: cyclaw-falco
+    profiles: ["monitoring"]
+    privileged: true            # required for the kernel / eBPF driver
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/host/var/run/docker.sock:ro
+      - /proc:/host/proc:ro
+      - /sys/kernel/debug:/sys/kernel/debug:ro
+      - ./deploy/falco/falco_rules.yaml:/etc/falco/rules.d/cyclaw_rules.yaml:ro
+    command: ["/usr/bin/falco", "--modern-bpf", "-r", "/etc/falco/rules.d/cyclaw_rules.yaml"]
 
   # Optional: redis or postgres for future checkpointer / state if scaling
   # redis:
@@ -35,5 +85,6 @@ services:
   #   volumes:
   #     - redis-data:/data
 
-# volumes:
-#   redis-data:
+volumes:
+  emb-cache:
+  # redis-data:

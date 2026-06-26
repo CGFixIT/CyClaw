@@ -466,6 +466,9 @@ The MCP server exposes a retrieval-only `hybrid_search` tool. It has **no sampli
 | Soul writes | Explicit human reason string + enforced write-boundary scan + atomic write |
 | Agentic writes | Stubbed / non-executing in current release |
 | `/ops/*` routes | Loopback-only, `require_api_key` gated, rate-limited (60/min), every call audited (`ops_sync_executed` / `ops_agentic_executed`); shells out via `subprocess.run([...])` — never imports `sync/` or `agentic/` |
+| Container | Non-root, `no-new-privileges`, `cap_drop: ALL`, read-only rootfs, seccomp, resource limits; optional eBPF/Falco detection (`deploy/falco/`, off by default) |
+
+> **Scope:** CyClaw is a single-operator, loopback-bound local server. The full threat model — what the sandbox does and does **not** cover (no microVM by design) and why — is documented in [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md).
 
 ---
 

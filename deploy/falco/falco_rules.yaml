@@ -1,0 +1,122 @@
+# CyClaw Falco rules — DETECTION ONLY (defense-in-depth observability).
+#
+# These rules LOG; they never block. Falco is not a containment boundary — it is
+# an eBPF tripwire over the out-of-band agentic/sync write paths and the gate, so
+# that anything outside CyClaw's known-good behaviour leaves an audit trail.
+#
+# Ships DISABLED. Enable only via the compose `monitoring` profile:
+#   docker compose --profile monitoring up
+#
+# Scope rationale: docs/THREAT_MODEL.md. Driver/why-eBPF: docs/SECCOMP_EBPF_HARDENING.md.
+#
+# Tune the macros below to your deployment (container name, LM Studio host/port)
+# before relying on the alerts — the defaults match docker-compose.yml.
+
+- required_engine_version: 0.31.0
+
+# ---------------------------------------------------------------------------
+# Macros — what "expected" looks like for CyClaw.
+# ---------------------------------------------------------------------------
+
+# The CyClaw app container (matches docker-compose.yml container_name).
+- macro: cyclaw_container
+  condition: (container.name = "cyclaw-prod")
+
+# Binaries CyClaw is legitimately expected to exec. Core paths exec nothing; the
+# out-of-band layers exec only these (all via argv-list, never a shell):
+#   - python  : ops_runner launches `python -m sync.cli` / `agentic.cli`, reindex
+#   - rclone  : sync/runner.py corpus sync
+#   - gh      : agentic/gh_client.py read-only GitHub CLI
+- list: cyclaw_expected_exes
+  items: [python, python3, python3.12, uvicorn, rclone, gh]
+
+# A real interactive/served shell is never part of CyClaw's runtime.
+- list: cyclaw_shell_binaries
+  items: [bash, sh, dash, zsh, ksh, csh, busybox, ash]
+
+# Directories CyClaw is expected to write to (mirrors the compose rw carve-outs).
+- macro: cyclaw_expected_write_dir
+  condition: >
+    (fd.name startswith "/app/data/" or
+     fd.name startswith "/app/logs/" or
+     fd.name startswith "/app/checkpoints/" or
+     fd.name startswith "/app/.emb_cache/" or
+     fd.name startswith "/tmp/")
+
+# The only egress CyClaw makes off-container is to the LM Studio / Grok endpoints.
+# Loopback stays in-container; adjust the host/port to your LM Studio if remote.
+- macro: cyclaw_expected_outbound
+  condition: >
+    (fd.sip = "127.0.0.1" or fd.sip = "::1" or
+     fd.sport = 1234)
+
+# ---------------------------------------------------------------------------
+# Rules.
+# ---------------------------------------------------------------------------
+
+# 1) Any exec inside the CyClaw container that is not on the allow-list. Catches
+#    a shell spawn or an unexpected binary on the agentic/sync subprocess path.
+- rule: CyClaw unexpected process spawned
+  desc: >
+    A process other than CyClaw's known interpreters/tools (python, rclone, gh)
+    executed inside the app container. The core request path execs nothing; the
+    out-of-band layers exec only the allow-listed binaries. Investigate.
+  condition: >
+    spawned_process and cyclaw_container and
+    not proc.name in (cyclaw_expected_exes)
+  output: >
+    CyClaw unexpected exec (proc=%proc.name cmdline=%proc.cmdline
+    parent=%proc.pname user=%user.name container=%container.name)
+  priority: WARNING
+  tags: [cyclaw, process, agentic]
+
+# 2) Explicit shell spawn — high signal for injection / RCE attempts.
+- rule: CyClaw shell spawned in container
+  desc: >
+    An interactive/served shell started inside the CyClaw container. CyClaw never
+    uses a shell (all subprocess calls are argv-list, no shell=True), so this is a
+    strong indicator of compromise or misconfiguration.
+  condition: >
+    spawned_process and cyclaw_container and
+    proc.name in (cyclaw_shell_binaries)
+  output: >
+    CyClaw shell spawned (shell=%proc.name cmdline=%proc.cmdline
+    parent=%proc.pname user=%user.name container=%container.name)
+  priority: CRITICAL
+  tags: [cyclaw, process, shell]
+
+# 3) Write outside the expected writable roots. The root fs is read-only in
+#    compose, so this should never fire — if it does, a carve-out is wider than
+#    intended or something is writing where it shouldn't.
+- rule: CyClaw write outside allowed roots
+  desc: >
+    A file write occurred outside CyClaw's expected writable directories
+    (data/logs/checkpoints/.emb_cache/tmp). With read_only:true this should be
+    impossible; an alert means drift from the hardened baseline.
+  condition: >
+    open_write and cyclaw_container and
+    not cyclaw_expected_write_dir and
+    not fd.name startswith "/proc/" and
+    not fd.name startswith "/dev/"
+  output: >
+    CyClaw out-of-bounds write (file=%fd.name proc=%proc.name
+    cmdline=%proc.cmdline container=%container.name)
+  priority: ERROR
+  tags: [cyclaw, filesystem]
+
+# 4) Unexpected outbound network. CyClaw is loopback-only plus the local LM Studio
+#    endpoint; egress to anywhere else from the app container is suspicious
+#    (data exfiltration, C2, unexpected cloud call).
+- rule: CyClaw unexpected outbound connection
+  desc: >
+    The CyClaw container opened an outbound connection to something other than
+    loopback or the local LM Studio endpoint. Tune cyclaw_expected_outbound to
+    your model host before relying on this in production.
+  condition: >
+    outbound and cyclaw_container and
+    not cyclaw_expected_outbound
+  output: >
+    CyClaw unexpected egress (dest=%fd.sip:%fd.sport proc=%proc.name
+    container=%container.name)
+  priority: WARNING
+  tags: [cyclaw, network, exfiltration]

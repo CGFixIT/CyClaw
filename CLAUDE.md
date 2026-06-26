@@ -94,6 +94,8 @@ Five invariants enforced by graph topology — not by prompts:
 
 Additional layers: loopback-only binding, atomic soul writes (`os.replace` + injection scan), SHA-256 query hashing in audit log (raw text never persisted).
 
+The full deployment threat model — assumptions, in-scope/out-of-scope adversaries, what the container sandbox does and does **not** cover (no microVM by design), and the hardening maturity ladder — lives in `docs/THREAT_MODEL.md`.
+
 ### Dependency Notes
 
 - **chromadb** has a known CVE (pre-auth RCE); accepted because only `PersistentClient` (embedded) is used — `pip-audit` ignores it per threat model.

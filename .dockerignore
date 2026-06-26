@@ -1,0 +1,54 @@
+# Keep the build context (and image layers) lean and free of local state/secrets.
+# The Dockerfile installs deps from pyproject/requirements and copies app code;
+# none of the paths below belong in the image.
+
+# VCS / CI
+.git
+.gitignore
+.github
+
+# Python caches & build artifacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Virtual envs
+.venv/
+venv/
+env/
+
+# Local regenerable caches (rebuilt at runtime; mounted as a volume in compose)
+.emb_cache/
+**/.hf_cache/
+**/.st_cache/
+
+# Local runtime state — provided via bind mounts at runtime, not baked in
+logs/
+checkpoints/
+data/chroma/
+data/bm25/
+
+# Tests & docs are not needed in the runtime image
+tests/
+docs/
+*.md
+
+# Editor / OS cruft
+.vscode/
+.idea/
+.DS_Store
+*.swp
+
+# Secrets / env files must never enter the image
+.env
+.env.*
+*.pem
+*.key
