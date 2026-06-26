@@ -1,17 +1,18 @@
 ---
 name: run-cyclaw
-description: Run, start, build, smoke-test, or interact with the CyClaw FastAPI RAG server. Use when asked to run cyclaw, start the server, test a change, verify an endpoint, or confirm the app is working.
+description: Run, start, build, smoke-test, or interact with the CyClaw FastAPI RAG server. Use when asked to run cyclaw, start the server, test a change, verify an endpoint, or confirm the app is working. Also invoked by /sandbox-runtime-verification as its primary test driver.
 ---
 
 # Run CyClaw
 
 CyClaw is a Python FastAPI server (`gate.py`) that exposes a RAG pipeline over
 a local ChromaDB + BM25 index. It binds to `127.0.0.1:8787`. The driver is a
-curl-based smoke script at `.claude/skills/run-cyclaw/smoke.sh`.
+bash smoke script at `.claude/skills/run-cyclaw/smoke.sh`.
 
 LM Studio is an **external dependency** (the local LLM). CI and the smoke
-script run without it: the `/query` path degrades gracefully (offline-best-effort
-returns an `[LLM Error: ...]` answer), and all structural flows are testable.
+script run without it: the `/query` path degrades gracefully
+(`offline-best-effort` returns an `[LLM Error: ...]` answer), and all
+structural flows are testable.
 
 ---
 
@@ -19,54 +20,80 @@ returns an `[LLM Error: ...]` answer), and all structural flows are testable.
 
 ```bash
 # Python 3.12 required
-# Install torch CPU first (avoids PyPI torch pulling CUDA)
 pip install torch==2.12.1+cpu --index-url https://download.pytorch.org/whl/cpu
 pip install -r requirements.txt --ignore-installed PyYAML
 ```
 
-PyYAML conflict is harmless — the system version works fine; skip the
-reinstall with `--ignore-installed PyYAML`.
+PyYAML conflict is harmless — skip the reinstall with `--ignore-installed PyYAML`.
 
 ---
 
 ## Build (retrieval index)
 
-Must be run once before the server starts; idempotent. The smoke script backs up
-your real `soul.md` before building, uses a minimal temp one, and restores it
-when done:
+Must be run once before the server starts; idempotent:
 
 ```bash
 mkdir -p data/personality index logs
 GROK_API_KEY=dummy python3 -m retrieval.indexer
 ```
 
-Expected output: `[Indexer] Done. ChromaDB: index/chroma_db, BM25: index/bm25.json`
-
-Your `data/personality/soul.md` is never modified by the smoke test.
+Expected: `[Indexer] Done. ChromaDB: index/chroma_db, BM25: index/bm25.json`
 
 ---
 
 ## Run (agent path — smoke driver)
 
-The smoke script launches the server, runs 6 checks covering all major
-API paths, and exits 0/1:
+The smoke script launches the server, runs all checks, and exits 0/1:
 
 ```bash
 bash .claude/skills/run-cyclaw/smoke.sh
 ```
 
-Checks performed (all verified in this session):
-1. `GET /health` — index_ready=True, graph_ready=True
-2. `POST /query` — vault-miss path returns `needs_confirm=True`
-3. `POST /query` with `user_confirmed_online=false` — exercises
-   `offline_best_effort` graph node (expects LLM error without LM Studio)
+### Checks performed
+
+**Core API (gateway + graph)**
+1. `GET /health` — `index_ready=True`, `graph_ready=True`
+2. `POST /query` — direct local path (`needs_confirm=False`)
+3. `POST /query user_confirmed_online=false` — `model_used=local` (offline path)
 4. Prompt injection blocked → HTTP 400
-5. `GET /soul` — personality endpoint live
-6. `GET /static/terminal.html` — static UI served
-7. read terminal.html file to find other api endpoints and test the ones that can feasibly be tested in this context 
-8. check that all individual files that can be individually ran are ran without error
-9. verify all tests under tests/ folder pass or report findings in summary
-10. generate a comprehensive, thorough summary and saving it to /.claude/sandbox-test.txt
+5. `GET /soul` with valid Bearer token → soul version returned
+5b. `GET /soul` without auth → HTTP 401 (fail-closed)
+6. `GET /static/terminal.html` → HTTP 200
+7. Terminal HTML endpoint discovery — parse `terminal.html` for API routes and probe each reachable one
+
+**agentic/fsconnect — filesystem connector**
+8. Lazy import gate — `agentic.fsconnect` not in `sys.modules` on the core path
+9. Path-safety escape rejection — `../` traversal raises `FsPathError`
+10. Emulated FS reads — `fs_list` / `fs_stat` / `fs_read` / `fs_grep` on a temp sandbox dir
+11. Emulated FS writes (dry-run) — `writes_enabled=False` → dry-run plan, no file created
+12. Emulated FS writes (live, temp root) — `writes_enabled=True` with temp config + writable root → file created, content verified
+13. OS platform detection — `osutil._file_manager_argv` returns correct argv for current OS
+
+**agentic/sqlconnect — SQL connector**
+14. Lazy import gate — `agentic.sqlconnect` not in `sys.modules` on the core path
+15. SELECT guard accepts valid `SELECT` query
+16. DML rejected — `INSERT` / `UPDATE` / `DELETE` each raise `SqlConnectError`
+17. SQL comment injection blocked — `--` / `/* */` raise `SqlConnectError`
+18. Multi-statement blocked — stacked statements raise `SqlConnectError`
+
+**NeMo guardrails**
+19. Soft import — `guardrails.integration` imports cleanly without `nemoguardrails` installed
+20. Isolation — `guardrails` not in `gate.py` / `graph.py` import graph
+21. Offline path — `get_cyclaw_guardrails()` raises `GuardrailsDependencyError` when `nemoguardrails` is absent (callers degrade via `safe_generate`)
+22. Soul mutation detection — `detect_soul_mutation_intent` flags mutation queries
+23. Injection scan — `scan_injection` detects injection patterns in content
+24. Grounding check — `grounding_score` returns a float in `[0.0, 1.0]`
+
+**PostgreSQL backends (opt-in — skipped cleanly when `CYCLAW_DB_URL` unset)**
+25. Soul DB Postgres — `tests/test_personality_postgres.py` (live connect/execute lifecycle)
+26. Rate-limiter Postgres — `tests/test_ratelimit_postgres.py` (allow/deny, restart-survival)
+27. pgvector store — `tests/test_pgvector_store.py` (index + cosine ranking parity)
+
+**Full test suite**
+28. `pytest tests/ -q --tb=short --continue-on-collection-errors` — all unit and integration tests; postgres/pgvector/fsconnect/sqlconnect/guardrails tests included (postgres tests skip cleanly without a DSN)
+
+**Report**
+29. Comprehensive pass/fail summary written to `.claude/sandbox-test.txt`
 
 ---
 
@@ -76,8 +103,7 @@ Checks performed (all verified in this session):
 GROK_API_KEY=dummy uvicorn gate:app --host 127.0.0.1 --port 8787
 ```
 
-Then open `http://127.0.0.1:8787` in a browser (the Soul Console terminal UI).
-Useless headless; use the smoke driver instead.
+Then open `http://127.0.0.1:8787` (Soul Console terminal UI). Useless headless.
 
 ---
 
@@ -85,23 +111,16 @@ Useless headless; use the smoke driver instead.
 
 ```bash
 BASE="http://127.0.0.1:8787"
+CYCLAW_API_KEY="smoke-test-key-ci"
 
-# Health
 curl -s $BASE/health | python3 -m json.tool
-
-# Query (offline, no LM Studio needed for graph flow)
 curl -s -X POST $BASE/query \
   -H "Content-Type: application/json" \
   -d '{"query":"What is RRF fusion?"}' | python3 -m json.tool
-
-# Confirm offline path (decline Grok)
 curl -s -X POST $BASE/query \
   -H "Content-Type: application/json" \
-  -d '{"query":"What is CyClaw?","user_confirmed_online":false}' \
-  | python3 -m json.tool
-
-# Soul
-curl -s $BASE/soul | python3 -m json.tool
+  -d '{"query":"What is CyClaw?","user_confirmed_online":false}' | python3 -m json.tool
+curl -s $BASE/soul -H "Authorization: Bearer $CYCLAW_API_KEY" | python3 -m json.tool
 ```
 
 ---
@@ -109,30 +128,30 @@ curl -s $BASE/soul | python3 -m json.tool
 ## Tests
 
 ```bash
-GROK_API_KEY=dummy pytest tests/test_sanitizer.py tests/test_security.py \
-  tests/test_rate_limit.py tests/test_audit.py tests/test_personality.py \
-  -q --tb=short
+GROK_API_KEY=dummy pytest tests/ -q --tb=short --continue-on-collection-errors
+# Postgres live tests (requires CYCLAW_DB_URL + psycopg[binary] + pgvector):
+CYCLAW_DB_URL=postgresql://... CYCLAW_DB_SSLMODE=disable \
+  pytest tests/test_personality_postgres.py tests/test_ratelimit_postgres.py \
+         tests/test_pgvector_store.py -q
 ```
 
 ---
 
 ## Gotchas
 
-- **`status: degraded`** in `/health` is normal without LM Studio running.
-  `index_ready` and `graph_ready` are the meaningful fields for smoke testing.
-- **`needs_confirm: true`** on `/query` is correct behavior when the top
-  retrieval score is below `min_score` (0.028). The corpus has only one
-  document in the dev index, so scores hover near zero. Re-submit with
-  `user_confirmed_online: false` to exercise the full graph path.
-- **PyYAML install conflict** — `pip install -r requirements.txt` errors on
-  the system-installed PyYAML. Use `--ignore-installed PyYAML`; the system
-  version is compatible.
-- **TELEMETRY KILL messages** printed to stdout on server start are
-  intentional (gate.py kills LangChain/Chroma phone-home hooks at startup).
-- **`GROK_API_KEY`** must be set (any non-empty value works) — gate.py checks
-  `security.require_env` at startup and warns if missing. `dummy` is fine for
-  offline mode.
-- **`soul.md` preservation** — The smoke script backs up your real
-  `data/personality/soul.md`, uses a minimal temp one during the test, and
-  restores the original afterward. Your personality file is guaranteed to be
-  unmodified.
+- **`status: degraded`** in `/health` is normal without LM Studio. `index_ready`
+  and `graph_ready` are the meaningful smoke fields.
+- **`needs_confirm: true`** on `/query` is correct when the top retrieval score
+  is below `min_score`. Re-submit with `user_confirmed_online: false` to drive
+  the offline path.
+- **PyYAML install conflict** — always use `--ignore-installed PyYAML`.
+- **TELEMETRY KILL messages** on startup are intentional.
+- **`GROK_API_KEY`** must be set (any non-empty value works offline).
+- **soul.md preservation** — the smoke script backs up and restores your real
+  `data/personality/soul.md`; it is never left modified.
+- **Postgres checks skip cleanly** without `CYCLAW_DB_URL` — set it to a live
+  DSN to exercise the live connect/execute paths.
+- **`writes_enabled=True` test** uses a fully isolated `/tmp` directory —
+  no project files are ever touched by the write-emulation check.
+- **NeMo guardrails** soft-import: tests pass whether or not `nemoguardrails`
+  is installed; the integration degrades to a transparent no-op when absent.
