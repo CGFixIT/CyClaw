@@ -28,6 +28,7 @@ import os
 import re
 import threading
 from datetime import UTC, datetime
+from functools import lru_cache
 from pathlib import Path
 
 from agentic.config import AgenticConfig
@@ -40,6 +41,25 @@ from utils.personality import OWASP_INJECTION_PATTERNS
 
 def _utcnow() -> str:
     return datetime.now(UTC).isoformat()
+
+
+@lru_cache(maxsize=8)
+def _compile_injection_patterns(sources: tuple[str, ...]) -> tuple[tuple[str, re.Pattern[str]], ...]:
+    """Compile (and memoize) a pattern-source tuple. Pure: same sources -> same result.
+
+    Memoized because the agentic CLI builds a fresh ``SkillRegistry`` per op
+    (``status`` / ``propose-skill`` / ``apply-skill``) and each construction
+    otherwise recompiles ~46 regexes (OWASP baseline + banned_patterns). Keyed on
+    the source tuple, so a config change with different patterns yields a fresh
+    entry. Mirrors ``agentic.fsconnect.client._compile_injection_patterns``.
+    """
+    compiled: list[tuple[str, re.Pattern[str]]] = []
+    for p in sources:
+        try:
+            compiled.append((p, re.compile(p, re.IGNORECASE)))
+        except re.error:
+            continue
+    return tuple(compiled)
 
 
 class SkillRegistry:
@@ -94,12 +114,7 @@ class SkillRegistry:
         for p in (pf.get("banned_patterns") or []):
             if p not in sources:
                 sources.append(p)
-        compiled: list[tuple] = []
-        for p in sources:
-            try:
-                compiled.append((p, re.compile(p, re.IGNORECASE)))
-            except re.error:
-                continue
+        compiled: list[tuple] = list(_compile_injection_patterns(tuple(sources)))
         # Fail closed. Unlike the soul scanner (advisory at propose time), this
         # scanner is ENFORCED at apply_skill: an empty pattern set would make
         # _scan_injection a silent no-op, so every skill would pass the injection
