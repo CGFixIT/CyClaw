@@ -27,9 +27,15 @@ from utils.errors import (
 from utils.logger import audit_log
 
 _IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)?$")
+# NOTE: ``replace`` is deliberately NOT in this list. ``REPLACE`` as a write
+# statement is MySQL-only DML, and this connector supports only Postgres/MSSQL,
+# where ``replace(...)`` is a read-only scalar string function. Blocking it
+# rejected legitimate read queries like ``SELECT replace(name,'a','b') FROM t``.
+# Even if a REPLACE write statement existed, the leading-keyword gate (must start
+# with SELECT/WITH) plus the single-statement check would already stop it.
 _FORBIDDEN_RE = re.compile(
     r"\b(insert|update|delete|drop|alter|create|truncate|grant|revoke|merge|call|"
-    r"exec|execute|into|copy|vacuum|attach|replace|begin|commit|rollback)\b",
+    r"exec|execute|into|copy|vacuum|attach|begin|commit|rollback)\b",
     re.IGNORECASE,
 )
 

@@ -42,6 +42,16 @@ def test_assert_rejects_non_readonly(bad):
         assert_read_only_sql(bad)
 
 
+@pytest.mark.parametrize("good", [
+    "SELECT replace(name, 'a', 'b') FROM t",
+    "select id, REPLACE(path, '\\\\', '/') as p from files",
+    "WITH x AS (SELECT replace(c, ' ', '_') AS c FROM t) SELECT * FROM x",
+])
+def test_assert_allows_replace_read_function(good):
+    """``replace()`` is a read-only scalar in Postgres/MSSQL and must not be blocked."""
+    assert assert_read_only_sql(good).lower().startswith(("select", "with"))
+
+
 def test_assert_rejects_comments_with_specific_code():
     """Comment rejection fires before the keyword/multi-statement guards."""
     with pytest.raises(SqlConnectError) as exc:
