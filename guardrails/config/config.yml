@@ -16,8 +16,9 @@ models:
     engine: openai
     model: qwen2.5-7b-instruct          # match LM Studio loaded model
     parameters:
-      # Intentional loopback binding to local LM Studio (offline-first)
-      base_url: http://127.0.0.1:1234/v1
+      # Loopback-only binding to local LM Studio is a core CyClaw security
+      # invariant (offline-first), not debug code -- suppress devskim heuristic.
+      base_url: http://127.0.0.1:1234/v1  # DevSkim: ignore DS162092
       api_key: "not-needed-for-local"
 
   # Optional: a smaller/faster local model dedicated to guardrail checks keeps
@@ -27,8 +28,9 @@ models:
     engine: openai
     model: qwen2.5-7b-instruct
     parameters:
-      # Intentional loopback binding to local LM Studio (offline-first)
-      base_url: http://127.0.0.1:1234/v1
+      # Loopback-only binding to local LM Studio is a core CyClaw security
+      # invariant (offline-first), not debug code -- suppress devskim heuristic.
+      base_url: http://127.0.0.1:1234/v1  # DevSkim: ignore DS162092
       api_key: "not-needed-for-local"
 
 # Instructions injected as the bot's general system framing. The soul/identity
