@@ -147,6 +147,9 @@ jobs:
             tests/test_startup_robustness.py \
             tests/test_clear_cache.py \
             tests/test_ops_runner.py \
+            tests/test_personality_postgres.py \
+            tests/test_ratelimit_postgres.py \
+            tests/test_pgvector_store.py \
             -q --tb=short \
             --cov=gate \
             --cov=utils.sanitizer \
@@ -189,6 +192,74 @@ jobs:
 
       - name: Final status
         run: echo "CI workflow completed on ${{ matrix.os }} (reproducible gate passed)"
+
+  # ==============================================================================
+  # Postgres backend job (opt-in DB paths)
+  # Exercises the LIVE psycopg/pgvector connect+execute paths that the default
+  # matrix can only skip: the soul DB over Postgres, the rate limiter over
+  # Postgres, and the pgvector vector store. Ubuntu-only — service containers do
+  # not run on the windows-latest leg. Uses pgvector/pgvector:pg16 (a superset of
+  # postgres:16 that ships the `vector` extension). Lean deps: torch / chromadb /
+  # sentence-transformers / fastapi stay lazy and are not needed; the job installs
+  # only the import-time deps the shared tests/conftest.py pulls in (rank-bm25 + nltk
+  # via retrieval.hybrid_search) plus the Postgres drivers. sslmode=disable because
+  # the service is a trusted same-host container.
+  # ==============================================================================
+  postgres-backend:
+    name: postgres-backend
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: cyclaw
+          POSTGRES_PASSWORD: cyclaw
+          POSTGRES_DB: cyclaw
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U cyclaw"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      CYCLAW_DB_URL: postgresql://cyclaw:cyclaw@localhost:5432/cyclaw
+      CYCLAW_DB_SSLMODE: disable
+      GROK_API_KEY: dummy
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1  # v6.3.0
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: |
+            constraints.txt
+            pyproject.toml
+
+      - name: Upgrade pip (CVE mitigation for CI env only)
+        run: python -m pip install --upgrade "pip>=26.1.2"
+
+      - name: Install Postgres-backend deps
+        run: |
+          # Postgres drivers + the import-time deps tests/conftest.py needs
+          # (retrieval.hybrid_search → rank-bm25, nltk; numpy backs rank-bm25).
+          # Constraints pin psycopg/psycopg-binary 3.2.13, pgvector 0.4.2, and the
+          # rest to the project versions. PorterStemmer needs no nltk_data download.
+          pip install -c constraints.txt 'psycopg[binary]' pgvector pyyaml rank-bm25 nltk numpy pytest
+
+      - name: Run live Postgres / pgvector backend tests
+        run: |
+          pytest \
+            tests/test_personality_postgres.py \
+            tests/test_ratelimit_postgres.py \
+            tests/test_pgvector_store.py \
+            -q --tb=short
+
+      - name: Final status
+        run: echo "Postgres backend tests passed (soul DB + rate limiter + pgvector)"
 
   # ==============================================================================
   # Skill verification matrix (new in feature/CyClaw-Agent)
