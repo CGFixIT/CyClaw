@@ -62,6 +62,14 @@ indexing:
   chunk_size: 512
   chunk_overlap: 50
   batch_size: 50
+  # Semantic (vector) backend. "chroma" (default) keeps the embedded, zero-config,
+  # offline-first PersistentClient. "pgvector" stores/queries the 384-dim embeddings
+  # in PostgreSQL (requires a running server — a deliberate move off local-first).
+  vector_backend: "chroma"
+  # pgvector DSN (only used when vector_backend=pgvector). Falls back to the
+  # CYCLAW_VECTOR_DB_URL or CYCLAW_DB_URL env vars when null.
+  # database_url: null
+  # BM25 (keyword) stays file-based (bm25_path) regardless of vector_backend.
 
 retrieval:
   top_k_semantic: 5
