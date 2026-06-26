@@ -38,6 +38,15 @@ def assert_read_only_sql(sql: str) -> str:
     """Return a cleaned single SELECT/WITH statement, or raise ``SqlConnectError``."""
     if not isinstance(sql, str) or not sql.strip():
         raise SqlConnectError("empty SQL", code="SQLCONNECT_BAD_QUERY")
+    # Defense in depth: SQL comments (``--`` line, ``/* */`` block) are a known
+    # vector for hiding forbidden keywords or a stacked statement from a keyword
+    # scanner (the DB strips the comment, the guard does not). Read-only previews
+    # never need comments, so reject them outright rather than try to parse them.
+    if "--" in sql or "/*" in sql or "*/" in sql:
+        raise SqlConnectError(
+            "SQL comments are not allowed in read-only queries",
+            code="SQLCONNECT_BAD_QUERY",
+        )
     cleaned = sql.strip().rstrip(";").strip()
     if ";" in cleaned:
         raise SqlConnectError(

@@ -32,10 +32,22 @@ def test_assert_accepts_select_and_with():
     "SELECT * INTO newt FROM t",
     "EXEC sp_who",
     "",
+    # SQL comments are a stacked-statement / keyword-hiding vector and are refused.
+    "SELECT 1 -- harmless",
+    "SELECT 1 /* DROP TABLE t */",
+    "SELECT 1 /* ; */ FROM t",
 ])
 def test_assert_rejects_non_readonly(bad):
     with pytest.raises(SqlConnectError):
         assert_read_only_sql(bad)
+
+
+def test_assert_rejects_comments_with_specific_code():
+    """Comment rejection fires before the keyword/multi-statement guards."""
+    with pytest.raises(SqlConnectError) as exc:
+        assert_read_only_sql("SELECT * FROM t -- /* sneaky */ DROP TABLE x")
+    assert exc.value.code == "SQLCONNECT_BAD_QUERY"
+    assert "comment" in str(exc.value).lower()
 
 
 def test_validate_identifier():
