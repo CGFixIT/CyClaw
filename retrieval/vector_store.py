@@ -226,8 +226,8 @@ class _PgVectorReader(_PgVectorBase):
         # Same ordering expression in SELECT and ORDER BY so the HNSW index is used.
         rows = conn.execute(
             "SELECT content, source, chunk_id, stem_tags, "  # noqa: S608
-            f"1 - (embedding <=> %(q)s) AS score FROM {_PG_TABLE} "
-            "ORDER BY embedding <=> %(q)s LIMIT %(k)s",
+            f"1 - (embedding <=> %(q)s::vector) AS score FROM {_PG_TABLE} "
+            "ORDER BY embedding <=> %(q)s::vector LIMIT %(k)s",
             {"q": _as_list(embedding), "k": k},
         ).fetchall()
         out: list[dict] = []
