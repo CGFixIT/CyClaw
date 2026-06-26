@@ -89,3 +89,75 @@ def test_dsn_missing(monkeypatch):
     client = SqlClient({}, sc)
     with pytest.raises(SqlConnectRuntimeError):
         client._dsn()
+
+
+class _FakeCursor:
+    def __init__(self) -> None:
+        self.executed: list[tuple] = []
+        self.description = [("col",)]
+
+    def execute(self, sql, params=()) -> None:
+        self.executed.append((sql, params))
+
+    def fetchmany(self, n):
+        return [("v",)]
+
+
+class _FakeConn:
+    def __init__(self) -> None:
+        self.read_only = False
+        self.timeout = None
+        self.cur = _FakeCursor()
+
+    def cursor(self):
+        return self.cur
+
+    def close(self) -> None:
+        pass
+
+
+class _FakeDriver:
+    def __init__(self) -> None:
+        self.conn = _FakeConn()
+
+    def connect(self, dsn):
+        return self.conn
+
+
+def test_execute_applies_statement_timeout_postgres(monkeypatch):
+    sc = SqlConnectConfig(driver="postgres", statement_timeout_ms=7000)
+    monkeypatch.setenv(sc.dsn_env, "postgresql://x")
+    client = SqlClient({}, sc)
+    fake = _FakeDriver()
+    monkeypatch.setattr(client, "_import_driver", lambda: fake)
+    client._execute("SELECT 1")
+    # The timeout is applied via set_config BEFORE the user query runs.
+    first_sql, first_params = fake.conn.cur.executed[0]
+    assert "set_config" in first_sql.lower()
+    assert "statement_timeout" in first_sql.lower()
+    assert first_params == ("7000",)
+    assert fake.conn.cur.executed[1][0] == "SELECT 1"
+
+
+def test_execute_applies_query_timeout_mssql(monkeypatch):
+    sc = SqlConnectConfig(driver="mssql", statement_timeout_ms=8000)
+    monkeypatch.setenv(sc.dsn_env, "Driver=ODBC;")
+    client = SqlClient({}, sc)
+    fake = _FakeDriver()
+    monkeypatch.setattr(client, "_import_driver", lambda: fake)
+    client._execute("SELECT 1")
+    # MSSQL uses the connection query timeout (seconds), not a SET statement.
+    assert fake.conn.timeout == 8
+    assert not any("statement_timeout" in s.lower() for s, _ in fake.conn.cur.executed)
+
+
+def test_execute_timeout_disabled_when_non_positive(monkeypatch):
+    sc = SqlConnectConfig(driver="postgres")
+    sc.statement_timeout_ms = 0  # bypass post-init validation to exercise the disabled branch
+    monkeypatch.setenv(sc.dsn_env, "postgresql://x")
+    client = SqlClient({}, sc)
+    fake = _FakeDriver()
+    monkeypatch.setattr(client, "_import_driver", lambda: fake)
+    client._execute("SELECT 1")
+    # No timeout SET issued; only the user query runs.
+    assert fake.conn.cur.executed == [("SELECT 1", ())]

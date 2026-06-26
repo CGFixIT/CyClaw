@@ -125,6 +125,25 @@ class SqlClient:
             ) from exc
         return pyodbc
 
+    def _apply_statement_timeout(self, conn: Any, cur: Any) -> None:
+        """Enforce ``statement_timeout_ms`` on the session before the user query.
+
+        Without this, a slow/pathological read-only SELECT (e.g. a cartesian join)
+        runs unbounded -- the configured timeout would be a no-op. Driver-specific:
+        Postgres applies a session GUC via ``set_config`` (parameterized -- ``SET``
+        itself rejects bind params); MSSQL/pyodbc sets the per-query timeout on the
+        connection (seconds). ``<= 0`` disables the cap explicitly.
+        """
+        timeout_ms = int(self.sql_cfg.statement_timeout_ms)
+        if timeout_ms <= 0:
+            return
+        if self.sql_cfg.driver == "postgres":
+            # SET statement_timeout cannot take a bind parameter; set_config can.
+            cur.execute("SELECT set_config('statement_timeout', %s, false)", (str(timeout_ms),))
+        else:  # mssql / pyodbc: query timeout is in seconds on the connection
+            with suppress_attr_error():
+                conn.timeout = max(1, timeout_ms // 1000)
+
     def _execute(self, sql: str, params: tuple = ()) -> dict:  # pragma: no cover - needs live DB
         driver = self._import_driver()
         dsn = self._dsn()
@@ -133,6 +152,7 @@ class SqlClient:
             with suppress_attr_error():
                 conn.read_only = True
             cur = conn.cursor()
+            self._apply_statement_timeout(conn, cur)
             cur.execute(sql, params)
             cols = [d[0] for d in cur.description] if cur.description else []
             rows = cur.fetchmany(self.sql_cfg.max_rows + 1)
