@@ -15,7 +15,7 @@ GROK_API_KEY="${GROK_API_KEY:-dummy}"
 CYCLAW_API_KEY="${CYCLAW_API_KEY:-smoke-test-key-ci}"
 PYTHON="${PYTHON:-python3.12}"
 PORT="${PORT:-8787}"
-BASE="http://127.0.0.1:$PORT"
+BASE="http://127.0.0.1:$PORT"  # DevSkim: ignore DS162092
 LOG="/tmp/cyclaw-server.log"
 REPORT_DIR=".claude"
 REPORT="$REPORT_DIR/sandbox-test.txt"
@@ -169,7 +169,7 @@ from utils.errors import FsPathError
 with tempfile.TemporaryDirectory() as root:
     sr = ScopedRoots([root])
     try:
-        sr.open_file("../escape.txt")
+        sr.stat("../escape.txt")
         print("  FAIL  path escape not rejected")
         sys.exit(1)
     except (FsPathError, OSError, ValueError):
