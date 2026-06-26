@@ -26,7 +26,7 @@ from pathlib import Path
 
 from agentic.fsconnect.client import build_injection_patterns
 from agentic.fsconnect.config import FsConnectConfig
-from agentic.fsconnect.pathsafe import ScopedRoots
+from agentic.fsconnect.pathsafe import ScopedRoots, split_components
 from utils.errors import FsConnectError, FsConnectRuntimeError
 from utils.logger import audit_log
 
@@ -95,7 +95,12 @@ class FsIndexer:
                     continue
                 rel = m["path"]
                 data = roots.read_bytes(rel, max_bytes=self.fs_cfg.index_max_file_bytes)
-                dest = staging / rel
+                # Re-validate the relative path through the same pathsafe guard the
+                # read side uses before joining it into the staging dir. A crafted
+                # entry name (path separators, "..", drive letter / ADS) must never
+                # escape `staging`; this also makes the join correct on Windows,
+                # where `rel` is always "/"-separated.
+                dest = staging.joinpath(*split_components(rel))
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 dest.write_bytes(data)
                 copied.append(rel)

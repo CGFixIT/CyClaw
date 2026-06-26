@@ -64,3 +64,17 @@ def test_apply_stages_into_staging_dir(env):
     assert res["reindex_required"] is True and res["reindexed"] is False
     assert (staging / "a.md").read_text(encoding="utf-8") == "# title"
     assert (staging / "docs" / "b.txt").exists()
+
+
+def test_apply_staged_paths_stay_within_staging(env):
+    """Every staged file's resolved path is contained in the staging dir.
+
+    The destination join goes through ``split_components`` (the same pathsafe
+    guard used on the read side), so a relative path can never escape staging.
+    """
+    cfg, fs_cfg, cp, _idx, tmp = env
+    staging = (tmp / "staging").resolve()
+    FsIndexer(cfg, fs_cfg, config_path=cp).apply(staging_dir=str(staging), reindex=False)
+    for path in staging.rglob("*"):
+        if path.is_file():
+            assert staging in path.resolve().parents
