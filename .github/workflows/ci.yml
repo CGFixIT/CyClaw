@@ -224,7 +224,8 @@ jobs:
           --health-timeout 5s
           --health-retries 5
     env:
-      CYCLAW_DB_URL: postgresql://cyclaw:cyclaw@127.0.0.1:5432/cyclaw
+      # Loopback DSN for the ephemeral CI service container, not debug code.
+      CYCLAW_DB_URL: postgresql://cyclaw:cyclaw@127.0.0.1:5432/cyclaw  # DevSkim: ignore DS162092
       CYCLAW_DB_SSLMODE: disable
       GROK_API_KEY: dummy
     steps:
