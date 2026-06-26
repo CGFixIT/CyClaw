@@ -79,7 +79,7 @@ bash .claude/skills/run-cyclaw/smoke.sh
 **NeMo guardrails**
 19. Soft import — `guardrails.integration` imports cleanly without `nemoguardrails` installed
 20. Isolation — `guardrails` not in `gate.py` / `graph.py` import graph
-21. Offline path — `get_cyclaw_guardrails(cfg)` returns `None` when disabled/dep missing
+21. Offline path — `get_cyclaw_guardrails()` raises `GuardrailsDependencyError` when `nemoguardrails` is absent (callers degrade via `safe_generate`)
 22. Soul mutation detection — `detect_soul_mutation_intent` flags mutation queries
 23. Injection scan — `scan_injection` detects injection patterns in content
 24. Grounding check — `grounding_score` returns a float in `[0.0, 1.0]`

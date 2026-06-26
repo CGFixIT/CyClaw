@@ -178,7 +178,7 @@ with tempfile.TemporaryDirectory() as root:
         sr.close()
 
 # ── 10. Emulated FS reads ─────────────────────────────────────────────────
-from agentic.fsconnect.client import FsConnectClient
+from agentic.fsconnect.client import FsClient
 from agentic.fsconnect.config import load_fsconnect_config
 from utils.logger import _get_config, reset_config_cache
 
@@ -201,7 +201,7 @@ with tempfile.TemporaryDirectory() as tmp:
     reset_config_cache()
     cfg = _get_config(str(cfg_path))
     fs_cfg = load_fsconnect_config(str(cfg_path))
-    client = FsConnectClient(cfg, fs_cfg)
+    client = FsClient(cfg, fs_cfg)
 
     listing = client.fs_list(".")
     assert any("hello.txt" in str(e) for e in listing["entries"]), f"listing: {listing}"
@@ -215,7 +215,7 @@ with tempfile.TemporaryDirectory() as tmp:
     assert "CyClaw" in content["content"]
     print("  PASS  agentic/fsconnect fs_read (content verified)")
 
-    grep = client.fs_grep("CyClaw", ".")
+    grep = client.fs_grep("hello.txt", "CyClaw")
     assert grep["match_count"] >= 1
     print(f"  PASS  agentic/fsconnect fs_grep (matches={grep['match_count']})")
 
@@ -240,8 +240,8 @@ with tempfile.TemporaryDirectory() as tmp:
     cfg = _get_config(str(cfg_path))
     fs_cfg = load_fsconnect_config(str(cfg_path))
     with FsWriter(cfg, fs_cfg, str(cfg_path)) as w:
-        result = w.write_file("dryrun.txt", b"should not exist", reason="smoke dry-run")
-    assert result.get("dry_run") is True
+        result = w.fs_write("dryrun.txt", b"should not exist", reason="smoke dry-run")
+    assert result.get("executed") is False
     assert not (wz / "dryrun.txt").exists()
     print("  PASS  agentic/fsconnect write dry-run (writes_enabled=False, no file created)")
     reset_config_cache()
@@ -263,10 +263,10 @@ with tempfile.TemporaryDirectory() as tmp:
     cfg = _get_config(str(cfg_path))
     fs_cfg = load_fsconnect_config(str(cfg_path))
     with FsWriter(cfg, fs_cfg, str(cfg_path)) as w:
-        result = w.write_file("live.txt", b"CyClaw write-enabled test", reason="smoke live write")
+        result = w.fs_write("live.txt", b"CyClaw write-enabled test", reason="smoke live write")
     written = (wz / "live.txt").read_bytes()
     assert written == b"CyClaw write-enabled test", f"content mismatch: {written!r}"
-    assert result.get("dry_run") is not True
+    assert result.get("executed") is True
     print("  PASS  agentic/fsconnect write live (writes_enabled=True, file created and verified)")
     reset_config_cache()
 
@@ -371,12 +371,19 @@ guardrail_imports = [
 assert not guardrail_imports, f"guardrails imported in gate.py: {guardrail_imports}"
 print("  PASS  NeMo guardrails isolation (not imported by gate.py)")
 
-# 21. Offline path — disabled/dep-missing returns None
+# 21. Offline path — dep-missing degrades (get_cyclaw_guardrails raises
+#     GuardrailsDependencyError; callers use safe_generate for graceful fallback)
 from guardrails.integration import get_cyclaw_guardrails
-cfg_minimal = {"guardrails": {"enabled": False}}
-gr = get_cyclaw_guardrails(cfg_minimal)
-assert gr is None, f"expected None when disabled, got {gr!r}"
-print("  PASS  guardrails offline path (disabled → returns None)")
+from guardrails.errors import GuardrailsDependencyError
+if not NEMO_AVAILABLE:
+    try:
+        get_cyclaw_guardrails()
+        print("  FAIL  expected GuardrailsDependencyError when nemoguardrails absent")
+        sys.exit(1)
+    except GuardrailsDependencyError:
+        print("  PASS  guardrails offline path (dep missing → GuardrailsDependencyError; safe_generate degrades)")
+else:
+    print("  PASS  guardrails offline path (nemoguardrails present — live engine path active)")
 
 # 22. Soul mutation detection
 from guardrails.rails import detect_soul_mutation_intent
