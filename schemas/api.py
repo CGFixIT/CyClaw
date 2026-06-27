@@ -14,8 +14,14 @@ from pydantic import BaseModel, ConfigDict, Field
 class QueryRequest(BaseModel):
     model_config = ConfigDict(extra='forbid', strict=True)
     # min_length=1 rejects empty queries at the schema boundary (HTTP 422)
-    # before any retrieval/LLM work is done.
-    query: str = Field(min_length=1)
+    # before any retrieval/LLM work is done. max_length is an independent hard
+    # DoS backstop: the configurable injection-filter length cap
+    # (policy.prompt_filter.max_input_chars, default 4000) is bypassed entirely
+    # when prompt_filter.enabled is false, so without a schema bound an operator
+    # who disables the filter would let a multi-MB query flow straight into
+    # retrieval + the LLM prompt. 65536 is far above any sane query yet caps the
+    # hot path regardless of filter state (mirrors the new_soul/body limits below).
+    query: str = Field(min_length=1, max_length=65536)
     user_confirmed_online: bool | None = None
 
 class SourceInfo(BaseModel):

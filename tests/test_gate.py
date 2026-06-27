@@ -96,6 +96,15 @@ class TestQueryEndpoint:
         resp = test_client.post("/query", json={"query": ""})
         assert resp.status_code == 422  # Pydantic validation (min_length=1)
 
+    def test_oversized_query_rejected(self, client):
+        # A query past the schema max_length is rejected at the 422 boundary
+        # before any retrieval/LLM work — an independent DoS backstop that holds
+        # even if policy.prompt_filter is disabled (it bypasses the length cap).
+        test_client, mock_graph = client
+        resp = test_client.post("/query", json={"query": "x" * 65537})
+        assert resp.status_code == 422  # Pydantic validation (max_length=65536)
+        mock_graph.invoke.assert_not_called()  # rejected before the graph runs
+
     def test_needs_confirm_response(self, client):
         test_client, mock_graph = client
         mock_graph.invoke.return_value = {
