@@ -103,6 +103,45 @@ def test_bang_extra_exclude_is_neutralised(tmp_path: Path) -> None:
     assert any("IGNORED" in ln and "!" in ln for ln in lines)
 
 
+def test_multiline_extra_exclude_cannot_smuggle_bang_reset(tmp_path: Path) -> None:
+    # A single extra_excludes entry that embeds a newline must not be able to
+    # smuggle a live '!' reset past the guard. The entry below strips to a value
+    # that does NOT start with '!', so a whole-value check would prepend '- ' and
+    # emit a bare '!' line that wipes every hardened exclusion above it.
+    text = generate_filters(_load(tmp_path, extra_excludes=["scratch/**\n!"]))
+    lines = text.splitlines()
+    live = [ln for ln in lines if not ln.startswith("#")]
+    # No live line is a bare '!' reset...
+    assert not any(ln.strip() == "!" for ln in live)
+    # ...the benign first physical line is still applied as an exclude...
+    assert "- scratch/**" in lines
+    # ...the smuggled '!' is neutralised with a loud comment...
+    assert any("IGNORED" in ln and "!" in ln for ln in lines)
+    # ...and the hardened soul/secret exclusions survive intact.
+    assert SOUL_RULE in text
+    assert "- *.db" in text
+
+
+def test_multiline_extra_exclude_each_line_validated(tmp_path: Path) -> None:
+    # Every physical line of a multi-line entry is validated independently: bare
+    # patterns get '- ' prepended, blanks are dropped, and explicit '- '/'+ '
+    # prefixes are preserved -- matching the single-entry behaviour.
+    text = generate_filters(_load(tmp_path, extra_excludes=["a/**\n\n- b/**\n+ c/**"]))
+    lines = text.splitlines()
+    assert "- a/**" in lines
+    assert "- b/**" in lines
+    assert "+ c/**" in lines
+
+
+def test_crlf_extra_exclude_split_too(tmp_path: Path) -> None:
+    # splitlines() handles CRLF, so a Windows-style multi-line entry is split the
+    # same way and a CR-prefixed '!' cannot survive as a live reset rule.
+    text = generate_filters(_load(tmp_path, extra_excludes=["keep/**\r\n!"]))
+    live = [ln for ln in text.splitlines() if not ln.startswith("#")]
+    assert not any(ln.strip() == "!" for ln in live)
+    assert "- keep/**" in text
+
+
 def test_write_filter_file_is_atomic_no_tmp_left(tmp_path: Path) -> None:
     target = tmp_path / "state" / "cyclaw_filters.txt"
     cfg = _load(tmp_path, filter_file=str(target))

@@ -124,23 +124,33 @@ def generate_filters(cfg: RcloneConfig) -> str:
         lines.append("")
         lines.append("# --- extra_excludes from config.yaml ---")
         for raw in cfg.extra_excludes:
-            pat = raw.strip()
-            if not pat:
-                continue
-            # rclone's '!' rule CLEARS the entire filter list built so far, which
-            # would silently wipe every hardened soul/secret/index exclusion above
-            # it -- the exact opposite of "tighten further". A user extra must never
-            # be able to do that, so neutralise any '!' entry (drop it with a loud
-            # comment) instead of preserving it verbatim.
-            if pat.startswith("!"):
-                lines.append(f"# IGNORED (rclone '!' would reset hardened filters): {pat}")
-                continue
-            # Tolerate entries written without a leading '- '/'+ '. A '+ ' include
-            # is harmless here: first-match-wins means a preceding hardened '-'
-            # rule has already matched, so a later '+' cannot re-include it.
-            if not pat.startswith(("- ", "+ ")):
-                pat = f"- {pat}"
-            lines.append(pat)
+            # A single extra_excludes entry can itself span multiple physical lines
+            # (a YAML block scalar, or a hand-crafted "scratch/**\n!" payload). rclone
+            # reads the filter file line-by-line, so each physical line MUST be
+            # validated independently. Inspecting only the first char of the whole
+            # stripped value lets a multi-line entry whose first line looks benign
+            # smuggle a live '!' (reset) or unguarded line past the checks below --
+            # e.g. "scratch/**\n!" strips to a value not starting with '!', gets
+            # '- ' prepended, and still emits a bare '!' line that wipes every
+            # hardened soul/secret/index exclusion above it. Split first, then guard.
+            for line in raw.splitlines():
+                pat = line.strip()
+                if not pat:
+                    continue
+                # rclone's '!' rule CLEARS the entire filter list built so far, which
+                # would silently wipe every hardened soul/secret/index exclusion above
+                # it -- the exact opposite of "tighten further". A user extra must never
+                # be able to do that, so neutralise any '!' entry (drop it with a loud
+                # comment) instead of preserving it verbatim.
+                if pat.startswith("!"):
+                    lines.append(f"# IGNORED (rclone '!' would reset hardened filters): {pat}")
+                    continue
+                # Tolerate entries written without a leading '- '/'+ '. A '+ ' include
+                # is harmless here: first-match-wins means a preceding hardened '-'
+                # rule has already matched, so a later '+' cannot re-include it.
+                if not pat.startswith(("- ", "+ ")):
+                    pat = f"- {pat}"
+                lines.append(pat)
 
     return "\n".join(lines) + "\n"
 
