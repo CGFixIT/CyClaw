@@ -52,6 +52,37 @@ def test_assert_allows_replace_read_function(good):
     assert assert_read_only_sql(good).lower().startswith(("select", "with"))
 
 
+@pytest.mark.parametrize("good", [
+    # String literals / quoted identifiers may legitimately contain SQL keywords
+    # or punctuation -- they are data / column names, not executable statements.
+    "SELECT 'please do not delete' AS note",
+    "SELECT * FROM t WHERE name = 'create account'",
+    'SELECT "delete" FROM t',                 # forbidden word as a quoted identifier
+    "SELECT 'a;b' AS x",                       # semicolon inside a literal is not a 2nd statement
+    "SELECT 'rate is 5/*2' AS note",          # comment marker inside a literal is just data
+    "SELECT 'it''s fine' AS note",            # doubled-quote escape inside a literal
+])
+def test_assert_allows_keywords_inside_quoted_literals(good):
+    """A keyword/punctuation inside a quoted literal or identifier must not be blocked."""
+    assert assert_read_only_sql(good).lower().startswith(("select", "with"))
+
+
+@pytest.mark.parametrize("bad", [
+    # The classic CTE-DML bypass: starts with WITH but performs a write. The DML
+    # keyword is OUTSIDE quotes, so quote-stripping must not let it through.
+    "WITH t AS (DELETE FROM users RETURNING *) SELECT * FROM t",
+    "WITH t AS (UPDATE users SET x=1 RETURNING *) SELECT * FROM t",
+    "WITH t AS (INSERT INTO users VALUES (1) RETURNING *) SELECT * FROM t",
+    # Stacked statement / real comment outside quotes still caught after stripping.
+    "SELECT * FROM t; DROP TABLE x",
+    "SELECT * FROM t -- DROP TABLE x",
+])
+def test_assert_still_rejects_dml_outside_quotes(bad):
+    """Quote-stripping must not reopen the CTE-DML / stacked-statement vectors."""
+    with pytest.raises(SqlConnectError):
+        assert_read_only_sql(bad)
+
+
 def test_assert_rejects_comments_with_specific_code():
     """Comment rejection fires before the keyword/multi-statement guards."""
     with pytest.raises(SqlConnectError) as exc:

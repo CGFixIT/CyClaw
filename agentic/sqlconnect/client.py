@@ -39,22 +39,44 @@ _FORBIDDEN_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Single-quoted string literals (``''`` escapes a quote) and double-quoted
+# identifiers (``""`` escapes a quote) can legitimately contain SQL keywords or
+# comment/``;`` punctuation as *data* or as a quoted column name -- e.g.
+# ``SELECT 'please do not delete'`` or ``SELECT "delete" FROM t``. Those are never
+# executable SQL, so the structural guards below scan a copy with quoted regions
+# blanked out to avoid false-rejecting valid read queries. Real DML, comments and
+# stacked statements always live OUTSIDE quotes, so the ``WITH (DELETE ... RETURNING)``
+# CTE bypass and ``--``/``/* */`` comment hiding are still caught.
+_QUOTED_RE = re.compile(r"'(?:[^']|'')*'|\"(?:[^\"]|\"\")*\"")
+
+
+def _strip_quoted(sql: str) -> str:
+    """Blank out single-quoted literals and double-quoted identifiers for scanning.
+
+    Replaces each quoted region with a single space (preserving token boundaries).
+    Note: PostgreSQL dollar-quoting (``$$...$$``) is not stripped; a keyword inside
+    a dollar-quoted literal would still be rejected -- fail-closed, never open.
+    """
+    return _QUOTED_RE.sub(" ", sql)
+
 
 def assert_read_only_sql(sql: str) -> str:
     """Return a cleaned single SELECT/WITH statement, or raise ``SqlConnectError``."""
     if not isinstance(sql, str) or not sql.strip():
         raise SqlConnectError("empty SQL", code="SQLCONNECT_BAD_QUERY")
+    cleaned = sql.strip().rstrip(";").strip()
+    # Structural guards run on the quote-stripped copy (see _QUOTED_RE rationale).
+    scan = _strip_quoted(cleaned)
     # Defense in depth: SQL comments (``--`` line, ``/* */`` block) are a known
     # vector for hiding forbidden keywords or a stacked statement from a keyword
     # scanner (the DB strips the comment, the guard does not). Read-only previews
     # never need comments, so reject them outright rather than try to parse them.
-    if "--" in sql or "/*" in sql or "*/" in sql:
+    if "--" in scan or "/*" in scan or "*/" in scan:
         raise SqlConnectError(
             "SQL comments are not allowed in read-only queries",
             code="SQLCONNECT_BAD_QUERY",
         )
-    cleaned = sql.strip().rstrip(";").strip()
-    if ";" in cleaned:
+    if ";" in scan:
         raise SqlConnectError(
             "multiple statements are not allowed", code="SQLCONNECT_BAD_QUERY"
         )
@@ -63,7 +85,7 @@ def assert_read_only_sql(sql: str) -> str:
         raise SqlConnectError(
             "only SELECT/WITH queries are allowed", code="SQLCONNECT_BAD_QUERY"
         )
-    hit = _FORBIDDEN_RE.search(cleaned)
+    hit = _FORBIDDEN_RE.search(scan)
     if hit:
         raise SqlConnectError(
             f"forbidden keyword in read-only query: {hit.group(0)!r}",
