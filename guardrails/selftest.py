@@ -44,7 +44,10 @@ def run_self_test(config_path: str = "config.yaml") -> tuple[int, int, list[str]
         results.append(_ok("01. guardrails config loads and validates"))
     except GuardrailsConfigError as exc:
         results.append(_fail("01. guardrails config loads and validates", exc.message))
-        for n in range(2, 7):
+        # Checks 02..07 are skipped when config is invalid. range(2, 8) keeps the
+        # reported total at 7 -- matching the success path -- so the "passed/total"
+        # denominator is consistent and check 07 is still represented.
+        for n in range(2, 8):
             results.append(_skip(f"{n:02d}. (skipped -- no config)", "config invalid"))
         return _finalize(results)
 
