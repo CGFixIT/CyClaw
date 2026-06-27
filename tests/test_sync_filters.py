@@ -89,6 +89,29 @@ def test_extra_excludes_appended_after_hardened_block(tmp_path: Path) -> None:
     assert lines.index("- scratch/**") > lines.index("- *.gguf")
 
 
+def test_bang_extra_exclude_is_neutralised(tmp_path: Path) -> None:
+    # rclone's '!' rule clears the whole filter list built so far. A user extra
+    # must never be able to wipe the hardened soul/secret/index exclusions, so a
+    # '!' entry is dropped (as a comment) rather than emitted as a live rule.
+    text = generate_filters(_load(tmp_path, extra_excludes=["!", "! reset"]))
+    lines = text.splitlines()
+    # No live (non-comment) line is a bare '!' reset.
+    assert "!" not in [ln for ln in lines if not ln.startswith("#")]
+    assert not any(ln.strip() == "!" for ln in lines if not ln.startswith("#"))
+    # The hardened soul rule still precedes any extras and survives intact.
+    assert SOUL_RULE in text
+    assert any("IGNORED" in ln and "!" in ln for ln in lines)
+
+
+def test_write_filter_file_is_atomic_no_tmp_left(tmp_path: Path) -> None:
+    target = tmp_path / "state" / "cyclaw_filters.txt"
+    cfg = _load(tmp_path, filter_file=str(target))
+    write_filter_file(cfg)
+    # The temp file used for the atomic replace must not linger.
+    assert not (target.parent / f"{target.name}.tmp").exists()
+    assert SOUL_RULE in target.read_text(encoding="utf-8")
+
+
 def test_write_filter_file_returns_abs_path(tmp_path: Path) -> None:
     target = tmp_path / "state" / "cyclaw_filters.txt"
     cfg = _load(tmp_path, filter_file=str(target))

@@ -25,6 +25,7 @@ rclone filter syntax (https://rclone.org/filtering/):
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from sync.config import RcloneConfig
@@ -126,8 +127,18 @@ def generate_filters(cfg: RcloneConfig) -> str:
             pat = raw.strip()
             if not pat:
                 continue
-            # Tolerate entries written without a leading '- '.
-            if not pat.startswith(("- ", "+ ", "!")):
+            # rclone's '!' rule CLEARS the entire filter list built so far, which
+            # would silently wipe every hardened soul/secret/index exclusion above
+            # it -- the exact opposite of "tighten further". A user extra must never
+            # be able to do that, so neutralise any '!' entry (drop it with a loud
+            # comment) instead of preserving it verbatim.
+            if pat.startswith("!"):
+                lines.append(f"# IGNORED (rclone '!' would reset hardened filters): {pat}")
+                continue
+            # Tolerate entries written without a leading '- '/'+ '. A '+ ' include
+            # is harmless here: first-match-wins means a preceding hardened '-'
+            # rule has already matched, so a later '+' cannot re-include it.
+            if not pat.startswith(("- ", "+ ")):
                 pat = f"- {pat}"
             lines.append(pat)
 
@@ -135,10 +146,19 @@ def generate_filters(cfg: RcloneConfig) -> str:
 
 
 def write_filter_file(cfg: RcloneConfig) -> str:
-    """Generate cyclaw_filters.txt at cfg.filter_file; return the absolute path."""
+    """Generate cyclaw_filters.txt at cfg.filter_file; return the absolute path.
+
+    The write is atomic (temp file in the same directory + ``os.replace``): rclone
+    reads this file via ``--filter-from`` on the very next run, and a crash or kill
+    mid-write would otherwise leave a truncated filter file that silently drops the
+    soul/secret/index exclusions. ``os.replace`` is atomic on POSIX and Windows, so
+    rclone only ever sees the complete previous file or the complete new one.
+    """
     target = Path(cfg.filter_file or "")
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(generate_filters(cfg), encoding="utf-8")
+    tmp = target.with_name(f"{target.name}.tmp")
+    tmp.write_text(generate_filters(cfg), encoding="utf-8")
+    os.replace(tmp, target)
     return str(target.resolve())
 
 

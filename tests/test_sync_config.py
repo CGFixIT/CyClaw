@@ -105,6 +105,14 @@ def test_rejects_leading_dash_remote_path(tmp_path: Path) -> None:
         load_sync_config(path)
 
 
+def test_rejects_leading_dash_remote_name(tmp_path: Path) -> None:
+    # "-foo" matches the ^[A-Za-z0-9_.-]+$ regex (dash is in the class) but would
+    # compose into the remote spec "-foo:path" and be parsed by rclone as a flag.
+    path = _write_config(tmp_path, _base_block(remote_name="-flag"))
+    with pytest.raises(SyncConfigError):
+        load_sync_config(path)
+
+
 def test_rejects_remote_path_with_shell_metachars(tmp_path: Path) -> None:
     path = _write_config(tmp_path, _base_block(remote_path="corpus; touch pwned"))
     with pytest.raises(SyncConfigError):
