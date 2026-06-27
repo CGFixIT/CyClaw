@@ -66,6 +66,32 @@ def test_apply_stages_into_staging_dir(env):
     assert (staging / "docs" / "b.txt").exists()
 
 
+def test_apply_reads_each_eligible_file_once(env, monkeypatch):
+    """apply() must read each eligible file from disk exactly once.
+
+    Previously apply() walked the share to build the manifest (reading every
+    eligible file) and then re-read each eligible file a second time in the
+    staging loop -- doubling the I/O and the per-component O_NOFOLLOW descent.
+    """
+    from agentic.fsconnect.pathsafe import ScopedRoots
+
+    cfg, fs_cfg, cp, _idx, tmp = env
+    reads: list[str] = []
+    orig = ScopedRoots.read_bytes
+
+    def counting(self, target, *args, **kwargs):
+        reads.append(target)
+        return orig(self, target, *args, **kwargs)
+
+    monkeypatch.setattr(ScopedRoots, "read_bytes", counting)
+    staging = tmp / "staging"
+    res = FsIndexer(cfg, fs_cfg, config_path=cp).apply(staging_dir=str(staging), reindex=False)
+    assert res["staged"] == 2
+    # Exactly one read per eligible file (a.md + docs/b.txt); big.txt is skipped
+    # before any read, and the second staging read is gone.
+    assert sorted(reads) == ["a.md", "docs/b.txt"]
+
+
 def test_apply_staged_paths_stay_within_staging(env):
     """Every staged file's resolved path is contained in the staging dir.
 

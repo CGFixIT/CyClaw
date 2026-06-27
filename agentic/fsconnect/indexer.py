@@ -22,6 +22,7 @@ import hashlib
 import os
 import subprocess  # noqa: S404 -- argv-list reindex trigger only; never shell=True
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 from agentic.fsconnect.client import build_injection_patterns
@@ -51,12 +52,18 @@ class FsIndexer:
         text = data.decode("utf-8", errors="replace")
         return sum(1 for _src, pat in self._patterns if pat.search(text))
 
-    def _walk(self, roots: ScopedRoots, rel: str, manifest: list[dict]) -> None:
+    def _walk(
+        self,
+        roots: ScopedRoots,
+        rel: str,
+        manifest: list[dict],
+        on_file: Callable[[str, bytes], None] | None = None,
+    ) -> None:
         for entry in roots.list_dir(rel):
             name = entry["name"]
             child = f"{rel}/{name}" if rel else name
             if entry["type"] == "dir":
-                self._walk(roots, child, manifest)
+                self._walk(roots, child, manifest, on_file)
             elif entry["type"] == "file":
                 ext = os.path.splitext(name)[1].lower()
                 if ext not in self.fs_cfg.index_extensions:
@@ -70,6 +77,14 @@ class FsIndexer:
                     "sha256": hashlib.sha256(data).hexdigest(),
                     "injection_flag_count": self._scan(data),
                 })
+                # When apply() drives the walk it passes a staging callback so the
+                # bytes we just read are written out in the SAME pass. Previously
+                # apply() walked to build the manifest (reading every eligible file)
+                # and THEN re-read each eligible file from disk a second time -- a
+                # second per-component O_NOFOLLOW descent + full read -- purely to
+                # fetch bytes the walk had already loaded. One read per file now.
+                if on_file is not None:
+                    on_file(child, data)
 
     def scan(self) -> dict:
         """Dry-run: enumerate eligible files under index_root (no copy, no reindex)."""
@@ -88,22 +103,22 @@ class FsIndexer:
         staging.mkdir(parents=True, exist_ok=True)
         copied: list[str] = []
         manifest: list[dict] = []
+
+        def _stage(rel: str, data: bytes) -> None:
+            # Re-validate the relative path through the same pathsafe guard the
+            # read side uses before joining it into the staging dir. A crafted
+            # entry name (path separators, "..", drive letter / ADS) must never
+            # escape `staging`; this also makes the join correct on Windows,
+            # where `rel` is always "/"-separated.
+            dest = staging.joinpath(*split_components(rel))
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_bytes(data)
+            copied.append(rel)
+
         with ScopedRoots([self.index_root], create=True, allow_unc=self.fs_cfg.allow_unc_roots) as roots:
-            self._walk(roots, "", manifest)
-            for m in manifest:
-                if "skipped" in m:
-                    continue
-                rel = m["path"]
-                data = roots.read_bytes(rel, max_bytes=self.fs_cfg.index_max_file_bytes)
-                # Re-validate the relative path through the same pathsafe guard the
-                # read side uses before joining it into the staging dir. A crafted
-                # entry name (path separators, "..", drive letter / ADS) must never
-                # escape `staging`; this also makes the join correct on Windows,
-                # where `rel` is always "/"-separated.
-                dest = staging.joinpath(*split_components(rel))
-                dest.parent.mkdir(parents=True, exist_ok=True)
-                dest.write_bytes(data)
-                copied.append(rel)
+            # Single pass: _walk reads each eligible file once and hands the bytes
+            # straight to _stage (bounded memory -- one file held at a time).
+            self._walk(roots, "", manifest, on_file=_stage)
         audit_log({"event": "fsconnect_index_apply", "index_root": self.index_root,
                    "staged": len(copied), "reindex": reindex}, self.config_path)
         result = {"op": "index_apply", "index_root": self.index_root,
