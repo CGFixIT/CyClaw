@@ -140,10 +140,19 @@ async def _action_check_soul_mutation(context: dict | None = None) -> bool:
 
 
 @_nemo_action(name="check_injection")
-async def _action_check_injection(context: dict | None = None) -> bool:
-    """NeMo action: True (allowed) unless light injection markers are present."""
-    user_message = (context or {}).get("user_message", "")
-    return not scan_injection(user_message)
+async def _action_check_injection(context: dict | None = None, text: str | None = None) -> bool:
+    """NeMo action: True (allowed) unless light injection markers are present.
+
+    Accepts an optional explicit ``text`` so the action can scan a string other
+    than the current user message. The ``check soul leak`` output flow in
+    ``rails.co`` calls ``check_injection(text=$bot_message)`` to reuse this scan on
+    the *bot* message; without a ``text`` parameter NeMo would pass that kwarg to a
+    function that does not accept it and raise ``TypeError`` at rail-execution
+    time. When ``text`` is omitted it falls back to the user message in context,
+    preserving the input-rail behaviour.
+    """
+    target = text if text is not None else (context or {}).get("user_message", "")
+    return not scan_injection(target)
 
 
 @_nemo_action(name="get_grounding_score")
