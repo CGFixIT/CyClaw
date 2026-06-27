@@ -80,6 +80,24 @@ def test_rejects_repo_with_metacharacters(tmp_path: Path) -> None:
         load_agentic_config(_write_config(tmp_path, _base_block(repo="evil/x; rm -rf")))
 
 
+@pytest.mark.parametrize("repo", ["-x/y", "x/-y", "-owner/-name", "--repo/x"])
+def test_rejects_repo_with_leading_dash_flag_injection(tmp_path: Path, repo: str) -> None:
+    # A slug whose owner or name starts with '-' would flow positionally into
+    # `gh repo view <repo>` and be parsed by gh as an option. '-' is not in
+    # _SHELL_METACHARS, so the slug regex (first char anchored to alphanumeric)
+    # is what must reject it.
+    with pytest.raises(AgenticConfigError) as exc:
+        load_agentic_config(_write_config(tmp_path, _base_block(repo=repo)))
+    assert exc.value.code == "AGENTIC_CONFIG_INVALID"
+
+
+@pytest.mark.parametrize("repo", ["CGFixIT/CyClaw", "a/b", "o.rg/my-repo.name", "x_y/z_1"])
+def test_accepts_valid_repo_slugs(tmp_path: Path, repo: str) -> None:
+    # Legitimate slugs (dots, hyphens, underscores in non-leading positions) still load.
+    cfg = load_agentic_config(_write_config(tmp_path, _base_block(repo=repo)))
+    assert cfg.repo == repo
+
+
 def test_rejects_bad_mode(tmp_path: Path) -> None:
     with pytest.raises(AgenticConfigError):
         load_agentic_config(_write_config(tmp_path, _base_block(mode="delete")))

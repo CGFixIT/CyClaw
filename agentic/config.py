@@ -43,8 +43,14 @@ DEFAULT_ALLOWED_READ_OPS = (
 )
 
 _VALID_MODES = ("read", "write")
-# owner/name -- GitHub slugs allow alphanumerics, hyphen, underscore, dot.
-_REPO_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+# owner/name -- GitHub slugs allow alphanumerics, hyphen, underscore, dot, but the
+# FIRST character of each segment must be alphanumeric. Anchoring it (rather than
+# the looser ``[A-Za-z0-9_.-]+``) closes a flag-injection gap: a slug like
+# "-x/y" otherwise validated and flowed positionally into ``gh repo view <repo>``,
+# where ``gh`` would parse the leading "-" as an option. ``_SHELL_METACHARS`` does
+# not list "-", so this regex is the boundary that rejects it. Same hardening the
+# skills-registry name validator applies to its first character.
+_REPO_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9][A-Za-z0-9_.-]*$")
 _GH_MIN_VERSION_RE = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
 # Shell metacharacters rejected at the boundary (defense in depth; argv is never
 # passed through a shell, but taint is rejected here anyway).
