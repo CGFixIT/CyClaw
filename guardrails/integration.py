@@ -156,6 +156,12 @@ async def safe_generate(
     if blocked:
         rail = triggered[0]
         metrics.record_blocked(stage="input", rail=rail, reason="offline heuristic", query=prompt)
+        # A single input can trip more than one offline rail (e.g. injection AND
+        # soul-mutation). record_blocked only counts the first rail, so record the
+        # remaining firings explicitly -- otherwise the analyzer's rails_by_name
+        # undercounts every rail past the first while rails_triggered lists them all.
+        for extra_rail in triggered[1:]:
+            metrics.record_rail(extra_rail, stage="input", query=prompt)
         return GuardResult(
             response=cfg.block_message,
             blocked=True,
