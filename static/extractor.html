@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BERT Insight Extractor</title>
+    <title>Keyword Insight Extractor</title>
     <style>
         :root {
             --color-bg-primary: #0f172a;
@@ -336,8 +336,8 @@
 <body>
     <div class="container">
         <header>
-            <h1>🧠 BERT Insight Extractor</h1>
-            <p class="subtitle">Semantic analysis of text using AI-powered keyword matching</p>
+            <h1>🔎 Keyword Insight Extractor</h1>
+            <p class="subtitle">Extracts lines matching an AI-safety keyword list, ranked by distinct-concept count</p>
         </header>
 
         <div class="card">
@@ -376,7 +376,7 @@
 
         <div class="loading" id="loading">
             <div class="spinner"></div>
-            <p style="color: var(--color-text-secondary);">Analyzing text with BERT semantic matching...</p>
+            <p style="color: var(--color-text-secondary);">Scanning text for AI-safety keywords...</p>
         </div>
 
         <div class="results card" id="results">
@@ -395,7 +395,7 @@
                     <div class="stat-label">Total Lines</div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-value" id="methodUsed">BERT</div>
+                    <div class="stat-value" id="methodUsed">Keyword</div>
                     <div class="stat-label">Method</div>
                 </div>
             </div>
@@ -418,7 +418,7 @@
 
         let extractedInsights = [];
         let totalLinesCount = 0;
-        let methodName = 'BERT';
+        let methodName = 'Keyword';
 
         fileInput.addEventListener('change', (e) => {
             const file = e.target.files[0];
@@ -449,11 +449,11 @@
                 const text = await file.text();
                 const threshold = parseFloat(thresholdSlider.value);
                 
-                const insights = extractInsightsBERT(text, threshold);
-                
+                const insights = extractInsightsByKeyword(text, threshold);
+
                 extractedInsights = insights;
                 totalLinesCount = text.split('\n').filter(l => l.trim()).length;
-                methodName = 'BERT';
+                methodName = 'Keyword';
                 
                 displayResults(insights, totalLinesCount, methodName);
                 
@@ -464,7 +464,11 @@
             }
         });
 
-        function extractInsightsBERT(text, threshold) {
+        // Honest naming: this is keyword substring matching, not BERT/embeddings.
+        // The relevance score is DETERMINISTIC -- identical input always yields the
+        // same score and ordering (the previous Math.random() variation made the
+        // score and sort order change on every run for the same file).
+        function extractInsightsByKeyword(text, threshold) {
             const keywords = [
                 'alignment', 'safety', 'ethics', 'bias', 'fairness', 'transparency',
                 'interpretability', 'robustness', 'security', 'privacy', 'regulation',
@@ -485,27 +489,27 @@
                 const message = match ? match[2] : line;
                 
                 const lowerMessage = message.toLowerCase();
-                let maxScore = 0;
-                let matchedKeywords = [];
+                const matchedKeywords = [];
 
                 for (const keyword of keywords) {
-                    if (lowerMessage.includes(keyword)) {
-                        const baseScore = 0.35;
-                        const randomVariation = Math.random() * 0.25;
-                        const score = baseScore + randomVariation;
-                        if (score > maxScore) {
-                            maxScore = score;
-                        }
+                    if (lowerMessage.includes(keyword.toLowerCase())) {
                         matchedKeywords.push(keyword);
                     }
                 }
 
-                if (maxScore >= threshold && matchedKeywords.length > 0) {
-                    insights.push({
-                        text: line,
-                        score: maxScore,
-                        keywords: [...new Set(matchedKeywords)].slice(0, 3)
-                    });
+                if (matchedKeywords.length > 0) {
+                    const distinct = [...new Set(matchedKeywords)];
+                    // Deterministic relevance: 0.35 base for a single matched
+                    // concept, +0.07 per additional distinct concept, capped at
+                    // 0.95. Monotonic in concept count, reproducible run-to-run.
+                    const score = Math.min(0.35 + 0.07 * (distinct.length - 1), 0.95);
+                    if (score >= threshold) {
+                        insights.push({
+                            text: line,
+                            score: score,
+                            keywords: distinct.slice(0, 3)
+                        });
+                    }
                 }
             }
 
@@ -571,7 +575,7 @@
             md += `## Extraction Method: ${method.toUpperCase()}\n\n`;
             md += '## Summary\n';
             md += `Extracted **${insights.length}** insights from **${totalLines}** lines.\n\n`;
-            md += '**Semantic Analysis Active**: Insights ranked by semantic relevance to AI safety keywords.\n\n';
+            md += '**Keyword matching**: Lines containing AI-safety keywords, ranked by distinct-concept count.\n\n';
             md += '## Extracted Insights\n\n';
 
             insights.forEach((insight, idx) => {
