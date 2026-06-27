@@ -118,7 +118,10 @@ def test_agentic_apply_confirm_and_body_file(monkeypatch: pytest.MonkeyPatch, tm
         reason="adding demo", confirm=True,
     )
     argv = captured[0]
-    assert "--name" in argv and "demo" in argv
+    # name/desc/reason are passed in --opt=value form so a leading-dash value
+    # cannot be reparsed by the child argparse as a separate flag.
+    assert "--name=demo" in argv and "--desc=a demo skill" in argv
+    assert "--reason=adding demo" in argv
     assert "--confirm" in argv
     # body routed through a temp --body-file, never inlined as an argv token
     assert "--body-file" in argv
@@ -128,6 +131,23 @@ def test_agentic_apply_confirm_and_body_file(monkeypatch: pytest.MonkeyPatch, tm
     from pathlib import Path
     assert not Path(argv[body_idx]).exists()
     assert res.parsed == {"status": "applied"}
+
+
+def test_agentic_leading_dash_value_bound_to_option(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A desc/reason that begins with '-' must travel as a single --opt=value argv
+    # element, never as a bare token the child argparse could mistake for a flag.
+    runner, captured = _fake_run(returncode=0, stdout='{"status": "applied"}')
+    monkeypatch.setattr(ops_runner, "_run", runner)
+    run_agentic_op(
+        "apply-skill", name="demo", desc="-- dashed desc",
+        reason="-x suspicious reason", confirm=True,
+    )
+    argv = captured[0]
+    assert "--desc=-- dashed desc" in argv
+    assert "--reason=-x suspicious reason" in argv
+    # No bare element equals the raw leading-dash value.
+    assert "-- dashed desc" not in argv
+    assert "-x suspicious reason" not in argv
 
 
 def test_agentic_apply_body_file_cleaned_up_when_run_raises(monkeypatch: pytest.MonkeyPatch) -> None:

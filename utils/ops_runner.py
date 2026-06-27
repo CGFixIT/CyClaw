@@ -196,12 +196,17 @@ def run_agentic_op(
                 argv.append("--no-diff")
         elif action in {"propose-skill", "apply-skill"}:
             # name/desc validated above; both are required, so they are non-None here.
-            argv += ["--name", str(name), "--desc", str(desc)]
+            # Use the --opt=value form (not two argv elements) so a value that
+            # begins with '-' is bound to its option rather than being reparsed by
+            # the child argparse as a separate flag. name is additionally slug-
+            # validated in agentic.registry, but desc/reason are free text and can
+            # legitimately start with '-'.
+            argv += [f"--name={name}", f"--desc={desc}"]
             if body:
                 body_file = _write_body(body)
                 argv += ["--body-file", body_file]
             if reason:
-                argv += ["--reason", reason]
+                argv += [f"--reason={reason}"]
             if action == "apply-skill" and confirm:
                 argv.append("--confirm")
 

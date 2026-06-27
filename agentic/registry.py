@@ -150,9 +150,17 @@ class SkillRegistry:
                     f"skill spec field {key!r} must be a non-empty string",
                     details={"field": key},
                 )
-        if not re.match(r"^[A-Za-z0-9_.-]+$", spec["name"]):
+        # Name must START with an alphanumeric. The previous ^[A-Za-z0-9_.-]+$
+        # allowed a leading '-' or '.', so a name like "-foo" or "..evil" passed:
+        # the dash form is an argument-injection shape when the name is later
+        # composed into a subprocess argv (utils/ops_runner.py), and a leading-dot
+        # form is a path-traversal shape if the name is ever used as a file key.
+        # Anchoring the first character to [A-Za-z0-9] closes both without
+        # restricting the rest of the slug.
+        if not re.match(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$", spec["name"]):
             raise SkillRegistryError(
-                f"skill name must match ^[A-Za-z0-9_.-]+$, got {spec['name']!r}",
+                f"skill name must match ^[A-Za-z0-9][A-Za-z0-9_.-]*$ "
+                f"(must start with a letter or digit), got {spec['name']!r}",
                 details={"name": spec["name"]},
             )
 

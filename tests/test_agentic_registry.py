@@ -116,6 +116,22 @@ def test_apply_rejects_bad_name(reg):
         reg.apply_skill(_spec(name="bad name!"), reason="x")
 
 
+@pytest.mark.parametrize("bad_name", ["-foo", "--config", ".hidden", "..evil", "-"])
+def test_rejects_name_not_starting_alphanumeric(reg, bad_name):
+    # A leading '-' is an argv-flag-injection shape when the name is composed into
+    # a subprocess argv; a leading '.' is a path-traversal shape. Both must be
+    # rejected even though they previously matched ^[A-Za-z0-9_.-]+$.
+    with pytest.raises(SkillRegistryError):
+        reg.propose_skill(_spec(name=bad_name), reason="r")
+
+
+@pytest.mark.parametrize("ok_name", ["foo", "foo-bar", "foo.bar_baz", "9lives", "a"])
+def test_accepts_valid_slug_names(reg, ok_name):
+    # Internal dashes/dots/underscores remain valid; only the first char is anchored.
+    out = reg.propose_skill(_spec(name=ok_name), reason="r")
+    assert out["name"] == ok_name
+
+
 def test_validate_rejects_empty_fields(reg):
     with pytest.raises(SkillRegistryError):
         reg.propose_skill({"name": "x", "description": "", "body": "y"}, reason="r")
