@@ -117,3 +117,80 @@ def test_node_helper_builds_context_from_docs():
     state = {"query": "benign question about notes", "retrieved_docs": [{"text": "chunk one"}]}
     out = _run(guardrail_safety_node(state, cfg=cfg))
     assert out["safety_blocked"] is False
+
+
+# --- Live NeMo path -----------------------------------------------------------
+# The branches below only run when ``cfg.enabled and NEMO_AVAILABLE`` -- i.e. the
+# code after the degraded-path return. We force that path by patching
+# NEMO_AVAILABLE on and stubbing get_cyclaw_guardrails with a fake rails object,
+# so the output grounding rail, the hallucination metric, and the RailsLoadError
+# degrade branch all get exercised without the heavy dependency or a live LLM.
+
+
+class _FakeRails:
+    """Minimal stand-in for an LLMRails instance: returns a fixed answer."""
+
+    def __init__(self, answer: str) -> None:
+        self._answer = answer
+
+    async def generate_async(self, *, messages):  # noqa: ANN001 - test stub
+        return {"content": self._answer}
+
+
+def _force_live(monkeypatch, rails_factory):
+    # String targets avoid importing guardrails.integration a second time (it is
+    # already imported via `from ... import` above; importing the same module both
+    # ways trips a CodeQL maintainability alert).
+    monkeypatch.setattr("guardrails.integration.NEMO_AVAILABLE", True)
+    monkeypatch.setattr("guardrails.integration.get_cyclaw_guardrails", lambda cfg=None: rails_factory())
+
+
+def test_live_empty_context_blocks_ungrounded_answer(monkeypatch):
+    # Regression for the empty-context grounding skip: with no retrieved context,
+    # an answer that has content cannot be grounded (score 0.0) and MUST be
+    # refused -- matching the Colang ``check grounding`` flow. The previous
+    # ``if context`` guard let this through unconditionally.
+    _force_live(monkeypatch, lambda: _FakeRails("a fabricated unsupported claim"))
+    cfg = GuardrailsConfig(enabled=True)
+    m = _metrics()
+    res = _run(safe_generate("any prompt", context="", cfg=cfg, metrics=m))
+    assert res["blocked"] is True
+    assert res["reason"] == "output rail: check_grounding"
+    assert res["response"] == cfg.block_message
+    assert res["grounding_score"] == 0.0
+    assert m.counters["hallucination_flagged"] == 1
+    assert m.counters["blocked_generation"] == 1
+    assert m.rails_fired["check_grounding"] == 1
+
+
+def test_live_grounded_answer_with_context_allowed(monkeypatch):
+    # Every answer token is present in the context -> grounding 1.0 -> allowed.
+    _force_live(monkeypatch, lambda: _FakeRails("rrf fusion combines ranks"))
+    cfg = GuardrailsConfig(enabled=True)
+    m = _metrics()
+    res = _run(safe_generate(
+        "explain fusion",
+        context="rrf fusion combines semantic and keyword ranks",
+        cfg=cfg, metrics=m,
+    ))
+    assert res["blocked"] is False
+    assert res["guardrails_active"] is True
+    assert res["grounding_score"] == 1.0
+    assert m.counters["generation_allowed"] == 1
+
+
+def test_live_rails_load_failure_degrades(monkeypatch):
+    # If building the live rails raises RailsLoadError, safe_generate degrades to
+    # a skipped, non-blocked turn rather than crashing the caller.
+    from guardrails.errors import RailsLoadError
+
+    def _boom():
+        raise RailsLoadError("config dir missing", details={"dir": "x"})
+
+    _force_live(monkeypatch, _boom)
+    cfg = GuardrailsConfig(enabled=True)
+    m = _metrics()
+    res = _run(safe_generate("benign prompt", context="some context", cfg=cfg, metrics=m))
+    assert res["blocked"] is False
+    assert res["guardrails_active"] is False
+    assert m.counters["guardrail_skipped"] == 1

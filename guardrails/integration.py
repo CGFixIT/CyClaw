@@ -203,8 +203,17 @@ async def safe_generate(
         )
 
     # Output rail: offline hallucination check against retrieved context.
-    score = grounding_score(response, context) if context else None
-    out_blocked = score is not None and is_possible_hallucination(response, context, cfg.hallucination_threshold)
+    # Evaluate grounding UNCONDITIONALLY -- an empty/absent context is the case
+    # most likely to produce an ungrounded answer, yet the previous
+    # ``if context`` guard skipped the check exactly then and let every
+    # no-context generation through. The Colang ``check grounding`` flow
+    # (config/rails.co) always executes ``get_grounding_score`` and refuses below
+    # the floor, so skipping it here drifted the offline floor from the live rail.
+    # ``grounding_score`` already returns 1.0 for an empty answer (nothing to
+    # flag) and 0.0 when there is content but no supporting context, so the
+    # unconditional call is well-defined for every input.
+    score = grounding_score(response, context)
+    out_blocked = is_possible_hallucination(response, context, cfg.hallucination_threshold)
     if out_blocked:
         metrics.record_hallucination(score=score or 0.0, threshold=cfg.hallucination_threshold, query=prompt)
         metrics.record_blocked(stage="output", rail="check_grounding", reason="low grounding", query=prompt)
