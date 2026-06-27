@@ -188,6 +188,17 @@ class RcloneConfig:
         self.local_path = str(resolved)
 
     def _validate_remote_name(self) -> None:
+        # Reject a leading '-' first: remote_name is composed into the rclone
+        # remote spec ``{remote_name}:{remote_path}`` (see the `remote` property)
+        # and handed to rclone as a bare argv element. A value like "-foo" yields
+        # "-foo:path", which rclone parses as a flag, not a remote -- the same
+        # argument-injection vector already guarded against in remote_path. The
+        # regex below would otherwise accept it ('-' is in the character class).
+        if self.remote_name.startswith("-"):
+            raise SyncConfigError(
+                f"sync.remote_name must not start with '-' (would be parsed as an rclone flag): {self.remote_name!r}",
+                details={"received": self.remote_name},
+            )
         if not _REMOTE_NAME_RE.match(self.remote_name):
             raise SyncConfigError(
                 f"sync.remote_name must match ^[A-Za-z0-9_.-]+$, got: {self.remote_name!r}",
