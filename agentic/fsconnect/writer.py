@@ -79,6 +79,25 @@ class FsWriter:
             )
         return True
 
+    def _enforce_write_size(self, op: str, data: bytes) -> None:
+        """Refuse a write whose payload exceeds ``max_write_bytes``.
+
+        The read path caps bytes via ``pathsafe._read_fd(max_file_bytes)``; the
+        write path had no equivalent, so the documented ``max_write_bytes`` cap
+        was dead config -- an operator slip or a compromised generate->write
+        pipeline could write an arbitrarily large file into a writable root
+        (resource exhaustion / disk fill). Mirror the read cap as a hard refusal
+        on the execute path, consistent with the reason/confirm gates (only the
+        real write is gated; dry-run still returns a plan).
+        """
+        cap = self.fs_cfg.max_write_bytes
+        if len(data) > cap:
+            raise FsWriteRefused(
+                f"write payload ({len(data)} bytes) exceeds max_write_bytes ({cap})",
+                details={"op": op, "failed_gate": "max_write_bytes",
+                         "size": len(data), "max": cap},
+            )
+
     def _scan(self, data: bytes) -> list[str]:
         if not self._patterns:
             return []
@@ -110,6 +129,7 @@ class FsWriter:
         extra = {"target": target, "bytes": len(data), "sha256": sha, "overwrite": overwrite}
         if not self._executable("fs_write", reason, confirm, destructive=overwrite):
             return self._dryrun("fs_write", reason, extra)
+        self._enforce_write_size("fs_write", data)
         flags = self._scan(data)
         result = self._roots.write_bytes(target, data, root=root, overwrite=overwrite)
         self._audit_applied("fs_write", reason, result, flags)
@@ -125,6 +145,7 @@ class FsWriter:
         extra = {"target": target, "bytes": len(data)}
         if not self._executable("fs_append", reason, confirm, destructive=False):
             return self._dryrun("fs_append", reason, extra)
+        self._enforce_write_size("fs_append", data)
         flags = self._scan(data)
         result = self._roots.append_bytes(target, data, root=root)
         self._audit_applied("fs_append", reason, result, flags)

@@ -117,6 +117,55 @@ def test_append_mkdir_move(env):
     assert not (wz / "doc.txt").exists()
 
 
+def test_oversized_write_refused(env):
+    # max_write_bytes is enforced on the execute path: an over-cap payload is
+    # refused and nothing is written (the cap was previously dead config).
+    cfg, fs_cfg, cp, wz, _audit = env
+    fs_cfg.writes_enabled = True
+    fs_cfg.max_write_bytes = 8
+    with FsWriter(cfg, fs_cfg, config_path=cp) as w:
+        with pytest.raises(FsWriteRefused) as ei:
+            w.fs_write("big.txt", b"x" * 9, reason="too big")
+    assert ei.value.details["failed_gate"] == "max_write_bytes"
+    assert ei.value.details["size"] == 9 and ei.value.details["max"] == 8
+    assert not (wz / "big.txt").exists()
+
+
+def test_oversized_append_refused(env):
+    # The append path is capped too, and must not mutate an existing file.
+    cfg, fs_cfg, cp, wz, _audit = env
+    fs_cfg.writes_enabled = True
+    fs_cfg.max_write_bytes = 8
+    with FsWriter(cfg, fs_cfg, config_path=cp) as w:
+        w.fs_write("doc.txt", b"seed\n", reason="seed")
+        with pytest.raises(FsWriteRefused) as ei:
+            w.fs_append("doc.txt", b"y" * 9, reason="too big")
+    assert ei.value.details["failed_gate"] == "max_write_bytes"
+    assert (wz / "doc.txt").read_bytes() == b"seed\n"  # unchanged
+
+
+def test_write_at_cap_boundary_applies(env):
+    # Boundary: exactly max_write_bytes is allowed (refusal is strictly >).
+    cfg, fs_cfg, cp, wz, _audit = env
+    fs_cfg.writes_enabled = True
+    fs_cfg.max_write_bytes = 8
+    with FsWriter(cfg, fs_cfg, config_path=cp) as w:
+        res = w.fs_write("ok.txt", b"x" * 8, reason="at cap")
+    assert res["executed"] is True
+    assert (wz / "ok.txt").read_bytes() == b"x" * 8
+
+
+def test_oversized_write_dryrun_not_refused(env):
+    # The cap gates the real write only (like reason/confirm). With writes
+    # disabled, an over-cap payload still returns a dry-run plan, not a refusal.
+    cfg, fs_cfg, cp, wz, _audit = env
+    fs_cfg.max_write_bytes = 8  # writes_enabled stays False (fixture default)
+    with FsWriter(cfg, fs_cfg, config_path=cp) as w:
+        res = w.fs_write("big.txt", b"x" * 9, reason="plan only")
+    assert res["status"] == "dry_run_plan" and res["executed"] is False
+    assert not (wz / "big.txt").exists()
+
+
 def test_move_requires_confirm(env):
     cfg, fs_cfg, cp, _wz, _audit = env
     fs_cfg.writes_enabled = True
