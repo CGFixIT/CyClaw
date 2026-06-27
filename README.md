@@ -455,7 +455,7 @@ Do **not** use it to bypass CyClaw's core RAG-first runtime or to inject autonom
 
 ## Filesystem & SQL Connectors (v1.8)
 
-v1.8 extends the agentic layer beyond GitHub to **local data**, for the air-gapped / regulated-SMB use case where AI cannot be hosted in the cloud. Both connectors are **opt-in, disabled by default, and fully out-of-band** — never imported by `gate.py`, `graph.py`, or `mcp_hybrid_server.py`, so the five security invariants hold by construction. While disabled, their CLIs are a pure no-op (exit 0).
+v1.8 extends the agentic layer beyond GitHub to **local data**, for the regulated or security conscious use case where AI use is compliance heavy. Both connectors are **opt-in, disabled by default, and fully out-of-band** — never imported by `gate.py`, `graph.py`, or `mcp_hybrid_server.py`, so the five security invariants hold by construction. While disabled, their CLIs are a pure no-op (exit 0).
 
 ### `agentic/fsconnect/` — local / SMB filesystem connector
 
