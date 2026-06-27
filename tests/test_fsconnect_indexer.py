@@ -104,3 +104,51 @@ def test_apply_staged_paths_stay_within_staging(env):
     for path in staging.rglob("*"):
         if path.is_file():
             assert staging in path.resolve().parents
+
+
+def test_scan_isolates_unreadable_file(env, monkeypatch):
+    # A file that raises on read (e.g. a TOCTOU grow-past-cap, or a vanished /
+    # permission-denied / no-longer-regular file) must be quarantined as
+    # skipped="read_error" without aborting the scan -- the other eligible files
+    # are still enumerated.
+    from agentic.fsconnect.pathsafe import ScopedRoots
+    from utils.errors import FsConnectRuntimeError
+
+    cfg, fs_cfg, cp, _idx, _tmp = env
+    orig = ScopedRoots.read_bytes
+
+    def flaky(self, target, *args, **kwargs):
+        if target == "a.md":
+            raise FsConnectRuntimeError("simulated TOCTOU grow past cap")
+        return orig(self, target, *args, **kwargs)
+
+    monkeypatch.setattr(ScopedRoots, "read_bytes", flaky)
+    res = FsIndexer(cfg, fs_cfg, config_path=cp).scan()
+    paths = {f["path"]: f for f in res["files"]}
+    assert paths["a.md"].get("skipped") == "read_error"
+    assert paths["a.md"].get("error") == "FsConnectRuntimeError"
+    # docs/b.txt is still indexed despite a.md failing.
+    assert "docs/b.txt" in paths and "skipped" not in paths["docs/b.txt"]
+    assert res["eligible"] == 1  # only docs/b.txt now eligible
+
+
+def test_apply_skips_unreadable_file(env, monkeypatch):
+    # apply() must also isolate the failing file: stage the good ones, never
+    # stage (or abort on) the unreadable one.
+    from agentic.fsconnect.pathsafe import ScopedRoots
+    from utils.errors import FsConnectRuntimeError
+
+    cfg, fs_cfg, cp, _idx, tmp = env
+    orig = ScopedRoots.read_bytes
+
+    def flaky(self, target, *args, **kwargs):
+        if target == "a.md":
+            raise FsConnectRuntimeError("boom")
+        return orig(self, target, *args, **kwargs)
+
+    monkeypatch.setattr(ScopedRoots, "read_bytes", flaky)
+    staging = tmp / "staging"
+    res = FsIndexer(cfg, fs_cfg, config_path=cp).apply(staging_dir=str(staging), reindex=False)
+    assert res["staged"] == 1  # only docs/b.txt staged; a.md quarantined
+    assert not (staging / "a.md").exists()
+    assert (staging / "docs" / "b.txt").exists()

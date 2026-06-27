@@ -71,7 +71,19 @@ class FsIndexer:
                 if entry["size"] > self.fs_cfg.index_max_file_bytes:
                     manifest.append({"path": child, "size": entry["size"], "skipped": "too_large"})
                     continue
-                data = roots.read_bytes(child, max_bytes=self.fs_cfg.index_max_file_bytes)
+                try:
+                    data = roots.read_bytes(child, max_bytes=self.fs_cfg.index_max_file_bytes)
+                except (FsConnectError, OSError) as exc:
+                    # Isolate per-file read failures so one unreadable file never
+                    # aborts the whole scan/apply. The size check above uses the
+                    # (possibly stale) directory-listing size, so a file that grows
+                    # past the cap between list_dir and read -- or that vanished,
+                    # lost read permission, or turned into a non-regular file (a
+                    # TOCTOU race) -- raises here. Quarantine it in the manifest and
+                    # keep walking rather than failing the run for every other file.
+                    manifest.append({"path": child, "size": entry["size"],
+                                     "skipped": "read_error", "error": type(exc).__name__})
+                    continue
                 manifest.append({
                     "path": child, "size": entry["size"],
                     "sha256": hashlib.sha256(data).hexdigest(),
