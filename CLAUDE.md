@@ -131,7 +131,7 @@ GROK_API_KEY=dummy pytest tests/test_agentic_*.py -q  # agentic unit tests
 
 **Exit codes:** `0` success · `2` operation failed · `3` env/config error · `4` write refused by gate.
 
-**Skills registry governance** mirrors soul governance: `propose_skill` never writes; `apply_skill` enforces the injection gate (same `banned_patterns` + OWASP baseline), requires a non-empty `reason`, and writes atomically. `governance_score(name)` returns 0–100 (injection penalty + structure bonuses).
+**Skills registry governance** mirrors soul governance: `propose_skill` never writes; `apply_skill` enforces the injection gate (same `banned_patterns` + OWASP baseline), requires a non-empty `reason`, and writes atomically. Both `propose-skill` and `apply-skill` also honor the `agentic.enabled` master switch — they no-op while the layer is disabled, so no registry write can occur (even via `POST /ops/agentic`) when the operator believes the layer is off. `governance_score(name)` returns 0–100 (injection penalty + structure bonuses).
 
 Full docs: `docs/agentic/AGENTIC_README.md`, `docs/agentic/SKILLS_REGISTRY_GOVERNANCE.md`.
 

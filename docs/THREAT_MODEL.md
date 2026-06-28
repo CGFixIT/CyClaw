@@ -128,7 +128,11 @@ threat that the architecture has already removed:
   and are confined to an allow-list of writable roots via zero-TOCTOU path checks.
 - **The skills registry never auto-writes.** `propose_skill` is advisory-only;
   `apply_skill` enforces the injection gate + `reason` and writes atomically to a
-  single confined JSON path.
+  single confined JSON path. All registry operations (`propose-skill` /
+  `apply-skill`) are additionally gated on the `agentic.enabled` master switch:
+  when the layer is disabled they no-op, so a registry write can never occur while
+  the operator believes the layer is off (including via the API-key-gated
+  `POST /ops/agentic` console).
 - **No `shell=True` anywhere.** Every subprocess uses argv-list form with an
   absolute/fixed binary path.
 - **Core paths exec nothing.** `gate.py`/`graph.py`/`mcp_hybrid_server.py` spawn

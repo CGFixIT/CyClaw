@@ -141,6 +141,12 @@ def cmd_propose_skill(args: argparse.Namespace) -> int:
     cfg = _load(args)
     if cfg is None:
         return EXIT_ENV
+    # Honor the master switch: agentic.enabled=false means "the layer is off", so a
+    # skills-registry op must not run while the operator believes it is inert
+    # (matching cmd_context). propose is read-only, but gating it keeps the switch
+    # consistent across all registry operations.
+    if not getattr(cfg, "enabled", False):
+        return _disabled_noop()
     spec = {"name": args.name, "description": args.desc, "body": _read_body(args)}
     from agentic.registry import SkillRegistry
     try:
@@ -157,6 +163,13 @@ def cmd_apply_skill(args: argparse.Namespace) -> int:
     cfg = _load(args)
     if cfg is None:
         return EXIT_ENV
+    # Master switch first: a registry WRITE must never run while agentic.enabled is
+    # false. Previously apply-skill ignored the flag, so a confirmed write reached
+    # the registry JSON even with the layer "disabled" (also reachable via the
+    # API-key-gated POST /ops/agentic console) — a leaky off-switch. The per-write
+    # governance (reason + confirm + injection gate) still applies once enabled.
+    if not getattr(cfg, "enabled", False):
+        return _disabled_noop()
     if not args.confirm:
         _err("apply-skill requires --confirm")
         return EXIT_REFUSED

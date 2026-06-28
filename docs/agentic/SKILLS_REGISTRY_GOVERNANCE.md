@@ -26,7 +26,11 @@ registry generalizes the soul governance pattern to a second surface.
 ## Governance guarantees
 1. **No autonomous modification.** There is no code path — graph node, request
    handler, or background loop — that calls `apply_skill`. It is reachable only via
-   `python -m agentic.cli apply-skill --confirm`, operated by a human.
+   `python -m agentic.cli apply-skill --confirm`, operated by a human. Both
+   `propose-skill` and `apply-skill` are also gated on the `agentic.enabled` master
+   switch: while the layer is disabled they no-op (exit 0) and never construct a
+   registry, so a write can never occur — even through the API-key-gated
+   `POST /ops/agentic` console — while the operator believes the layer is off.
 2. **Injection gate at the write boundary.** `apply_skill(scan=True)` scans the
    canonical `name\ndescription\nbody` against the **same** pattern set the query
    path uses; a match raises `PromptInjectionError` *before any write* and audits

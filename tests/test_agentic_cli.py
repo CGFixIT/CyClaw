@@ -76,6 +76,46 @@ def test_propose_skill_runs(tmp_path, capsys):
     assert "proposed" in capsys.readouterr().out
 
 
+def test_propose_skill_disabled_is_noop(tmp_path, capsys):
+    # enabled=false -> registry op is a clean no-op (matches context).
+    code = cli.main(["--config", _write_config(tmp_path, enabled=False),
+                     "propose-skill", "--name", "x", "--desc", "d",
+                     "--body", "a safe body", "--reason", "r"])
+    assert code == 0
+    assert "disabled" in capsys.readouterr().out.lower()
+
+
+def test_apply_skill_disabled_does_not_write(tmp_path, capsys):
+    # The master switch must block the registry WRITE even with --confirm + reason
+    # + a clean (injection-free) body. agentic.enabled=false means the layer is off,
+    # so the registry JSON must never be created. registry_path is validated to live
+    # under the repo data/ tree, so use a unique repo-relative path (the gate fires
+    # before any SkillRegistry is constructed, so nothing is ever written there).
+    rel = "data/agentic/_test_disabled_noop_registry.json"
+    registry = REPO_ROOT / rel
+    registry.unlink(missing_ok=True)  # defensive: never pre-exist
+    cfg = {
+        "logging": {"audit_file": str(tmp_path / "audit.jsonl"), "audit_fields": {}},
+        "policy": {"prompt_filter": {"banned_patterns": ["ignore previous instructions"]},
+                   "privacy": {}},
+        "agentic": {
+            "enabled": False, "repo": "CGFixIT/CyClaw", "mode": "read",
+            "writes_enabled": False, "gh_min_version": "2.40.0",
+            "registry_path": rel,
+        },
+    }
+    path = tmp_path / "config.yaml"
+    path.write_text(yaml.safe_dump(cfg), encoding="utf-8")
+    try:
+        code = cli.main(["--config", str(path), "apply-skill", "--name", "demo",
+                         "--desc", "d", "--body", "a safe body", "--reason", "r", "--confirm"])
+        assert code == 0
+        assert "disabled" in capsys.readouterr().out.lower()
+        assert not registry.exists()  # nothing was written while the layer is off
+    finally:
+        registry.unlink(missing_ok=True)
+
+
 def test_unknown_subcommand_errors(tmp_path):
     with pytest.raises(SystemExit):
         cli.main(["--config", _write_config(tmp_path, enabled=True), "bogus"])

@@ -26,7 +26,10 @@ agentic:
   registry_path: "data/agentic/skills_registry.json"
   allowed_read_ops: [pr_view, pr_list, pr_diff, issue_view, issue_list, repo_view]
 ```
-While `enabled: false`, every CLI command that touches GitHub is a clean no-op (exit 0).
+While `enabled: false`, every CLI command except `status` is a clean no-op (exit 0) —
+both the GitHub `context` commands **and** the skills-registry `propose-skill` /
+`apply-skill` writes. The master switch fully turns the layer off; only `status`
+still runs so you can confirm the disabled state (and it never writes).
 
 ## 3. Commands
 ```bash
