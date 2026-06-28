@@ -15,7 +15,10 @@ from utils.errors import SqlConnectConfigError
 from utils.logger import _get_config
 
 VALID_DRIVERS = ("postgres", "mssql")
-DEFAULT_ALLOWED_SQL_OPS = ("schema_list", "table_preview", "run_select")
+# All read-only. explain (Postgres-only) and row_count are diagnostic helpers
+# added alongside the original three; every op is gated again at call time by
+# SqlClient._guard_op against the operator's allowed_sql_ops.
+DEFAULT_ALLOWED_SQL_OPS = ("schema_list", "table_preview", "run_select", "explain", "row_count")
 VALID_SQL_OPS = frozenset(DEFAULT_ALLOWED_SQL_OPS)
 
 

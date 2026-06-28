@@ -30,6 +30,12 @@ class _FakeClient:
     def run_select(self, sql):
         return {"op": "run_select", "sql": sql}
 
+    def explain(self, sql):
+        return {"op": "explain", "sql": sql}
+
+    def row_count(self, table):
+        return {"op": "row_count", "table": table}
+
 
 @pytest.fixture
 def patched(monkeypatch):
@@ -66,6 +72,24 @@ def test_run_select_routes_with_sql(patched):
 
 def test_run_select_coalesces_missing_sql(patched):
     assert context.run_op({}, _SQL_CFG, "run_select")["sql"] == ""
+
+
+def test_explain_routes_with_sql(patched):
+    res = context.run_op({}, _SQL_CFG, "explain", sql="SELECT 1")
+    assert res == {"op": "explain", "sql": "SELECT 1"}
+
+
+def test_explain_coalesces_missing_sql(patched):
+    assert context.run_op({}, _SQL_CFG, "explain")["sql"] == ""
+
+
+def test_row_count_routes_with_table(patched):
+    res = context.run_op({}, _SQL_CFG, "row_count", table="public.t")
+    assert res == {"op": "row_count", "table": "public.t"}
+
+
+def test_row_count_coalesces_missing_table(patched):
+    assert context.run_op({}, _SQL_CFG, "row_count")["table"] == ""
 
 
 def test_unknown_op_raises(patched):

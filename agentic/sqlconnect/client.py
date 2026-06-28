@@ -94,6 +94,28 @@ def assert_read_only_sql(sql: str) -> str:
     return cleaned
 
 
+def _columns_and_types(description: Any) -> tuple[list[str], list[str]]:
+    """Split a DB-API cursor ``description`` into column names and type names.
+
+    DB-API ``description`` rows are 7-tuples
+    ``(name, type_code, display_size, internal_size, precision, scale, null_ok)``.
+    ``type_code`` is driver-specific (pyodbc gives a Python type like ``str``;
+    psycopg gives a type OID), so the type is rendered as a portable best-effort
+    string: a type's ``__name__`` when present (``str``/``int``/...), else
+    ``str(type_code)`` (e.g. the OID). Returns ``([], [])`` for a non-row
+    statement (``description`` is ``None``). Pure -- unit-tested without a DB.
+    """
+    if not description:
+        return [], []
+    cols: list[str] = []
+    types: list[str] = []
+    for d in description:
+        cols.append(d[0])
+        type_code = d[1] if len(d) > 1 else None
+        types.append(getattr(type_code, "__name__", None) or str(type_code))
+    return cols, types
+
+
 def validate_identifier(name: str) -> str:
     if not isinstance(name, str) or not _IDENT_RE.match(name):
         raise SqlConnectError(
@@ -182,12 +204,13 @@ class SqlClient:
             cur = conn.cursor()
             self._apply_statement_timeout(conn, cur)
             cur.execute(sql, params)
-            cols = [d[0] for d in cur.description] if cur.description else []
+            cols, col_types = _columns_and_types(cur.description)
             rows = cur.fetchmany(self.sql_cfg.max_rows + 1)
             truncated = len(rows) > self.sql_cfg.max_rows
             rows = rows[: self.sql_cfg.max_rows]
             return {
                 "columns": cols,
+                "column_types": col_types,
                 "rows": [list(r) for r in rows],
                 "row_count": len(rows),
                 "truncated": truncated,
@@ -221,6 +244,35 @@ class SqlClient:
         cleaned = assert_read_only_sql(sql)  # pure guard, runs before any connection
         audit_log({"event": "sqlconnect_read", "op": "run_select"}, self.config_path)
         return {"op": "run_select", **self._execute(cleaned)}
+
+    def explain(self, sql: str) -> dict:
+        """Return the query plan for a read-only SELECT/WITH (Postgres only).
+
+        The inner statement passes the same SELECT-only guard as ``run_select``,
+        and plain ``EXPLAIN`` (no ``ANALYZE``) only *plans* it -- it never executes
+        the query, so no DML can hide inside. MSSQL has no single-statement
+        ``EXPLAIN`` equivalent (it uses a session ``SET SHOWPLAN`` toggle), so this
+        op is refused for the mssql driver rather than emitting invalid SQL.
+        """
+        self._guard_op("explain")
+        if self.sql_cfg.driver == "mssql":
+            raise SqlConnectError(
+                "explain is not supported for the mssql driver",
+                code="SQLCONNECT_OP_NOT_ALLOWED",
+                details={"driver": "mssql"},
+            )
+        cleaned = assert_read_only_sql(sql)  # pure guard, runs before any connection
+        audit_log({"event": "sqlconnect_read", "op": "explain"}, self.config_path)
+        return {"op": "explain", **self._execute(f"EXPLAIN {cleaned}")}
+
+    def row_count(self, table: str) -> dict:
+        """Return ``count(*)`` for a table without materialising its rows."""
+        self._guard_op("row_count")
+        ident = quote_identifier(table, self.sql_cfg.driver)
+        audit_log({"event": "sqlconnect_read", "op": "row_count", "table": table}, self.config_path)
+        # ident is allow-list-validated + driver-quoted; no untrusted text reaches SQL.
+        sql = f"SELECT count(*) AS row_count FROM {ident}"  # noqa: S608
+        return {"op": "row_count", "table": table, **self._execute(sql)}
 
 
 class suppress_attr_error:  # pragma: no cover - trivial helper used only in live path

@@ -344,10 +344,12 @@ sqlconnect:
   enabled: false                 # off by default; disabled scaffold
   driver: "postgres"             # "postgres" | "mssql"
   dsn_env: "CYCLAW_SQL_DSN"      # DSN read from this env var only (never hardcoded)
-  allowed_sql_ops:               # operator-configurable read subset
+  allowed_sql_ops:               # operator-configurable read subset (all read-only)
     - schema_list
     - table_preview
     - run_select
+    - explain                    # query plan for a SELECT/WITH (Postgres only)
+    - row_count                  # count(*) for a table without materialising rows
   read_only: true                # hard: SET TRANSACTION READ ONLY / ApplicationIntent=ReadOnly
   statement_timeout_ms: 5000
   max_rows: 1000
