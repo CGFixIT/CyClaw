@@ -254,6 +254,7 @@ sync:
   direction: "pull"              # "pull" (safe default) | "bisync" (opt-in, discouraged)
   include_soul: false            # leave false — data/personality/ is NOT sync-safe
   reindex_on_change: true        # exit 10 when data/corpus/** changed
+  auto_reindex: false            # when true, `sync.cli sync` runs the indexer itself on change (no exit-10 cron chain needed)
   checksum: true                 # rclone --checksum (hash compare, not mtime)
   max_delete: 20                 # safety fuse: abort if > N deletions
   max_transfer: "1G"             # safety fuse: abort if run would move > this

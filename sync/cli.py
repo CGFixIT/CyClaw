@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import argparse
 import platform
+import subprocess  # noqa: S404 -- fixed-argv indexer invocation only; never shell=True
 import sys
 import textwrap
 from typing import Any
@@ -160,6 +161,33 @@ def cmd_setup(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def _run_auto_reindex(cfg: Any) -> int:
+    """Rebuild the index as a child process after a corpus-changing sync.
+
+    Reached only when ``sync.auto_reindex`` is true and the run signalled a
+    corpus change (the exit-10 condition). Returns ``EXIT_OK`` if the rebuild
+    succeeded, ``EXIT_FAIL`` otherwise -- a failed rebuild leaves the index stale
+    relative to the freshly-synced corpus, which the operator must see rather
+    than have masked behind a success code.
+
+    argv is a fixed list (``sys.executable -m retrieval.indexer``); never
+    ``shell=True``. The indexer reads the repo's ``config.yaml`` itself, so this
+    runs in the inherited working directory (the same one the scheduled job uses).
+    """
+    _heading("Corpus changed -- auto-reindexing")
+    argv = [sys.executable, "-m", "retrieval.indexer"]
+    try:
+        completed = subprocess.run(argv, check=False)  # noqa: S603 -- fixed argv, no shell
+    except OSError as exc:
+        _err(f"Could not launch the indexer: {exc}")
+        return EXIT_FAIL
+    if completed.returncode == 0:
+        _ok("Index rebuilt; corpus and index are back in sync.")
+        return EXIT_OK
+    _err(f"Indexer exited {completed.returncode}; the index may be stale.")
+    return EXIT_FAIL
+
+
 def cmd_sync(args: argparse.Namespace) -> int:
     """Run one sync now."""
     try:
@@ -199,7 +227,14 @@ def cmd_sync(args: argparse.Namespace) -> int:
         for line in result.errors[:5]:
             _err(line[:200])
 
-    return reindex_exit_code_for(result, cfg)
+    code = reindex_exit_code_for(result, cfg)
+    # auto_reindex turns the exit-10 "caller should reindex" signal into an
+    # in-CLI rebuild, so a scheduled sync keeps the index fresh with no second
+    # cron entry. Only fires on the corpus-changed path; every other exit code
+    # (no change, safety abort, failure) passes straight through unchanged.
+    if code == EXIT_REINDEX and getattr(cfg, "auto_reindex", False):
+        return _run_auto_reindex(cfg)
+    return code
 
 
 def cmd_test(args: argparse.Namespace) -> int:

@@ -41,6 +41,7 @@ DEFAULT_CONFLICT_RESOLVE = "newer"
 DEFAULT_CONFLICT_LOSER = "rename"
 DEFAULT_INCLUDE_SOUL = False
 DEFAULT_REINDEX_ON_CHANGE = True  # exit 10 if corpus files changed
+DEFAULT_AUTO_REINDEX = False  # when true, the CLI runs the indexer itself on change
 DEFAULT_CHECKSUM = True
 # Wall-clock ceiling on the rclone sync subprocess. A hung rclone (dead remote,
 # stalled network) would otherwise block run_sync forever WHILE HOLDING the
@@ -99,6 +100,9 @@ class RcloneConfig:
     direction: str = DEFAULT_DIRECTION  # "pull" | "bisync"
     include_soul: bool = DEFAULT_INCLUDE_SOUL
     reindex_on_change: bool = DEFAULT_REINDEX_ON_CHANGE
+    # When true AND reindex_on_change fires, `sync.cli sync` runs the indexer
+    # itself (a child process) instead of just signalling exit 10 to the caller.
+    auto_reindex: bool = DEFAULT_AUTO_REINDEX
     checksum: bool = DEFAULT_CHECKSUM
 
     # Safety fuses.

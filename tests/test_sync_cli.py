@@ -128,6 +128,62 @@ def test_sync_dry_run_passes_flag():
 
 
 # ---------------------------------------------------------------------------
+# auto_reindex -- exit-10 corpus change is rebuilt in-CLI when enabled
+# ---------------------------------------------------------------------------
+
+def test_auto_reindex_runs_indexer_and_returns_0_on_change():
+    cfg = _cfg()
+    cfg.auto_reindex = True
+    captured = {}
+
+    def fake_run(argv, check=False):
+        captured["argv"] = argv
+        return MagicMock(returncode=0)
+
+    with patch("sync.cli.load_sync_config", return_value=cfg), \
+         patch("sync.cli.run_sync", return_value=_result(corpus_changed=True)), \
+         patch("sync.cli.reindex_exit_code_for", return_value=EXIT_REINDEX), \
+         patch("sync.cli.subprocess.run", side_effect=fake_run):
+        # A successful auto-reindex collapses exit 10 -> 0 (work is done).
+        assert main(["sync"]) == EXIT_OK
+    # Fixed argv, module form, never shell=True.
+    assert captured["argv"][1:] == ["-m", "retrieval.indexer"]
+
+
+def test_auto_reindex_off_passes_exit_10_through():
+    cfg = _cfg()
+    cfg.auto_reindex = False
+    with patch("sync.cli.load_sync_config", return_value=cfg), \
+         patch("sync.cli.run_sync", return_value=_result(corpus_changed=True)), \
+         patch("sync.cli.reindex_exit_code_for", return_value=EXIT_REINDEX), \
+         patch("sync.cli.subprocess.run") as mrun:
+        assert main(["sync"]) == EXIT_REINDEX
+        mrun.assert_not_called()  # default behaviour: signal, don't rebuild
+
+
+def test_auto_reindex_failure_returns_exit_2():
+    cfg = _cfg()
+    cfg.auto_reindex = True
+    with patch("sync.cli.load_sync_config", return_value=cfg), \
+         patch("sync.cli.run_sync", return_value=_result(corpus_changed=True)), \
+         patch("sync.cli.reindex_exit_code_for", return_value=EXIT_REINDEX), \
+         patch("sync.cli.subprocess.run", return_value=MagicMock(returncode=3)):
+        # A failed rebuild must surface as a failure, not be masked as success.
+        assert main(["sync"]) == EXIT_FAIL
+
+
+def test_auto_reindex_not_triggered_without_corpus_change():
+    cfg = _cfg()
+    cfg.auto_reindex = True
+    with patch("sync.cli.load_sync_config", return_value=cfg), \
+         patch("sync.cli.run_sync", return_value=_result()), \
+         patch("sync.cli.reindex_exit_code_for", return_value=EXIT_OK), \
+         patch("sync.cli.subprocess.run") as mrun:
+        assert main(["sync"]) == EXIT_OK
+        mrun.assert_not_called()  # no exit-10 -> indexer never launched
+
+
+# ---------------------------------------------------------------------------
 # status / test subcommands
 # ---------------------------------------------------------------------------
 
