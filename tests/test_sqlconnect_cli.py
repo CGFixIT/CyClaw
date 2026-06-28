@@ -58,6 +58,29 @@ def test_query_requires_arg(tmp_path):
     assert cli.main(["--config", cp, "query"]) == 2
 
 
+def test_query_csv_format_reaches_guard_and_exits_env(tmp_path):
+    # --format csv passes the guard (SQL is valid) then hits the absent driver -> EXIT_ENV.
+    cp = _cfg(tmp_path, {"enabled": True})
+    assert cli.main(["--config", cp, "query", "--sql", "SELECT 1", "--format", "csv"]) == 3
+
+
+def test_query_csv_format_prints_csv_string(tmp_path, capsys, monkeypatch):
+    cp = _cfg(tmp_path, {"enabled": True})
+    # context is imported lazily inside _run; patch the module-level run_op directly.
+    import agentic.sqlconnect.context as ctx_mod
+
+    monkeypatch.setattr(
+        ctx_mod,
+        "run_op",
+        lambda *a, **kw: {"format": "csv", "csv": "id,name\r\n1,alice\r\n"},
+    )
+    code = cli.main(["--config", cp, "query", "--sql", "SELECT 1", "--format", "csv"])
+    out = capsys.readouterr().out
+    assert code == 0
+    assert "id,name" in out
+    assert "alice" in out
+
+
 def test_query_explain_selected_for_valid_sql(tmp_path):
     # --sql --explain on Postgres passes the guard, then hits the absent driver
     # import -> EXIT_ENV, proving the explain op was selected (not rejected).

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from agentic.sqlconnect.client import SqlClient
 from agentic.sqlconnect.config import SqlConnectConfig
 
@@ -14,6 +16,7 @@ def run_op(
     config_path: str = "config.yaml",
     table: str | None = None,
     sql: str | None = None,
+    fmt: Literal["json", "csv"] = "json",
 ) -> dict:
     client = SqlClient(cfg, sql_cfg, config_path=config_path)
     if op == "schema_list":
@@ -21,7 +24,7 @@ def run_op(
     if op == "table_preview":
         return client.table_preview(table or "")
     if op == "run_select":
-        return client.run_select(sql or "")
+        return client.run_select(sql or "", fmt=fmt)
     if op == "explain":
         return client.explain(sql or "")
     if op == "row_count":

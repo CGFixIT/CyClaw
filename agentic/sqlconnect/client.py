@@ -14,9 +14,11 @@ Never imported by gate.py / graph.py / mcp_hybrid_server.py.
 
 from __future__ import annotations
 
+import csv
+import io
 import os
 import re
-from typing import Any
+from typing import Any, Literal
 
 from agentic.sqlconnect.config import SqlConnectConfig
 from utils.errors import (
@@ -77,19 +79,16 @@ def assert_read_only_sql(sql: str) -> str:
             code="SQLCONNECT_BAD_QUERY",
         )
     if ";" in scan:
-        raise SqlConnectError(
-            "multiple statements are not allowed", code="SQLCONNECT_BAD_QUERY"
-        )
+        raise SqlConnectError("multiple statements are not allowed", code="SQLCONNECT_BAD_QUERY")
     lowered = cleaned.lower()
     if not (lowered.startswith("select") or lowered.startswith("with")):
-        raise SqlConnectError(
-            "only SELECT/WITH queries are allowed", code="SQLCONNECT_BAD_QUERY"
-        )
+        raise SqlConnectError("only SELECT/WITH queries are allowed", code="SQLCONNECT_BAD_QUERY")
     hit = _FORBIDDEN_RE.search(scan)
     if hit:
         raise SqlConnectError(
             f"forbidden keyword in read-only query: {hit.group(0)!r}",
-            code="SQLCONNECT_BAD_QUERY", details={"keyword": hit.group(0)},
+            code="SQLCONNECT_BAD_QUERY",
+            details={"keyword": hit.group(0)},
         )
     return cleaned
 
@@ -118,9 +117,7 @@ def _columns_and_types(description: Any) -> tuple[list[str], list[str]]:
 
 def validate_identifier(name: str) -> str:
     if not isinstance(name, str) or not _IDENT_RE.match(name):
-        raise SqlConnectError(
-            f"invalid SQL identifier: {name!r}", code="SQLCONNECT_BAD_IDENT"
-        )
+        raise SqlConnectError(f"invalid SQL identifier: {name!r}", code="SQLCONNECT_BAD_IDENT")
     return name
 
 
@@ -129,6 +126,21 @@ def quote_identifier(name: str, driver: str) -> str:
     if driver == "mssql":
         return ".".join(f"[{p}]" for p in parts)
     return ".".join(f'"{p}"' for p in parts)
+
+
+def _rows_to_csv(columns: list[str], rows: list[list[Any]]) -> str:
+    """Render *columns* + *rows* as an RFC 4180 CSV string (header + data rows).
+
+    Uses :mod:`csv` with default dialect (comma delimiter, CRLF line terminator,
+    quoting on demand). ``None`` values are rendered as the empty string, matching
+    standard SQL NULL export behaviour. Pure — unit-tested without a live DB.
+    """
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(columns)
+    for row in rows:
+        writer.writerow(["" if v is None else v for v in row])
+    return buf.getvalue()
 
 
 class SqlClient:
@@ -221,10 +233,7 @@ class SqlClient:
     def schema_list(self) -> dict:
         self._guard_op("schema_list")
         audit_log({"event": "sqlconnect_read", "op": "schema_list"}, self.config_path)
-        sql = (
-            "SELECT table_schema, table_name FROM information_schema.tables "
-            "ORDER BY table_schema, table_name"
-        )
+        sql = "SELECT table_schema, table_name FROM information_schema.tables ORDER BY table_schema, table_name"
         return {"op": "schema_list", **self._execute(sql)}
 
     def table_preview(self, table: str) -> dict:
@@ -239,11 +248,14 @@ class SqlClient:
             sql = f"SELECT * FROM {ident} LIMIT {int(self.sql_cfg.max_rows)}"  # noqa: S608
         return {"op": "table_preview", "table": table, **self._execute(sql)}
 
-    def run_select(self, sql: str) -> dict:
+    def run_select(self, sql: str, fmt: Literal["json", "csv"] = "json") -> dict:
         self._guard_op("run_select")
         cleaned = assert_read_only_sql(sql)  # pure guard, runs before any connection
-        audit_log({"event": "sqlconnect_read", "op": "run_select"}, self.config_path)
-        return {"op": "run_select", **self._execute(cleaned)}
+        audit_log({"event": "sqlconnect_read", "op": "run_select", "fmt": fmt}, self.config_path)
+        result = self._execute(cleaned)
+        if fmt == "csv":
+            return {"op": "run_select", "format": "csv", "csv": _rows_to_csv(result["columns"], result["rows"])}
+        return {"op": "run_select", **result}
 
     def explain(self, sql: str) -> dict:
         """Return the query plan for a read-only SELECT/WITH (Postgres only).
@@ -285,4 +297,4 @@ class suppress_attr_error:  # pragma: no cover - trivial helper used only in liv
         return exc_type is AttributeError
 
 
-__all__ = ["SqlClient", "assert_read_only_sql", "validate_identifier", "quote_identifier"]
+__all__ = ["SqlClient", "_rows_to_csv", "assert_read_only_sql", "validate_identifier", "quote_identifier"]

@@ -88,6 +88,7 @@ def _run(args: argparse.Namespace, op: str, **kw: object) -> int:
     if not getattr(sc, "enabled", False):
         return _disabled_noop()
     from agentic.sqlconnect import context
+
     cfg = _get_config(args.config)
     try:
         res = context.run_op(cfg, sc, op, config_path=args.config, **kw)  # type: ignore[arg-type]
@@ -97,7 +98,10 @@ def _run(args: argparse.Namespace, op: str, **kw: object) -> int:
     except SqlConnectError as exc:
         _err(exc.message)
         return EXIT_FAIL
-    _emit(res)
+    if res.get("format") == "csv":
+        print(res["csv"], end="")
+    else:
+        _emit(res)
     return EXIT_OK
 
 
@@ -113,13 +117,14 @@ def cmd_query(args: argparse.Namespace) -> int:
     if args.sql:
         if args.explain:
             return _run(args, "explain", sql=args.sql)
-        return _run(args, "run_select", sql=args.sql)
+        return _run(args, "run_select", sql=args.sql, fmt=args.format)
     _err("query requires --sql or --table")
     return EXIT_FAIL
 
 
 def cmd_test(args: argparse.Namespace) -> int:
     from agentic.sqlconnect.selftest import run_self_test
+
     passed, total, lines = run_self_test(args.config)
     _heading(f"Self-test: {passed}/{total} passed")
     for line in lines:
@@ -146,6 +151,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_query.add_argument("--table", help="Preview a table (schema.table).")
     p_query.add_argument("--explain", action="store_true", help="With --sql: return the query plan (Postgres only).")
     p_query.add_argument("--count", action="store_true", help="With --table: return count(*) instead of a preview.")
+    p_query.add_argument(
+        "--format",
+        choices=["json", "csv"],
+        default="json",
+        help="Output format for --sql run_select: json (default) or csv.",
+    )
     p_query.set_defaults(func=cmd_query)
 
     p_test = sub.add_parser("test", help="Run the pre-flight self-test.")

@@ -20,6 +20,7 @@ _SQL_CFG = object()
 class _FakeClient:
     def __init__(self, cfg, sql_cfg, config_path="config.yaml"):
         self.config_path = config_path
+        self.last_fmt: str = "json"
 
     def schema_list(self):
         return {"op": "schema_list"}
@@ -27,7 +28,8 @@ class _FakeClient:
     def table_preview(self, table):
         return {"op": "table_preview", "table": table}
 
-    def run_select(self, sql):
+    def run_select(self, sql, fmt="json"):
+        self.last_fmt = fmt
         return {"op": "run_select", "sql": sql}
 
     def explain(self, sql):
@@ -100,3 +102,19 @@ def test_unknown_op_raises(patched):
 def test_config_path_threaded_to_client(patched):
     context.run_op({}, _SQL_CFG, "schema_list", config_path="/x/config.yaml")
     assert patched["client"].config_path == "/x/config.yaml"
+
+
+def test_run_select_threads_fmt_json_by_default(patched):
+    context.run_op({}, _SQL_CFG, "run_select", sql="SELECT 1")
+    assert patched["client"].last_fmt == "json"
+
+
+def test_run_select_threads_fmt_csv(patched):
+    context.run_op({}, _SQL_CFG, "run_select", sql="SELECT 1", fmt="csv")
+    assert patched["client"].last_fmt == "csv"
+
+
+def test_fmt_ignored_for_non_run_select_ops(patched):
+    # fmt only applies to run_select; other ops must not fail when it's passed.
+    res = context.run_op({}, _SQL_CFG, "schema_list", fmt="csv")
+    assert res == {"op": "schema_list"}
