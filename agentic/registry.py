@@ -27,6 +27,7 @@ import json
 import os
 import re
 import threading
+import time
 from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
@@ -41,6 +42,54 @@ from utils.personality import OWASP_INJECTION_PATTERNS
 
 def _utcnow() -> str:
     return datetime.now(UTC).isoformat()
+
+
+# An apply completes in milliseconds, so a lock directory older than this is from
+# a crashed run and is safe to reclaim. Mirrors sync/runner's atomic-mkdir lock.
+_LOCK_STALE_SEC = 60
+
+
+def _acquire_registry_lock(lock_dir: Path) -> None:
+    """Acquire a cross-process write lock, or raise ``SkillRegistryError``.
+
+    The in-process ``threading.Lock`` only serializes threads inside ONE process;
+    two separate ``agentic.cli apply-skill`` processes each hold their own and
+    would not exclude each other. ``Path.mkdir`` is atomic on every platform, so
+    an atomically-created lock directory doubles as a zero-dependency,
+    cross-platform mutex with no fcntl/msvcrt branching. A lock left by a crashed
+    run is reclaimed after ``_LOCK_STALE_SEC``.
+    """
+    try:
+        lock_dir.mkdir()
+        return
+    except FileExistsError:
+        pass
+    try:
+        age = time.time() - lock_dir.stat().st_mtime
+    except OSError:
+        age = 0.0
+    if age > _LOCK_STALE_SEC:
+        try:
+            lock_dir.rmdir()
+            lock_dir.mkdir()
+            return
+        except OSError:
+            pass
+    raise SkillRegistryError(
+        "another skills-registry apply is in progress",
+        details={
+            "lock_dir": str(lock_dir),
+            "hint": "Retry shortly, or remove the lock dir if it is stale.",
+        },
+    )
+
+
+def _release_registry_lock(lock_dir: Path) -> None:
+    """Release the cross-process write lock; tolerant if it is already gone."""
+    try:
+        lock_dir.rmdir()
+    except OSError:
+        pass
 
 
 @lru_cache(maxsize=8)
@@ -281,30 +330,42 @@ class SkillRegistry:
 
         new_sha = self._sha256(canonical)
         ts = _utcnow()
-        with self._lock:
-            data = dict(self._data)
-            skills = dict(data.get("skills", {}))
-            history = list(data.get("history", []))
-            skills[spec["name"]] = {
-                "name": spec["name"],
-                "description": spec["description"],
-                "body": spec["body"],
-                "sha256": new_sha,
-                "reason": reason,
-                "updated": ts,
-            }
-            new_version = int(data.get("version", 0)) + 1
-            history.append({
-                "version": new_version,
-                "name": spec["name"],
-                "sha256": new_sha,
-                "reason": reason,
-                "timestamp": ts,
-            })
-            data.update({"version": new_version, "updated": ts,
-                         "skills": skills, "history": history})
-            self._atomic_write(data)
-            self._data = data
+        self.registry_path.parent.mkdir(parents=True, exist_ok=True)
+        lock_dir = self.registry_path.with_suffix(self.registry_path.suffix + ".lock.d")
+        with self._lock:  # serialize threads within this process
+            _acquire_registry_lock(lock_dir)  # serialize other processes too
+            try:
+                # Rebase on the LATEST committed state, not stale self._data. A
+                # concurrent process may have applied a skill since we loaded at
+                # construction; re-reading from disk here carries its skill and
+                # version forward instead of overwriting them with a colliding
+                # version. (self._data is loaded once in __init__ and the in-process
+                # lock can't see another process's write -- only a re-read can.)
+                data = dict(self._load())
+                skills = dict(data.get("skills", {}))
+                history = list(data.get("history", []))
+                skills[spec["name"]] = {
+                    "name": spec["name"],
+                    "description": spec["description"],
+                    "body": spec["body"],
+                    "sha256": new_sha,
+                    "reason": reason,
+                    "updated": ts,
+                }
+                new_version = int(data.get("version", 0)) + 1
+                history.append({
+                    "version": new_version,
+                    "name": spec["name"],
+                    "sha256": new_sha,
+                    "reason": reason,
+                    "timestamp": ts,
+                })
+                data.update({"version": new_version, "updated": ts,
+                             "skills": skills, "history": history})
+                self._atomic_write(data)
+                self._data = data
+            finally:
+                _release_registry_lock(lock_dir)
 
         audit_log({
             "event": "agentic_skill_applied",
