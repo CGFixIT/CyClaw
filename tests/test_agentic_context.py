@@ -14,7 +14,13 @@ import pytest
 
 from agentic import context
 from agentic.config import AgenticConfig
-from agentic.context import fetch_issue_context, fetch_pr_context, fetch_repo_context
+from agentic.context import (
+    fetch_issue_context,
+    fetch_issue_list,
+    fetch_pr_context,
+    fetch_pr_list,
+    fetch_repo_context,
+)
 from utils.errors import AgenticError
 
 
@@ -37,6 +43,7 @@ def _fake_run_read(op: str, repo: str, **kwargs):
 
 
 # --- fetch_pr_context ------------------------------------------------------
+
 
 def test_fetch_pr_context_includes_diff_by_default():
     with patch.object(context, "run_read", side_effect=_fake_run_read) as mr:
@@ -75,6 +82,7 @@ def test_fetch_pr_context_guard_rejects_when_pr_diff_not_allowed():
 
 # --- fetch_issue_context ---------------------------------------------------
 
+
 def test_fetch_issue_context_bundles_issue():
     with patch.object(context, "run_read", side_effect=_fake_run_read) as mr:
         bundle = fetch_issue_context(_cfg(), 99)
@@ -92,6 +100,7 @@ def test_fetch_issue_context_guard_rejects_when_not_allowed():
 
 
 # --- fetch_repo_context ----------------------------------------------------
+
 
 def test_fetch_repo_context_includes_lists_when_allowed():
     with patch.object(context, "run_read", side_effect=_fake_run_read) as mr:
@@ -159,3 +168,86 @@ def test_fetch_repo_context_guard_rejects_when_repo_view_not_allowed():
         with pytest.raises(AgenticError):
             fetch_repo_context(_cfg(allowed=["pr_view"]))
     mr.assert_not_called()
+
+
+def test_fetch_repo_context_passes_max_prs_and_max_issues_to_list():
+    """max_prs / max_issues must be forwarded as the limit to _list_with_more."""
+    captured: list[tuple[str, int]] = []
+
+    def fake(op: str, repo: str, **kwargs: object) -> dict:
+        if op in ("pr_list", "issue_list"):
+            captured.append((op, int(kwargs["limit"])))  # type: ignore[arg-type]
+            return {"data": []}
+        return {"data": {"op": op, "repo": repo}}
+
+    with patch.object(context, "run_read", side_effect=fake):
+        fetch_repo_context(_cfg(), max_prs=5, max_issues=3)
+
+    # _list_with_more probes limit+1, so we see 5+1=6 and 3+1=4.
+    assert ("pr_list", 6) in captured
+    assert ("issue_list", 4) in captured
+
+
+# --- fetch_pr_list -----------------------------------------------------------
+
+
+def test_fetch_pr_list_returns_paginated_result():
+    with patch.object(context, "run_read", side_effect=_fake_run_read) as mr:
+        result = fetch_pr_list(_cfg())
+    assert "items" in result and "count" in result and "has_more" in result
+    assert result["items"] == [{"number": 1}]
+    assert result["count"] == 1
+    assert result["has_more"] is False
+    assert mr.call_args_list[0].args[0] == "pr_list"
+
+
+def test_fetch_pr_list_guard_rejects_when_not_allowed():
+    with patch.object(context, "run_read", side_effect=_fake_run_read) as mr:
+        with pytest.raises(AgenticError):
+            fetch_pr_list(_cfg(allowed=["repo_view"]))
+    mr.assert_not_called()
+
+
+def test_fetch_pr_list_respects_max_items():
+    """max_items is forwarded as limit so the +1 probe reflects the cap."""
+    captured: dict = {}
+
+    def fake(op: str, repo: str, **kwargs: object) -> dict:
+        captured.update(kwargs)
+        return {"data": []}
+
+    with patch.object(context, "run_read", side_effect=fake):
+        fetch_pr_list(_cfg(), max_items=25)
+
+    assert captured["limit"] == 26  # 25 + 1 probe
+
+
+# --- fetch_issue_list --------------------------------------------------------
+
+
+def test_fetch_issue_list_returns_paginated_result():
+    with patch.object(context, "run_read", side_effect=_fake_run_read) as mr:
+        result = fetch_issue_list(_cfg())
+    assert "items" in result and "count" in result and "has_more" in result
+    assert result["items"] == [{"number": 1}]
+    assert mr.call_args_list[0].args[0] == "issue_list"
+
+
+def test_fetch_issue_list_guard_rejects_when_not_allowed():
+    with patch.object(context, "run_read", side_effect=_fake_run_read) as mr:
+        with pytest.raises(AgenticError):
+            fetch_issue_list(_cfg(allowed=["repo_view"]))
+    mr.assert_not_called()
+
+
+def test_fetch_issue_list_respects_max_items():
+    captured: dict = {}
+
+    def fake(op: str, repo: str, **kwargs: object) -> dict:
+        captured.update(kwargs)
+        return {"data": []}
+
+    with patch.object(context, "run_read", side_effect=fake):
+        fetch_issue_list(_cfg(), max_items=50)
+
+    assert captured["limit"] == 51

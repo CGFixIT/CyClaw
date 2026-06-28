@@ -80,26 +80,53 @@ def fetch_issue_context(cfg: AgenticConfig, number: int) -> dict:
     }
 
 
-def fetch_repo_context(cfg: AgenticConfig) -> dict:
+def fetch_pr_list(cfg: AgenticConfig, max_items: int = 100) -> dict:
+    """Return open PRs as ``{"items", "count", "has_more"}`` up to *max_items*.
+
+    ``has_more=True`` signals that additional PRs exist beyond the returned slice;
+    the caller can page by increasing *max_items* or calling the gh CLI directly.
+    """
+    _guard_read_op(cfg, "pr_list")
+    return _list_with_more(cfg, "pr_list", limit=max_items)
+
+
+def fetch_issue_list(cfg: AgenticConfig, max_items: int = 100) -> dict:
+    """Return open issues as ``{"items", "count", "has_more"}`` up to *max_items*.
+
+    Same pagination semantics as :func:`fetch_pr_list`.
+    """
+    _guard_read_op(cfg, "issue_list")
+    return _list_with_more(cfg, "issue_list", limit=max_items)
+
+
+def fetch_repo_context(
+    cfg: AgenticConfig,
+    *,
+    max_prs: int = _DEFAULT_LIST_LIMIT,
+    max_issues: int = _DEFAULT_LIST_LIMIT,
+) -> dict:
     """Return a repo overview plus a shortlist of open PRs and issues.
 
-    The PR/issue shortlists are returned as ``{"items", "count", "has_more"}`` so
-    a consumer can tell a complete list from a truncated one (``has_more=true``
-    means there are more open items than the shortlist shows).
+    *max_prs* and *max_issues* cap the number of items in each shortlist
+    (default ``_DEFAULT_LIST_LIMIT``).  The shortlists are returned as
+    ``{"items", "count", "has_more"}`` so a consumer can tell a complete list
+    from a truncated one (``has_more=True`` means more exist beyond the cap).
     """
     _guard_read_op(cfg, "repo_view")
     bundle: dict = {"repo": cfg.repo}
     bundle["overview"] = _read(cfg, "repo_view")["data"]
     if "pr_list" in cfg.allowed_read_ops:
-        bundle["open_prs"] = _list_with_more(cfg, "pr_list")
+        bundle["open_prs"] = _list_with_more(cfg, "pr_list", limit=max_prs)
     if "issue_list" in cfg.allowed_read_ops:
-        bundle["open_issues"] = _list_with_more(cfg, "issue_list")
+        bundle["open_issues"] = _list_with_more(cfg, "issue_list", limit=max_issues)
     return bundle
 
 
 __all__ = [
     "DEFAULT_MIN_GH",
-    "fetch_pr_context",
     "fetch_issue_context",
+    "fetch_issue_list",
+    "fetch_pr_context",
+    "fetch_pr_list",
     "fetch_repo_context",
 ]
