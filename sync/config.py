@@ -42,6 +42,7 @@ DEFAULT_CONFLICT_LOSER = "rename"
 DEFAULT_INCLUDE_SOUL = False
 DEFAULT_REINDEX_ON_CHANGE = True  # exit 10 if corpus files changed
 DEFAULT_AUTO_REINDEX = False  # when true, the CLI runs the indexer itself on change
+DEFAULT_POST_SYNC_CHECK = False  # when true, run `rclone check` after each successful sync
 DEFAULT_CHECKSUM = True
 # Wall-clock ceiling on the rclone sync subprocess. A hung rclone (dead remote,
 # stalled network) would otherwise block run_sync forever WHILE HOLDING the
@@ -103,6 +104,10 @@ class RcloneConfig:
     # When true AND reindex_on_change fires, `sync.cli sync` runs the indexer
     # itself (a child process) instead of just signalling exit 10 to the caller.
     auto_reindex: bool = DEFAULT_AUTO_REINDEX
+    # When true, run `rclone check` after each successful non-dry-run sync to
+    # verify the local corpus matches the remote. Differences are audited and
+    # surfaced in SyncResult.check_result; they do NOT flip the sync to failed.
+    post_sync_check: bool = DEFAULT_POST_SYNC_CHECK
     checksum: bool = DEFAULT_CHECKSUM
 
     # Safety fuses.

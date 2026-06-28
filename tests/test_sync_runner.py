@@ -21,14 +21,17 @@ from sync.runner import (
     MIN_RCLONE_MAJOR,
     MIN_RCLONE_MINOR,
     MIN_RCLONE_PATCH,
+    CheckResult,
     FileEvent,
     SyncResult,
     build_bisync_argv,
+    build_check_argv,
     build_pull_argv,
     check_rclone_version,
     hash_changed_files,
     parse_log,
     reindex_exit_code_for,
+    run_post_sync_check,
     run_sync,
 )
 from utils.errors import RcloneNotInstalledError, RcloneTimeoutError, RcloneVersionError, SyncRuntimeError
@@ -685,3 +688,166 @@ def test_run_sync_audit_events_have_file_key_no_query(tmp_path):
     # No secret-looking fields anywhere.
     for e in captured:
         assert not (set(e.keys()) & {"token", "refresh_token", "secret", "password", "stderr"})
+
+
+# ---------------------------------------------------------------------------
+# Post-sync rclone check
+# ---------------------------------------------------------------------------
+
+def test_build_check_argv_is_list_with_remote_local_filter(tmp_path):
+    cfg = _make_cfg(tmp_path)
+    argv = build_check_argv(cfg, rclone_bin=FAKE_RCLONE)
+    assert isinstance(argv, list)
+    assert argv[1] == "check"
+    assert cfg.remote in argv
+    assert cfg.local_path in argv
+    assert "--filter-from" in argv
+    assert cfg.filter_file in argv
+    # check is read-only: no --dry-run, no log-file writes.
+    assert "--log-file" not in argv
+
+
+def test_build_check_argv_includes_checksum_flag(tmp_path):
+    cfg = _make_cfg(tmp_path, checksum=True)
+    assert "--checksum" in build_check_argv(cfg, rclone_bin=FAKE_RCLONE)
+
+
+def test_build_check_argv_omits_checksum_when_off(tmp_path):
+    cfg = _make_cfg(tmp_path, checksum=False)
+    assert "--checksum" not in build_check_argv(cfg, rclone_bin=FAKE_RCLONE)
+
+
+def test_run_post_sync_check_ok_when_zero_differences(tmp_path):
+    cfg = _make_cfg(tmp_path)
+    ok_output = (
+        "2026/06/20 00:00:00 INFO  : 0 differences found\n"
+        "2026/06/20 00:00:00 INFO  : Found 0 missing on Local\n"
+        "2026/06/20 00:00:00 INFO  : Found 0 missing on Remote\n"
+    )
+    with patch("sync.runner.subprocess.run",
+               return_value=MagicMock(returncode=0, stdout="", stderr=ok_output)), \
+         _patch_audit():
+        cr = run_post_sync_check(cfg, rclone_bin=FAKE_RCLONE)
+    assert cr.ok is True
+    assert cr.differences == 0
+    assert cr.missing_local == 0
+    assert cr.missing_remote == 0
+    assert cr.errors == []
+
+
+def test_run_post_sync_check_not_ok_when_differences_found(tmp_path):
+    cfg = _make_cfg(tmp_path)
+    diff_output = (
+        "2026/06/20 00:00:00 NOTICE: notes.md: sizes differ\n"
+        "2026/06/20 00:00:00 INFO  : Found 1 missing on Local\n"
+        "2026/06/20 00:00:00 INFO  : Found 0 missing on Remote\n"
+        "2026/06/20 00:00:00 INFO  : 1 differences found\n"
+    )
+    with patch("sync.runner.subprocess.run",
+               return_value=MagicMock(returncode=1, stdout="", stderr=diff_output)), \
+         _patch_audit():
+        cr = run_post_sync_check(cfg, rclone_bin=FAKE_RCLONE)
+    assert cr.ok is False
+    assert cr.differences == 1
+    assert cr.missing_local == 1
+    assert cr.missing_remote == 0
+    assert len(cr.errors) == 1
+    assert "notes.md" in cr.errors[0]
+
+
+def test_run_post_sync_check_timeout_raises_sync_runtime_error(tmp_path):
+    cfg = _make_cfg(tmp_path, sync_timeout_sec=1)
+    with patch("sync.runner.subprocess.run",
+               side_effect=subprocess.TimeoutExpired(cmd=["rclone"], timeout=1)):
+        with pytest.raises(SyncRuntimeError) as exc:
+            run_post_sync_check(cfg, rclone_bin=FAKE_RCLONE)
+    assert exc.value.details.get("op") == "check"
+
+
+def test_run_sync_calls_check_on_success_when_configured(tmp_path):
+    cfg = _make_cfg(tmp_path, post_sync_check=True)
+    log_path = cfg.log_path
+
+    check_output = (
+        "2026/06/20 00:00:00 INFO  : 0 differences found\n"
+        "2026/06/20 00:00:00 INFO  : Found 0 missing on Local\n"
+        "2026/06/20 00:00:00 INFO  : Found 0 missing on Remote\n"
+    )
+
+    def dispatch(argv, **kwargs):
+        if argv[1] == "version":
+            return _version_mock("1.70.0")
+        if argv[1] == "check":
+            return MagicMock(returncode=0, stdout="", stderr=check_output)
+        # sync call
+        Path(log_path).parent.mkdir(parents=True, exist_ok=True)
+        Path(log_path).write_text("", encoding="utf-8")
+        return MagicMock(returncode=0, stdout="", stderr="")
+
+    with patch("sync.runner.shutil.which", return_value=FAKE_RCLONE), \
+         patch("sync.runner.subprocess.run", side_effect=dispatch) as mrun, \
+         _patch_audit():
+        result = run_sync(cfg, rclone_bin=FAKE_RCLONE)
+
+    assert result.check_result is not None
+    assert result.check_result.ok is True
+    # subprocess.run should have been called 3 times: version + sync + check.
+    assert mrun.call_count == 3
+    check_calls = [c for c in mrun.call_args_list if c.args[0][1] == "check"]
+    assert len(check_calls) == 1
+
+
+def test_run_sync_skips_check_on_dry_run(tmp_path):
+    cfg = _make_cfg(tmp_path, post_sync_check=True)
+    log_path = cfg.log_path
+
+    def dispatch(argv, **kwargs):
+        if argv[1] == "version":
+            return _version_mock("1.70.0")
+        Path(log_path).parent.mkdir(parents=True, exist_ok=True)
+        Path(log_path).write_text("", encoding="utf-8")
+        return MagicMock(returncode=0, stdout="", stderr="")
+
+    with patch("sync.runner.shutil.which", return_value=FAKE_RCLONE), \
+         patch("sync.runner.subprocess.run", side_effect=dispatch) as mrun, \
+         _patch_audit():
+        result = run_sync(cfg, dry_run=True, rclone_bin=FAKE_RCLONE)
+
+    assert result.check_result is None  # dry_run -> no check
+    check_calls = [c for c in mrun.call_args_list if c.args[0][1] == "check"]
+    assert len(check_calls) == 0
+
+
+def test_run_sync_skips_check_when_sync_failed(tmp_path):
+    cfg = _make_cfg(tmp_path, post_sync_check=True)
+    log_path = cfg.log_path
+
+    def dispatch(argv, **kwargs):
+        if argv[1] == "version":
+            return _version_mock("1.70.0")
+        Path(log_path).parent.mkdir(parents=True, exist_ok=True)
+        Path(log_path).write_text("", encoding="utf-8")
+        # sync fails with exit 2 (not a transient code -> no retry)
+        return MagicMock(returncode=2, stdout="", stderr="fatal error")
+
+    with patch("sync.runner.shutil.which", return_value=FAKE_RCLONE), \
+         patch("sync.runner.subprocess.run", side_effect=dispatch) as mrun, \
+         _patch_audit():
+        result = run_sync(cfg, rclone_bin=FAKE_RCLONE)
+
+    assert result.success is False
+    assert result.check_result is None  # failure -> no check
+    check_calls = [c for c in mrun.call_args_list if c.args[0][1] == "check"]
+    assert len(check_calls) == 0
+
+
+def test_sync_result_audit_includes_check_summary(tmp_path):
+    cr = CheckResult(ok=False, missing_local=1, missing_remote=0, differences=1)
+    result = SyncResult(
+        success=True, direction="pull", started_at=0.0, finished_at=1.0,
+        rclone_exit_code=0, check_result=cr,
+    )
+    d = result.to_audit_dict()
+    assert "check" in d
+    assert d["check"]["ok"] is False
+    assert d["check"]["differences"] == 1

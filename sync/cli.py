@@ -227,6 +227,16 @@ def cmd_sync(args: argparse.Namespace) -> int:
         for line in result.errors[:5]:
             _err(line[:200])
 
+    if result.check_result is not None:
+        cr = result.check_result
+        _kv("check_ok", cr.ok)
+        if not cr.ok:
+            _kv("check_differences", cr.differences)
+            _kv("check_missing_local", cr.missing_local)
+            _kv("check_missing_remote", cr.missing_remote)
+            for e in cr.errors[:3]:
+                _warn(f"check: {e}")
+
     code = reindex_exit_code_for(result, cfg)
     # auto_reindex turns the exit-10 "caller should reindex" signal into an
     # in-CLI rebuild, so a scheduled sync keeps the index fresh with no second

@@ -130,6 +130,17 @@ _LOG_MODIFIED_RE = re.compile(
 _LOG_DELETED_RE = re.compile(r":\s*([^:]+?):\s*Deleted(?:\s|$)", re.IGNORECASE)
 _LOG_ERROR_RE = re.compile(r"\bERROR\b\s*:\s*(.+)", re.IGNORECASE)
 
+# rclone check summary + mismatch patterns. check outputs to stderr (or stdout
+# depending on version/flags); we capture both and scan for these anchors.
+#   2026/01/01 00:00:00 INFO  : Found 2 missing on Local
+#   2026/01/01 00:00:00 INFO  : Found 1 missing on Remote
+#   2026/01/01 00:00:00 INFO  : 3 differences found
+#   2026/01/01 00:00:00 NOTICE: file.md: sizes differ
+_CHECK_MISSING_LOCAL_RE = re.compile(r"Found (\d+) missing on Local", re.IGNORECASE)
+_CHECK_MISSING_REMOTE_RE = re.compile(r"Found (\d+) missing on Remote", re.IGNORECASE)
+_CHECK_DIFFS_RE = re.compile(r"(\d+) differences?\s+found", re.IGNORECASE)
+_CHECK_MISMATCH_RE = re.compile(r"(?:NOTICE|ERROR)\s*:\s*([^\n]+?):\s*(.+)", re.IGNORECASE)
+
 # rclone's own scratch / state artifacts that may appear in a log line but are
 # NOT corpus content. They should never trip the "corpus changed -> reindex"
 # signal even if one ever leaks past the filter file.
@@ -173,6 +184,26 @@ class FileEvent:
 
 
 @dataclass
+class CheckResult:
+    """Outcome of a post-sync ``rclone check`` integrity run."""
+
+    ok: bool              # True when rclone check exits 0 and no differences found
+    missing_local: int    # files on remote not present locally (anomaly after pull)
+    missing_remote: int   # files locally not present on remote (extra local files)
+    differences: int      # total mismatches (includes missing + hash/size diffs)
+    errors: list[str] = field(default_factory=list)  # individual mismatch lines (capped)
+
+    def to_audit_dict(self) -> dict:
+        return {
+            "ok": self.ok,
+            "missing_local": self.missing_local,
+            "missing_remote": self.missing_remote,
+            "differences": self.differences,
+            "errors_n": len(self.errors),
+        }
+
+
+@dataclass
 class SyncResult:
     """Outcome of a single sync run."""
 
@@ -187,6 +218,7 @@ class SyncResult:
     aborted_for_safety: bool = False  # True if --max-delete / --max-transfer tripped
     dry_run: bool = False
     corpus_changed: bool = False  # True if any event hit data/corpus/**
+    check_result: CheckResult | None = None  # populated when post_sync_check=True
 
     @property
     def duration_sec(self) -> float:
@@ -199,7 +231,7 @@ class SyncResult:
         return counts
 
     def to_audit_dict(self) -> dict:
-        return {
+        d: dict = {
             "event": "sync_completed" if self.success else "sync_failed",
             "direction": self.direction,
             "duration_sec": round(self.duration_sec, 3),
@@ -210,6 +242,9 @@ class SyncResult:
             "dry_run": self.dry_run,
             "corpus_changed": self.corpus_changed,
         }
+        if self.check_result is not None:
+            d["check"] = self.check_result.to_audit_dict()
+        return d
 
 
 def parse_log(log_path: str) -> tuple[list[FileEvent], list[str]]:
@@ -292,6 +327,101 @@ def hash_changed_files(events: Sequence[FileEvent], local_root: str) -> list[Fil
         except OSError:
             out.append(ev)
     return out
+
+
+# ---------------------------------------------------------------------------
+# Post-sync integrity check
+# ---------------------------------------------------------------------------
+
+def build_check_argv(cfg: RcloneConfig, rclone_bin: str = "rclone") -> list[str]:
+    """Build the argv for ``rclone check`` (read-only diff of remote vs local).
+
+    Uses the same filter file as the sync run so only corpus files in scope are
+    compared. ``--checksum`` and ``--fast-list`` mirror the sync config so the
+    check uses the same comparison strategy.
+    """
+    argv = [
+        rclone_bin, "check",
+        cfg.remote, cfg.local_path,
+        "--filter-from", cfg.filter_file,
+    ]
+    if cfg.checksum:
+        argv.append("--checksum")
+    if cfg.fast_list:
+        argv.append("--fast-list")
+    return argv
+
+
+def run_post_sync_check(cfg: RcloneConfig, rclone_bin: str = "rclone") -> CheckResult:
+    """Run ``rclone check`` after a successful sync and return a :class:`CheckResult`.
+
+    ``rclone check`` exits 0 when remote and local are identical (filtered),
+    non-zero when differences exist. This function NEVER raises on differences --
+    it returns a ``CheckResult(ok=False)`` so callers can react. Only raises
+    :class:`SyncRuntimeError` on subprocess failure (binary gone, OS error).
+
+    Timeout reuses ``cfg.sync_timeout_sec`` (0 = unbounded). Audit event is emitted
+    whether the check passes or not so the operator has a verifiable record.
+    """
+    argv = build_check_argv(cfg, rclone_bin)
+    timeout = cfg.sync_timeout_sec if cfg.sync_timeout_sec > 0 else None
+    try:
+        completed = subprocess.run(  # noqa: S603 -- argv list, absolute binary, no shell
+            argv,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise SyncRuntimeError(
+            f"rclone check timed out after {cfg.sync_timeout_sec}s",
+            details={"op": "check"},
+        ) from exc
+    except (FileNotFoundError, subprocess.SubprocessError) as exc:
+        raise SyncRuntimeError(
+            f"rclone check subprocess failed: {type(exc).__name__}",
+            details={"op": "check"},
+        ) from exc
+
+    # rclone check writes to stderr (text mode). Combine stdout+stderr defensively
+    # in case a future rclone version changes the target stream.
+    combined = (completed.stdout or "") + (completed.stderr or "")
+    missing_local = 0
+    missing_remote = 0
+    differences = 0
+    errors: list[str] = []
+
+    for line in combined.splitlines():
+        m = _CHECK_MISSING_LOCAL_RE.search(line)
+        if m:
+            missing_local = int(m.group(1))
+            continue
+        m = _CHECK_MISSING_REMOTE_RE.search(line)
+        if m:
+            missing_remote = int(m.group(1))
+            continue
+        m = _CHECK_DIFFS_RE.search(line)
+        if m:
+            differences = int(m.group(1))
+            continue
+        m = _CHECK_MISMATCH_RE.search(line)
+        if m:
+            errors.append(f"{m.group(1).strip()}: {m.group(2).strip()}"[:200])
+
+    ok = completed.returncode == 0 and differences == 0
+    result = CheckResult(
+        ok=ok,
+        missing_local=missing_local,
+        missing_remote=missing_remote,
+        differences=differences,
+        errors=errors[:20],
+    )
+    audit_log({
+        "event": "sync_check_ok" if ok else "sync_check_differences",
+        **result.to_audit_dict(),
+    })
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -612,6 +742,13 @@ def _run_sync_locked(
         dry_run=dry_run,
         corpus_changed=corpus_changed,
     )
+
+    # Post-sync integrity check: confirm remote and local agree after a successful
+    # non-dry-run sync. Skipped on failure or dry-run because there is nothing to
+    # verify. Does not raise on differences -- sets check_result.ok=False instead
+    # so the caller can surface the discrepancy without masking the sync result.
+    if result.success and not dry_run and getattr(cfg, "post_sync_check", False):
+        result.check_result = run_post_sync_check(cfg, rclone_bin)
 
     # Per-file audit events -- one row per file, with sha256 when available.
     for ev in events:
