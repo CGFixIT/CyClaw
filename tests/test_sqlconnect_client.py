@@ -6,6 +6,7 @@ import pytest
 
 from agentic.sqlconnect.client import (
     SqlClient,
+    _columns_and_types,
     assert_read_only_sql,
     quote_identifier,
     validate_identifier,
@@ -202,3 +203,81 @@ def test_execute_timeout_disabled_when_non_positive(monkeypatch):
     client._execute("SELECT 1")
     # No timeout SET issued; only the user query runs.
     assert fake.conn.cur.executed == [("SELECT 1", ())]
+
+
+# ---------------------------------------------------------------------------
+# column type metadata
+# ---------------------------------------------------------------------------
+
+def test_columns_and_types_renders_portable_type_names():
+    # pyodbc-style: type_code is a Python type -> its __name__.
+    assert _columns_and_types([("id", int), ("name", str)]) == (["id", "name"], ["int", "str"])
+    # psycopg-style: type_code is a numeric OID -> stringified.
+    assert _columns_and_types([("c", 23)]) == (["c"], ["23"])
+    # non-row statement (description is None) and a description row without a
+    # type code both degrade gracefully rather than raising.
+    assert _columns_and_types(None) == ([], [])
+    assert _columns_and_types([("c",)]) == (["c"], ["None"])
+
+
+def test_execute_result_includes_column_types(monkeypatch):
+    sc = SqlConnectConfig(driver="postgres")
+    monkeypatch.setenv(sc.dsn_env, "postgresql://x")
+    client = SqlClient({}, sc)
+    fake = _FakeDriver()
+    monkeypatch.setattr(client, "_import_driver", lambda: fake)
+    res = client._execute("SELECT 1")
+    assert res["columns"] == ["col"]  # from _FakeCursor.description
+    assert "column_types" in res and isinstance(res["column_types"], list)
+
+
+# ---------------------------------------------------------------------------
+# explain + row_count read-only ops
+# ---------------------------------------------------------------------------
+
+def test_explain_wraps_a_guarded_select_postgres(monkeypatch):
+    sc = SqlConnectConfig(driver="postgres")
+    monkeypatch.setenv(sc.dsn_env, "postgresql://x")
+    client = SqlClient({}, sc)
+    fake = _FakeDriver()
+    monkeypatch.setattr(client, "_import_driver", lambda: fake)
+    res = client.explain("SELECT 1")
+    assert res["op"] == "explain"
+    # EXPLAIN-wraps the guard-cleaned statement; runs after the timeout SET.
+    assert fake.conn.cur.executed[-1][0] == "EXPLAIN SELECT 1"
+
+
+def test_explain_rejects_dml_before_connect():
+    client = SqlClient({}, SqlConnectConfig(driver="postgres"))
+    with pytest.raises(SqlConnectError):
+        client.explain("DELETE FROM t")  # SELECT-only guard fires before any DB work
+
+
+def test_explain_refused_for_mssql():
+    # MSSQL has no single-statement EXPLAIN; the op is refused, never emitted.
+    client = SqlClient({}, SqlConnectConfig(driver="mssql"))
+    with pytest.raises(SqlConnectError):
+        client.explain("SELECT 1")
+
+
+def test_explain_op_guard_when_not_allowlisted():
+    client = SqlClient({}, SqlConnectConfig(allowed_sql_ops=["schema_list"]))
+    with pytest.raises(SqlConnectError):
+        client.explain("SELECT 1")
+
+
+def test_row_count_builds_count_star(monkeypatch):
+    sc = SqlConnectConfig(driver="postgres")
+    monkeypatch.setenv(sc.dsn_env, "postgresql://x")
+    client = SqlClient({}, sc)
+    fake = _FakeDriver()
+    monkeypatch.setattr(client, "_import_driver", lambda: fake)
+    res = client.row_count("public.users")
+    assert res["op"] == "row_count" and res["table"] == "public.users"
+    assert fake.conn.cur.executed[-1][0] == 'SELECT count(*) AS row_count FROM "public"."users"'
+
+
+def test_row_count_rejects_bad_identifier_before_connect():
+    client = SqlClient({}, SqlConnectConfig(driver="postgres"))
+    with pytest.raises(SqlConnectError):
+        client.row_count("a; DROP")  # identifier guard fires before any DB work

@@ -5,6 +5,8 @@ Subcommands:
     status   Print sqlconnect config (driver, dsn env, ops, caps).
     schema   List table schemas (read-only).
     query    Run a read-only query (--sql SELECT...) or preview a table (--table).
+             --sql --explain returns the query plan (Postgres); --table --count
+             returns count(*) instead of a row preview.
     test     Run the pre-flight self-test.
 
 Exit codes: 0 ok (and the clean no-op when disabled) / 2 op or query failed /
@@ -105,8 +107,12 @@ def cmd_schema(args: argparse.Namespace) -> int:
 
 def cmd_query(args: argparse.Namespace) -> int:
     if args.table:
+        if args.count:
+            return _run(args, "row_count", table=args.table)
         return _run(args, "table_preview", table=args.table)
     if args.sql:
+        if args.explain:
+            return _run(args, "explain", sql=args.sql)
         return _run(args, "run_select", sql=args.sql)
     _err("query requires --sql or --table")
     return EXIT_FAIL
@@ -138,6 +144,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_query = sub.add_parser("query", help="Run a read-only query or preview a table.")
     p_query.add_argument("--sql", help="A single SELECT/WITH query.")
     p_query.add_argument("--table", help="Preview a table (schema.table).")
+    p_query.add_argument("--explain", action="store_true", help="With --sql: return the query plan (Postgres only).")
+    p_query.add_argument("--count", action="store_true", help="With --table: return count(*) instead of a preview.")
     p_query.set_defaults(func=cmd_query)
 
     p_test = sub.add_parser("test", help="Run the pre-flight self-test.")

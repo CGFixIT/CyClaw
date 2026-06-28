@@ -58,6 +58,27 @@ def test_query_requires_arg(tmp_path):
     assert cli.main(["--config", cp, "query"]) == 2
 
 
+def test_query_explain_selected_for_valid_sql(tmp_path):
+    # --sql --explain on Postgres passes the guard, then hits the absent driver
+    # import -> EXIT_ENV, proving the explain op was selected (not rejected).
+    cp = _cfg(tmp_path, {"enabled": True})
+    assert cli.main(["--config", cp, "query", "--sql", "SELECT 1", "--explain"]) == 3
+
+
+def test_query_explain_refused_for_mssql(tmp_path):
+    # explain is unsupported on mssql -> SqlConnectError -> EXIT_FAIL, before any
+    # driver import is attempted.
+    cp = _cfg(tmp_path, {"enabled": True, "driver": "mssql"})
+    assert cli.main(["--config", cp, "query", "--sql", "SELECT 1", "--explain"]) == 2
+
+
+def test_query_count_selected_for_table(tmp_path):
+    # --table --count selects row_count; the identifier is valid so it reaches the
+    # absent driver import -> EXIT_ENV (proving row_count was selected).
+    cp = _cfg(tmp_path, {"enabled": True})
+    assert cli.main(["--config", cp, "query", "--table", "public.t", "--count"]) == 3
+
+
 def test_schema_driver_absent_exit_env(tmp_path):
     cp = _cfg(tmp_path, {"enabled": True})
     assert cli.main(["--config", cp, "schema"]) == 3

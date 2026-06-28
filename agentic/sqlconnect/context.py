@@ -22,6 +22,10 @@ def run_op(
         return client.table_preview(table or "")
     if op == "run_select":
         return client.run_select(sql or "")
+    if op == "explain":
+        return client.explain(sql or "")
+    if op == "row_count":
+        return client.row_count(table or "")
     raise ValueError(f"unknown sql op: {op!r}")
 
 
