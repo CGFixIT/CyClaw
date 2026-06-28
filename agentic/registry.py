@@ -24,6 +24,7 @@ from __future__ import annotations
 import difflib
 import hashlib
 import json
+import logging
 import os
 import re
 import threading
@@ -38,6 +39,8 @@ from utils.logger import audit_log
 
 # Reuse the soul scanner's OWASP baseline so the two never drift.
 from utils.personality import OWASP_INJECTION_PATTERNS
+
+logger = logging.getLogger(__name__)
 
 
 def _utcnow() -> str:
@@ -167,6 +170,25 @@ class SkillRegistry:
             if p not in sources:
                 sources.append(p)
         compiled: list[tuple] = list(_compile_injection_patterns(tuple(sources)))
+        # Surface uncompilable patterns. _compile_injection_patterns silently drops
+        # an invalid regex (re.error), which quietly SHRINKS the enforced injection
+        # gate: a malformed banned_patterns entry in config would weaken
+        # skill-poisoning defense with no signal at all. Log + audit the dropped
+        # patterns so an operator can fix the typo. (The gate still operates on
+        # whatever DID compile; the total-failure case is fail-closed just below.)
+        compiled_srcs = {src for src, _pat in compiled}
+        dropped = [s for s in sources if s not in compiled_srcs]
+        if dropped:
+            logger.warning(
+                "skills-registry injection scanner dropped %d uncompilable pattern(s); "
+                "the enforced gate is smaller than configured. First few: %r",
+                len(dropped), dropped[:3],
+            )
+            audit_log({
+                "event": "agentic_skill_pattern_compile_failed",
+                "dropped_count": len(dropped),
+                "patterns": dropped[:10],
+            })
         # Fail closed. Unlike the soul scanner (advisory at propose time), this
         # scanner is ENFORCED at apply_skill: an empty pattern set would make
         # _scan_injection a silent no-op, so every skill would pass the injection

@@ -11,6 +11,7 @@ clean it up.
 
 from __future__ import annotations
 
+import logging
 import os
 import time
 import uuid
@@ -288,5 +289,31 @@ def test_empty_pattern_set_fails_closed(tmp_path, monkeypatch):
         with pytest.raises(SkillRegistryError) as exc:
             _registry_with_cfg(tmp_path, {"policy": {"prompt_filter": {"banned_patterns": []}}})
         assert "fail-closed" in str(exc.value).lower()
+    finally:
+        reset_config_cache()
+
+
+def test_uncompilable_pattern_is_logged_not_silent(tmp_path, caplog):
+    # A malformed banned_patterns entry can't compile. It must be DROPPED (so the
+    # gate still runs on what compiled) but LOGGED -- never silently shrinking the
+    # enforced injection gate with no signal to the operator.
+    cfg_doc = {"policy": {"prompt_filter": {"banned_patterns": ["(unclosed", "validword"]}}}
+    try:
+        with caplog.at_level(logging.WARNING, logger="agentic.registry"):
+            reg = _registry_with_cfg(tmp_path, cfg_doc)
+        # OWASP baseline + "validword" still compiled -> the registry built and enforces.
+        assert len(reg._injection_patterns) >= 1
+        assert any("uncompilable" in r.getMessage() for r in caplog.records)
+    finally:
+        reset_config_cache()
+
+
+def test_uncompilable_pattern_is_audited(tmp_path):
+    # The drop is also recorded in the audit log for after-the-fact review.
+    cfg_doc = {"policy": {"prompt_filter": {"banned_patterns": ["[unterminated"]}}}
+    try:
+        _registry_with_cfg(tmp_path, cfg_doc)
+        audit = (tmp_path / "audit.jsonl").read_text(encoding="utf-8")
+        assert "agentic_skill_pattern_compile_failed" in audit
     finally:
         reset_config_cache()
