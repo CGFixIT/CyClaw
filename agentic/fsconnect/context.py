@@ -22,6 +22,7 @@ def run_read(
     root: str | None = None,
     pattern: str | None = None,
     regex: bool = False,
+    recursive: bool = True,
 ) -> dict:
     """Open a client, run one read op, and return its result bundle."""
     with FsClient(cfg, fs_cfg, config_path=config_path) as client:
@@ -33,6 +34,8 @@ def run_read(
             return client.fs_read(target, root=root)
         if op == "fs_grep":
             return client.fs_grep(target, pattern or "", root=root, regex=regex)
+        if op == "fs_glob":
+            return client.fs_glob(target, pattern or "", root=root, recursive=recursive)
         raise ValueError(f"unknown read op: {op!r}")
 
 

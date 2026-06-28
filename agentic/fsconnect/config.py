@@ -26,7 +26,7 @@ from dataclasses import asdict, dataclass, field
 from utils.errors import FsConnectConfigError
 from utils.logger import _get_config
 
-DEFAULT_ALLOWED_FS_OPS = ("fs_list", "fs_stat", "fs_read", "fs_grep")
+DEFAULT_ALLOWED_FS_OPS = ("fs_list", "fs_stat", "fs_read", "fs_grep", "fs_glob")
 VALID_FS_OPS = frozenset(DEFAULT_ALLOWED_FS_OPS)
 DEFAULT_MAX_FILE_BYTES = 5 * 1024 * 1024  # 5 MiB
 DEFAULT_MAX_WRITE_BYTES = 10 * 1024 * 1024  # 10 MiB

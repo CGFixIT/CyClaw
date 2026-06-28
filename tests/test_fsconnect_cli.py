@@ -59,6 +59,19 @@ def test_read_enabled(tmp_path, capsys):
     assert "hello" in capsys.readouterr().out
 
 
+def test_glob_enabled(tmp_path, capsys):
+    share = tmp_path / "share"
+    (share / "sub").mkdir(parents=True)
+    (share / "a.md").write_text("x", encoding="utf-8")
+    (share / "sub" / "b.md").write_text("y", encoding="utf-8")
+    (share / "c.txt").write_text("z", encoding="utf-8")
+    cp = _cfg(tmp_path, {"enabled": True, "allowed_roots": [str(share)]})
+    assert cli.main(["--config", cp, "glob", "--pattern", "*.md"]) == 0
+    out = capsys.readouterr().out
+    assert "a.md" in out and "sub/b.md" in out
+    assert "c.txt" not in out  # different extension
+
+
 def test_write_dryrun_when_disabled(tmp_path, capsys):
     wz = tmp_path / "wz"
     cp = _cfg(tmp_path, {"enabled": True, "writable_roots": [str(wz)], "writes_enabled": False})

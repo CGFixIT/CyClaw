@@ -102,6 +102,63 @@ def test_fs_grep_binary_errors(env):
             c.fs_grep("blob.bin", "x")
 
 
+def test_fs_glob_recursive_matches_at_any_depth(env):
+    cfg, fs_cfg, cp, share, _audit = env
+    (share / "sub" / "deep.txt").write_text("x", encoding="utf-8")
+    (share / "sub" / "note.md").write_text("y", encoding="utf-8")
+    with FsClient(cfg, fs_cfg, config_path=cp) as c:
+        res = c.fs_glob("", "*.txt")
+    paths = {m["path"] for m in res["matches"]}
+    assert {"hello.txt", "danger.txt", "sub/deep.txt"} <= paths  # * spans / when recursive
+    assert "sub/note.md" not in paths  # different extension
+    assert res["recursive"] is True
+
+
+def test_fs_glob_non_recursive_only_top_level(env):
+    cfg, fs_cfg, cp, share, _audit = env
+    (share / "sub" / "deep.txt").write_text("x", encoding="utf-8")
+    with FsClient(cfg, fs_cfg, config_path=cp) as c:
+        res = c.fs_glob("", "*.txt", recursive=False)
+    paths = {m["path"] for m in res["matches"]}
+    assert {"hello.txt", "danger.txt"} <= paths
+    assert "sub/deep.txt" not in paths  # not descended
+
+
+def test_fs_glob_under_subdir_target_matches_relative(env):
+    cfg, fs_cfg, cp, share, _audit = env
+    (share / "sub" / "note.md").write_text("y", encoding="utf-8")
+    (share / "sub" / "deeper").mkdir()
+    (share / "sub" / "deeper" / "x.md").write_text("z", encoding="utf-8")
+    with FsClient(cfg, fs_cfg, config_path=cp) as c:
+        res = c.fs_glob("sub", "*.md")
+    paths = {m["path"] for m in res["matches"]}
+    # pattern matches the path RELATIVE to target; reported path is from the root.
+    assert "sub/note.md" in paths
+    assert "sub/deeper/x.md" in paths
+
+
+def test_fs_glob_empty_pattern_errors(env):
+    cfg, fs_cfg, cp, _share, _audit = env
+    with FsClient(cfg, fs_cfg, config_path=cp) as c:
+        with pytest.raises(FsConnectError):
+            c.fs_glob("", "")
+
+
+def test_fs_glob_op_not_allowed(env):
+    cfg, fs_cfg, cp, _share, _audit = env
+    fs_cfg.allowed_fs_ops = ["fs_list"]  # fs_glob not allow-listed
+    with FsClient(cfg, fs_cfg, config_path=cp) as c:
+        with pytest.raises(FsConnectError):
+            c.fs_glob("", "*.txt")
+
+
+def test_context_run_read_fs_glob(env):
+    cfg, fs_cfg, cp, _share, _audit = env
+    res = context.run_read(cfg, fs_cfg, "fs_glob", config_path=cp, target="", pattern="*.txt")
+    assert res["op"] == "fs_glob"
+    assert res["match_count"] >= 2  # hello.txt + danger.txt
+
+
 def test_op_not_allowed(env):
     cfg, fs_cfg, cp, _share, _audit = env
     fs_cfg.allowed_fs_ops = ["fs_list"]  # restrict

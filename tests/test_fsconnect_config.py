@@ -39,7 +39,7 @@ def test_defaults_when_minimal(tmp_path):
     assert fc.enabled is True
     assert fc.allowed_roots == [str(tmp_path)]
     assert fc.writes_enabled is False
-    assert fc.allowed_fs_ops == ["fs_list", "fs_stat", "fs_read", "fs_grep"]
+    assert fc.allowed_fs_ops == ["fs_list", "fs_stat", "fs_read", "fs_grep", "fs_glob"]
     # null writable root expands to the OS default; index_root defaults to it
     assert fc.write_root_strs == [os_default_writable_root()]
     assert fc.index_root == os_default_writable_root()

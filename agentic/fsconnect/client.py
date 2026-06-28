@@ -14,6 +14,7 @@ Never imported by gate.py / graph.py / mcp_hybrid_server.py.
 
 from __future__ import annotations
 
+import fnmatch
 import re
 from functools import lru_cache
 
@@ -26,6 +27,7 @@ from utils.logger import audit_log
 from utils.personality import OWASP_INJECTION_PATTERNS
 
 _MAX_GREP_MATCHES = 200
+_MAX_GLOB_MATCHES = 1000
 
 
 @lru_cache(maxsize=8)
@@ -174,6 +176,46 @@ class FsClient:
                      "match_count": len(matches)})
         return {"op": "fs_grep", "path": target, "pattern": pattern, "regex": regex,
                 "match_count": len(matches), "truncated": truncated, "matches": matches}
+
+    def fs_glob(
+        self, target: str = "", pattern: str = "", *, root: str | None = None, recursive: bool = True
+    ) -> dict:
+        """Find entries under *target* whose path matches a glob *pattern*.
+
+        Enumeration goes through the SAME pathsafe ``list_dir`` descent every read
+        uses (per-component ``O_NOFOLLOW``) -- never Python's ``glob``, which would
+        resolve paths outside the security core. The pattern is matched (via
+        ``fnmatch``) against each entry's path RELATIVE to *target*; ``*`` spans
+        ``/``, so ``*.md`` finds matches at any depth when ``recursive`` is true.
+        Results are capped at ``_MAX_GLOB_MATCHES`` (``truncated`` flags the cap).
+        """
+        self._guard_op("fs_glob")
+        if not pattern:
+            raise FsConnectError("fs_glob requires a non-empty pattern", code="FSCONNECT_BAD_ARG")
+        matches: list[dict] = []
+        prefix = f"{target}/" if target else ""
+
+        def _walk(rel: str) -> bool:
+            """Enumerate *rel*; return False once the match cap is hit (stop)."""
+            for entry in self._roots.list_dir(rel, root=root):
+                name = entry["name"]
+                child = f"{rel}/{name}" if rel else name
+                relpath = child[len(prefix):] if prefix and child.startswith(prefix) else child
+                if fnmatch.fnmatch(relpath, pattern):
+                    if len(matches) >= _MAX_GLOB_MATCHES:
+                        return False
+                    matches.append({"path": child, "type": entry["type"],
+                                    "size": entry.get("size", 0)})
+                if recursive and entry["type"] == "dir" and not _walk(child):
+                    return False
+            return True
+
+        truncated = not _walk(target)
+        self._audit({"event": "fsconnect_read", "op": "fs_glob", "path": target or ".",
+                     "match_count": len(matches)})
+        return {"op": "fs_glob", "path": target or ".", "pattern": pattern,
+                "recursive": recursive, "match_count": len(matches),
+                "truncated": truncated, "matches": matches}
 
 
 __all__ = ["FsClient", "build_injection_patterns"]

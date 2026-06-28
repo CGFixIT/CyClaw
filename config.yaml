@@ -314,6 +314,7 @@ fsconnect:
     - fs_stat
     - fs_read
     - fs_grep
+    - fs_glob                    # find files by glob pattern (read-only, pathsafe enumeration)
   allow_unc_roots: false         # UNC \\server\share roots opt-in (egress risk); default refuse
   max_file_bytes: 5242880        # 5 MiB read cap (enforced via fstat on the open handle)
   follow_symlinks: false         # hard default; ANY symlink/reparse point under a root is DENIED

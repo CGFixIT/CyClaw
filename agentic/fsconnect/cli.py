@@ -7,6 +7,7 @@ Subcommands:
     read     Read a file under a read root (--root --path).
     stat     Stat a path under a read root.
     grep     Search a file for a pattern (--pattern [--regex]).
+    glob     Find files matching a glob under a read root (--pattern [--no-recursive]).
     write    Write a file in a writable root (gated; --reason; --overwrite/--confirm).
     append   Append to a file in a writable root (gated; --reason).
     mkdir    Make a directory in a writable root (gated; --reason).
@@ -121,6 +122,7 @@ def _run_read(args: argparse.Namespace, op: str) -> int:
             root=getattr(args, "root", None),
             pattern=getattr(args, "pattern", None),
             regex=getattr(args, "regex", False),
+            recursive=getattr(args, "recursive", True),
         )
     except FsConnectError as exc:
         _err(exc.message)
@@ -143,6 +145,10 @@ def cmd_stat(args: argparse.Namespace) -> int:
 
 def cmd_grep(args: argparse.Namespace) -> int:
     return _run_read(args, "fs_grep")
+
+
+def cmd_glob(args: argparse.Namespace) -> int:
+    return _run_read(args, "fs_glob")
 
 
 def _run_write(args: argparse.Namespace, op: str) -> int:
@@ -273,6 +279,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_grep.add_argument("--pattern", required=True)
     p_grep.add_argument("--regex", action="store_true", help="Treat pattern as a regex.")
     p_grep.set_defaults(func=cmd_grep)
+
+    p_glob = sub.add_parser("glob", help="Find files matching a glob under a read root.")
+    p_glob.add_argument("--root")
+    p_glob.add_argument("--path", default="", help="Directory to search under (default: root).")
+    p_glob.add_argument("--pattern", required=True, help="Glob pattern, e.g. '*.md' or 'sub/*.txt'.")
+    p_glob.add_argument("--no-recursive", action="store_false", dest="recursive",
+                        help="Search only the immediate directory, not subdirectories.")
+    p_glob.set_defaults(func=cmd_glob, recursive=True)
 
     for name, func in (("write", cmd_write), ("append", cmd_append)):
         p = sub.add_parser(name, help=f"{name.capitalize()} a file in a writable root (gated).")
