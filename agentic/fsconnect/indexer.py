@@ -100,9 +100,10 @@ class FsIndexer:
                     manifest.append({"path": child, "size": entry["size"],
                                      "skipped": "read_error", "error": type(exc).__name__})
                     continue
+                digest = hashlib.sha256(data).hexdigest()  # hash of file CONTENT, not metadata
                 manifest.append({
                     "path": child, "size": entry["size"], "mtime": entry["mtime"],
-                    "sha256": hashlib.sha256(data).hexdigest(),
+                    "sha256": digest,
                     "injection_flag_count": self._scan(data),
                 })
                 # When apply() drives the walk it passes a staging callback so the
@@ -137,15 +138,22 @@ class FsIndexer:
     def _save_cache(self, staging: Path, manifest: list[dict]) -> None:
         """Persist the skip-cache from this run's manifest (atomic tmp + os.replace).
 
-        Only successfully-read/unchanged entries (those carrying sha256+mtime) are
-        kept; too_large / read_error rows and files that vanished from the share are
-        dropped, so the cache self-prunes each run.
+        Only successfully-read/unchanged entries (those carrying a content hash and
+        a modtime) are kept; too_large / read_error rows and files that vanished from
+        the share are dropped, so the cache self-prunes each run.
         """
-        files = {
-            m["path"]: {"size": m["size"], "mtime": m["mtime"], "sha256": m["sha256"],
-                        "injection_flag_count": m.get("injection_flag_count", 0)}
-            for m in manifest if "sha256" in m and "mtime" in m
-        }
+        files: dict[str, dict] = {}
+        for m in manifest:
+            if "sha256" not in m:
+                continue
+            if "mtime" not in m:
+                continue
+            files[m["path"]] = {
+                "size": m["size"],
+                "mtime": m["mtime"],
+                "sha256": m["sha256"],
+                "injection_flag_count": m.get("injection_flag_count", 0),
+            }
         tmp = staging / (_CACHE_NAME + ".tmp")
         tmp.write_text(json.dumps({"files": files}, indent=2, sort_keys=True), encoding="utf-8")
         os.replace(tmp, staging / _CACHE_NAME)
