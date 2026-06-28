@@ -33,6 +33,8 @@ DEFAULT_MODE = "read"  # "read" (safe default) | "write" (opt-in, still gated)
 DEFAULT_WRITES_ENABLED = False
 DEFAULT_GH_MIN_VERSION = "2.40.0"
 DEFAULT_REGISTRY_PATH = "data/agentic/skills_registry.json"
+DEFAULT_GH_TIMEOUT_SEC = 30  # wall-clock ceiling per gh read subprocess
+DEFAULT_GH_RETRIES = 2  # extra attempts on a TRANSIENT gh failure (matches models.*.retry)
 DEFAULT_ALLOWED_READ_OPS = (
     "pr_view",
     "pr_list",
@@ -69,6 +71,9 @@ class AgenticConfig:
     allowed_read_ops: list[str] = field(
         default_factory=lambda: list(DEFAULT_ALLOWED_READ_OPS)
     )
+    # gh read-path resilience knobs (threaded into gh_client.run_read).
+    gh_timeout_sec: int = DEFAULT_GH_TIMEOUT_SEC
+    gh_retries: int = DEFAULT_GH_RETRIES
 
     # --- Validation -------------------------------------------------------
 
@@ -77,6 +82,7 @@ class AgenticConfig:
         self._validate_mode()
         self._validate_gh_min_version()
         self._validate_registry_path()
+        self._validate_gh_runtime()
 
     def _validate_repo(self) -> None:
         if not _REPO_RE.match(self.repo):
@@ -123,6 +129,20 @@ class AgenticConfig:
                 details={"data_root": str(data_root)},
             )
         self.registry_path = str(resolved)
+
+    def _validate_gh_runtime(self) -> None:
+        t = self.gh_timeout_sec
+        if not isinstance(t, int) or isinstance(t, bool) or t <= 0:
+            raise AgenticConfigError(
+                f"agentic.gh_timeout_sec must be a positive integer, got: {t!r}",
+                details={"received": t},
+            )
+        r = self.gh_retries
+        if not isinstance(r, int) or isinstance(r, bool) or r < 0:
+            raise AgenticConfigError(
+                f"agentic.gh_retries must be an integer >= 0 (0 = no retry), got: {r!r}",
+                details={"received": r},
+            )
 
     # --- Computed properties ---------------------------------------------
 

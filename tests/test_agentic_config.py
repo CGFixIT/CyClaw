@@ -118,6 +118,28 @@ def test_rejects_registry_path_escape(tmp_path: Path) -> None:
         load_agentic_config(_write_config(tmp_path, _base_block(registry_path="data/../etc/x.json")))
 
 
+def test_gh_runtime_defaults(tmp_path: Path) -> None:
+    cfg = load_agentic_config(_write_config(tmp_path, _base_block()))
+    assert cfg.gh_timeout_sec == 30
+    assert cfg.gh_retries == 2
+
+
+def test_gh_runtime_overrides(tmp_path: Path) -> None:
+    cfg = load_agentic_config(_write_config(tmp_path, _base_block(gh_timeout_sec=60, gh_retries=0)))
+    assert cfg.gh_timeout_sec == 60
+    assert cfg.gh_retries == 0
+
+
+def test_rejects_bad_gh_timeout(tmp_path: Path) -> None:
+    with pytest.raises(AgenticConfigError):
+        load_agentic_config(_write_config(tmp_path, _base_block(gh_timeout_sec=0)))
+
+
+def test_rejects_negative_gh_retries(tmp_path: Path) -> None:
+    with pytest.raises(AgenticConfigError):
+        load_agentic_config(_write_config(tmp_path, _base_block(gh_retries=-1)))
+
+
 def test_unknown_keys_collected_not_fatal(tmp_path: Path) -> None:
     cfg = load_agentic_config(_write_config(tmp_path, _base_block(typo="oops")))
     assert cfg._unknown_keys == ["typo"]  # type: ignore[attr-defined]

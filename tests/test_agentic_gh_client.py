@@ -5,6 +5,7 @@ No live gh binary required: subprocess and shutil.which are mocked.
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -13,7 +14,12 @@ import pytest
 import yaml
 
 from agentic import gh_client
-from agentic.gh_client import build_read_argv, check_gh_version, run_read
+from agentic.gh_client import (
+    _is_transient_gh_error,
+    build_read_argv,
+    check_gh_version,
+    run_read,
+)
 from utils.errors import AgenticError, GhNotInstalledError, GhVersionError
 from utils.logger import reset_config_cache
 
@@ -53,6 +59,22 @@ def test_build_pr_diff_argv():
 def test_build_repo_view_argv():
     argv = build_read_argv("repo_view", "owner/repo")
     assert argv[1:3] == ["repo", "view"] and "owner/repo" in argv
+
+
+def test_pr_view_argv_requests_richer_fields():
+    argv = build_read_argv("pr_view", "owner/repo", number=1)
+    fields = argv[argv.index("--json") + 1]
+    for f in ("labels", "assignees", "createdAt", "mergeable", "changedFiles"):
+        assert f in fields
+
+
+def test_issue_and_repo_view_request_richer_fields():
+    issue_fields = build_read_argv("issue_view", "owner/repo", number=1)
+    ifields = issue_fields[issue_fields.index("--json") + 1]
+    assert "assignees" in ifields and "milestone" in ifields and "comments" in ifields
+    repo_argv = build_read_argv("repo_view", "owner/repo")
+    rfields = repo_argv[repo_argv.index("--json") + 1]
+    assert "repositoryTopics" in rfields and "primaryLanguage" in rfields
 
 
 def test_build_rejects_unknown_op():
@@ -140,3 +162,61 @@ def test_run_read_bad_json_raises():
          patch.object(gh_client.subprocess, "run", return_value=_completed(stdout="not json")):
         with pytest.raises(AgenticError):
             run_read("pr_list", "owner/repo")
+
+
+# --- transient retry -------------------------------------------------------
+
+def test_is_transient_gh_error_classifies():
+    assert _is_transient_gh_error("error: HTTP 503 Service Unavailable")
+    assert _is_transient_gh_error("dial tcp: i/o timeout")
+    assert _is_transient_gh_error("API rate limit exceeded")
+    # gh's 404 message and auth/usage errors must NOT be treated as transient.
+    assert not _is_transient_gh_error("Could not resolve to a PullRequest (not found)")
+    assert not _is_transient_gh_error("unknown flag: --bogus")
+    assert not _is_transient_gh_error("")
+
+
+def test_run_read_retries_transient_then_succeeds():
+    transient = _completed(stderr="error: HTTP 503 Service Unavailable", returncode=1)
+    success = _completed(stdout='{"number": 1}', returncode=0)
+    with patch.object(gh_client, "check_gh_version", return_value=(2, 55, 0)), \
+         patch.object(gh_client.shutil, "which", return_value="/usr/bin/gh"), \
+         patch.object(gh_client.subprocess, "run", side_effect=[transient, success]) as mrun, \
+         patch.object(gh_client.time, "sleep"):
+        out = run_read("pr_view", "owner/repo", number=1, retries=2, retry_backoff_sec=0)
+    assert out["data"]["number"] == 1
+    assert mrun.call_count == 2  # one transient retry, then success
+
+
+def test_run_read_does_not_retry_nontransient():
+    # A 404 ("could not resolve to a PR") is deterministic -> single attempt, raises.
+    notfound = _completed(stderr="Could not resolve to a PullRequest (not found)", returncode=1)
+    with patch.object(gh_client, "check_gh_version", return_value=(2, 55, 0)), \
+         patch.object(gh_client.shutil, "which", return_value="/usr/bin/gh"), \
+         patch.object(gh_client.subprocess, "run", return_value=notfound) as mrun, \
+         patch.object(gh_client.time, "sleep"):
+        with pytest.raises(AgenticError):
+            run_read("pr_view", "owner/repo", number=999, retries=3, retry_backoff_sec=0)
+    assert mrun.call_count == 1  # never retried
+
+
+def test_run_read_retries_on_timeout_then_succeeds():
+    success = _completed(stdout='{"number": 2}', returncode=0)
+    with patch.object(gh_client, "check_gh_version", return_value=(2, 55, 0)), \
+         patch.object(gh_client.shutil, "which", return_value="/usr/bin/gh"), \
+         patch.object(gh_client.subprocess, "run",
+                      side_effect=[subprocess.TimeoutExpired(cmd="gh", timeout=1), success]) as mrun, \
+         patch.object(gh_client.time, "sleep"):
+        out = run_read("pr_view", "owner/repo", number=1, retries=1, retry_backoff_sec=0)
+    assert out["data"]["number"] == 2
+    assert mrun.call_count == 2
+
+
+def test_run_read_timeout_exhausted_raises():
+    with patch.object(gh_client, "check_gh_version", return_value=(2, 55, 0)), \
+         patch.object(gh_client.shutil, "which", return_value="/usr/bin/gh"), \
+         patch.object(gh_client.subprocess, "run",
+                      side_effect=subprocess.TimeoutExpired(cmd="gh", timeout=1)), \
+         patch.object(gh_client.time, "sleep"):
+        with pytest.raises(AgenticError):
+            run_read("pr_view", "owner/repo", number=1, retries=1, retry_backoff_sec=0)

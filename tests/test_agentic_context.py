@@ -27,9 +27,12 @@ def _cfg(allowed: list[str] | None = None) -> AgenticConfig:
 
 
 def _fake_run_read(op: str, repo: str, **kwargs):
-    """Mimic gh_client.run_read's return shapes: diff ops -> {'diff'}, else {'data'}."""
+    """Mimic gh_client.run_read's return shapes: diff ops -> {'diff'}, list ops ->
+    {'data': [...]}, view ops -> {'data': {...}}."""
     if op == "pr_diff":
         return {"diff": "diff --git a/f b/f\n+x"}
+    if op in ("pr_list", "issue_list"):
+        return {"data": [{"number": 1}]}
     return {"data": {"op": op, "repo": repo, "kwargs": kwargs}}
 
 
@@ -95,9 +98,51 @@ def test_fetch_repo_context_includes_lists_when_allowed():
         bundle = fetch_repo_context(_cfg())  # default allow-list has pr_list + issue_list
     assert bundle["repo"] == "owner/repo"
     assert bundle["overview"]["op"] == "repo_view"
-    assert bundle["open_prs"]["op"] == "pr_list"
-    assert bundle["open_issues"]["op"] == "issue_list"
+    # Shortlists now carry pagination metadata, not a bare list.
+    assert bundle["open_prs"]["items"] == [{"number": 1}]
+    assert bundle["open_prs"]["count"] == 1
+    assert bundle["open_prs"]["has_more"] is False
+    assert bundle["open_issues"]["items"] == [{"number": 1}]
     assert [c.args[0] for c in mr.call_args_list] == ["repo_view", "pr_list", "issue_list"]
+
+
+def test_list_with_more_signals_truncation():
+    # When the +1 probe row comes back, has_more is true and items are capped.
+    def fake(op, repo, **kwargs):
+        limit = kwargs["limit"]  # _list_with_more requests limit+1
+        return {"data": [{"number": i} for i in range(limit)]}  # always returns the full limit+1
+
+    with patch.object(context, "run_read", side_effect=fake):
+        out = context._list_with_more(_cfg(), "pr_list", limit=10)
+    assert out["has_more"] is True
+    assert out["count"] == 10 and len(out["items"]) == 10
+
+
+def test_list_with_more_no_truncation():
+    def fake(op, repo, **kwargs):
+        return {"data": [{"number": 1}, {"number": 2}]}  # fewer than the limit
+
+    with patch.object(context, "run_read", side_effect=fake):
+        out = context._list_with_more(_cfg(), "issue_list", limit=10)
+    assert out["has_more"] is False
+    assert out["count"] == 2
+
+
+def test_read_threads_timeout_and_retries_from_cfg():
+    captured: dict = {}
+
+    def fake(op, repo, **kwargs):
+        captured.update(kwargs)
+        return {"data": {"ok": True}}
+
+    cfg = _cfg()
+    cfg.gh_timeout_sec = 17
+    cfg.gh_retries = 4
+    with patch.object(context, "run_read", side_effect=fake):
+        context._read(cfg, "repo_view")
+    assert captured["timeout"] == 17
+    assert captured["retries"] == 4
+    assert captured["min_version"] == cfg.gh_min_tuple
 
 
 def test_fetch_repo_context_omits_lists_when_not_allowed():

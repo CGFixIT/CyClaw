@@ -25,6 +25,7 @@ import json
 import re
 import shutil
 import subprocess  # noqa: S404 -- argv-list gh invocation only; never shell=True
+import time
 
 from utils.errors import AgenticError, GhNotInstalledError, GhVersionError
 from utils.logger import audit_log
@@ -100,18 +101,49 @@ def check_gh_version(
 # Read-only operation catalog
 # ---------------------------------------------------------------------------
 
-# Default --json field sets per resource (kept small; callers can override).
-_PR_FIELDS = "number,title,state,author,headRefName,baseRefName,isDraft,url,body"
-_PR_LIST_FIELDS = "number,title,state,author,isDraft,url"
-_ISSUE_FIELDS = "number,title,state,author,labels,url,body"
-_ISSUE_LIST_FIELDS = "number,title,state,author,url"
-_REPO_FIELDS = "name,owner,description,defaultBranchRef,isPrivate,url"
+# Default --json field sets per resource. Every name is a real `gh ... --json`
+# field (gh validates them against its schema and errors on an unknown one). The
+# view sets are richer than the list sets on purpose: a single-item view can
+# afford labels/timestamps/diffstat, while a list stays lean to keep payloads small.
+_PR_FIELDS = (
+    "number,title,state,author,headRefName,baseRefName,isDraft,url,body,"
+    "labels,assignees,createdAt,updatedAt,mergeable,reviewDecision,"
+    "additions,deletions,changedFiles"
+)
+_PR_LIST_FIELDS = "number,title,state,author,isDraft,url,labels,createdAt,updatedAt"
+_ISSUE_FIELDS = (
+    "number,title,state,author,labels,url,body,assignees,milestone,"
+    "createdAt,updatedAt,comments"
+)
+_ISSUE_LIST_FIELDS = "number,title,state,author,url,labels,createdAt,updatedAt"
+_REPO_FIELDS = (
+    "name,owner,description,defaultBranchRef,isPrivate,url,"
+    "isArchived,pushedAt,primaryLanguage,repositoryTopics,stargazerCount,licenseInfo"
+)
 
 # Every supported op maps to a builder. There is intentionally NO entry that
 # mutates state -- this dict IS the read-only allow-list.
 _READ_OPS = frozenset(
     {"pr_view", "pr_list", "pr_diff", "issue_view", "issue_list", "repo_view"}
 )
+
+
+# A non-zero `gh` exit whose stderr matches this is a TRANSIENT network/server
+# condition worth retrying. Deterministic failures (404 not found, bad flag, auth)
+# do NOT match, so they still fail fast -- no point re-running them.
+_TRANSIENT_GH_RE = re.compile(
+    r"(?:timeout|timed out|temporary failure|connection (?:reset|refused|timed out)|"
+    # "could not resolve HOST" is DNS (transient). NOT gh's 404 "Could not resolve
+    # to a PullRequest", which must fail fast -- so the 'host' anchor is required.
+    r"could not resolve host|network is unreachable|i/o timeout|\bEOF\b|"
+    r"HTTP 5\d\d|HTTP 429|rate limit|server error|service unavailable|bad gateway)",
+    re.IGNORECASE,
+)
+
+
+def _is_transient_gh_error(stderr: str) -> bool:
+    """True if a non-zero gh exit looks like a transient network/server failure."""
+    return bool(_TRANSIENT_GH_RE.search(stderr or ""))
 
 
 def build_read_argv(
@@ -169,6 +201,8 @@ def run_read(
     gh_bin: str = "gh",
     min_version: tuple[int, int, int] = DEFAULT_MIN_GH,
     timeout: int = 30,
+    retries: int = 0,
+    retry_backoff_sec: float = 2.0,
 ) -> dict:
     """Run a read-only ``gh`` op and return a structured result dict.
 
@@ -176,6 +210,12 @@ def run_read(
     (argv list, no shell), and audits the call. ``pr_diff`` returns raw text under
     ``{"diff": ...}``; the JSON ops return ``{"data": <parsed>}``. Raises
     ``AgenticError`` on non-zero exit. Never raises with secret-bearing details.
+
+    ``retries`` adds up to N extra attempts with exponential backoff, but ONLY on
+    a transient failure: a timeout, or a non-zero exit whose stderr matches a
+    network/server pattern (see ``_is_transient_gh_error``). Deterministic
+    failures (404, bad flag, auth) are never retried -- they fail fast.
+    ``retries=0`` (the default) is exactly the historical single-shot behaviour.
     """
     found = check_gh_version(gh_bin, min_version)
     binary = shutil.which(gh_bin)
@@ -184,20 +224,46 @@ def run_read(
 
     argv = build_read_argv(op, repo, number=number, limit=limit, gh_bin=binary)
 
-    try:
-        completed = subprocess.run(  # noqa: S603 -- argv list, absolute binary, no shell
-            argv,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            check=False,
-        )
-    except subprocess.TimeoutExpired as exc:
-        audit_log({"event": "agentic_read_timeout", "op": op, "repo": repo})
-        raise AgenticError(
-            f"gh {op} timed out after {timeout}s",
-            details={"op": op, "repo": repo},
-        ) from exc
+    attempts = max(1, retries + 1)
+    completed = None
+    for attempt in range(1, attempts + 1):
+        try:
+            completed = subprocess.run(  # noqa: S603 -- argv list, absolute binary, no shell
+                argv,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+                check=False,
+            )
+        except subprocess.TimeoutExpired as exc:
+            audit_log({"event": "agentic_read_timeout", "op": op, "repo": repo, "attempt": attempt})
+            if attempt < attempts:
+                time.sleep(retry_backoff_sec * (2 ** (attempt - 1)))
+                continue
+            raise AgenticError(
+                f"gh {op} timed out after {timeout}s",
+                details={"op": op, "repo": repo},
+            ) from exc
+
+        # Retry a transient non-zero exit while attempts remain; break otherwise.
+        if (
+            completed.returncode != 0
+            and attempt < attempts
+            and _is_transient_gh_error(completed.stderr or "")
+        ):
+            audit_log({
+                "event": "agentic_read_retry",
+                "op": op,
+                "repo": repo,
+                "attempt": attempt,
+                "exit_code": completed.returncode,
+            })
+            time.sleep(retry_backoff_sec * (2 ** (attempt - 1)))
+            continue
+        break
+
+    if completed is None:  # pragma: no cover -- attempts >= 1 guarantees one run
+        raise AgenticError(f"gh {op} never executed", details={"op": op, "repo": repo})
 
     audit_log({
         "event": "agentic_read",

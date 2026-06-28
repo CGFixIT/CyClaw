@@ -284,6 +284,8 @@ agentic:
   mode: "read"                   # "read" (safe default) | "write" (opt-in, still gated)
   writes_enabled: false          # second flag; writes need mode=write AND this AND reason AND confirm
   gh_min_version: "2.40.0"       # `gh` version floor (X.Y.Z)
+  gh_timeout_sec: 30             # wall-clock ceiling per gh read subprocess
+  gh_retries: 2                  # extra attempts on a TRANSIENT gh failure (timeout/5xx/429); deterministic errors fail fast
   registry_path: "data/agentic/skills_registry.json"  # validated: under repo data/ tree
   allowed_read_ops:              # only these read ops may run
     - pr_view
