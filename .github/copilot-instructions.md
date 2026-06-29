@@ -78,7 +78,7 @@ pip install -r requirements.txt -c constraints.txt
 Important:
 - **Always install CPU-only torch first**. Otherwise Linux may try to pull the huge CUDA wheel.
 - `requirements.txt` is now **deprecated**; prefer `uv pip install -r pyproject.toml --constraint constraints.txt` for local development.
-- CI install gate runs `pip install -r requirements.txt pytest pytest-cov` (no `-c constraints.txt`); `constraints.txt` is used for local reproducibility only.
+- CI install gate runs `pip install -r requirements.txt -c constraints.txt pytest pytest-cov`; `constraints.txt` pins the full dependency set for reproducible CI runs (see PR #343).
 - If PyYAML reinstall conflicts in your environment, repo docs note `pip install -r requirements.txt --ignore-installed PyYAML` as a fallback.
 - Optional Postgres support exists via `psycopg[binary]`, but default behavior is local-file based.
 - A `Dockerfile` exists for production deployments (Python 3.12-slim-bookworm, non-root `cyclaw` user, uv install preferred, exposes port 8000).
@@ -181,7 +181,7 @@ powershell -File tests/apipsTest.ps1   # Windows/manual live-server smoke
 ```
 
 ## CI / workflow facts that matter for PRs
-- `.github/workflows/ci.yml`: main test gate on `main`, `cc`, and `feature/CyClaw-Agent`, Python 3.12, Ubuntu + Windows, 30 min timeout. Installs `torch==2.12.1+cpu`, then `pip install -r requirements.txt pytest pytest-cov` (no `-c constraints.txt` in CI), prepares hermetic dirs, runs `tests.ci_rag_smoke`, then the explicit pytest file list with per-module `--cov` flags. Also includes non-blocking `discover-skills` + `verify-skills` jobs that run `.claude/skills/*/verify.sh` and `smoke.sh` in parallel (`continue-on-error: true`; does not gate merges).
+- `.github/workflows/ci.yml`: main test gate on `main`, `cc`, and `feature/CyClaw-Agent`, Python 3.12, Ubuntu + Windows, 30 min timeout. Installs `torch==2.12.1+cpu`, then `pip install -r requirements.txt -c constraints.txt pytest pytest-cov`, prepares hermetic dirs, runs `tests.ci_rag_smoke`, then the explicit pytest file list with per-module `--cov` flags. Also includes non-blocking `discover-skills` + `verify-skills` jobs that run `.claude/skills/*/verify.sh` and `smoke.sh` in parallel (`continue-on-error: true`; does not gate merges).
 - `.github/workflows/lint.yml`: PR lint gate for `main`/`cc`; runs only Ruff with `--select E,F,I,B,C4,S`.
 - Security workflows exist for CodeQL, OSV, pip-audit, Gitleaks, DevSkim, Defender, Fortify. Avoid introducing secrets, vulnerable deps, telemetry, or unsafe network exposure.
 - `pip-audit.yml` and `.osv-scanner.toml` intentionally ignore CVE-2026-45829 (ChromaDB Critical pre-auth RCE, no upstream patch) because CyClaw uses embedded `PersistentClient` (local/offline air-gapped only, no `HttpClient`, no `trust_remote_code`); do not "fix" that policy casually.
