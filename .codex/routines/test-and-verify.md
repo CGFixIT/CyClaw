@@ -18,7 +18,10 @@ Use this when choosing checks before/after a change, validating CI parity, or re
 4. For lint-only confidence, run `ruff check --select E,F,I,B,C4,UP,S .`.
 5. For broad release-risk changes, mirror `.github/workflows/ci.yml`.
 6. For agentic changes, run `GROK_API_KEY=dummy pytest tests/test_agentic_*.py -q` and `python -m agentic.cli test` if `gh` availability matters.
-7. Record skipped checks with the reason.
+7. For skill, routine, prompt, or checklist-only changes, prefer static checks:
+   skill validation, shell syntax checks, markdown review, and stale-string
+   searches.
+8. Record skipped checks with the reason.
 
 ## Verification Checklist
 
@@ -26,6 +29,7 @@ Use this when choosing checks before/after a change, validating CI parity, or re
 - Commands came from repo docs/config/CI.
 - Failures were diagnosed before retrying.
 - External dependencies were not assumed.
+- Sandbox or approval limits were reported instead of hidden.
 
 ## Expected Final Response
 

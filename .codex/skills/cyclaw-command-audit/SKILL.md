@@ -1,61 +1,62 @@
 ---
 name: cyclaw-command-audit
 description: >-
-  CyClaw repository skill adapted from .claude/commands/audit.md. Use when working in CGFixIT/CyClaw and the user asks for this Claude command workflow: Run metrics.py against audit.jsonl to produce a session summary — query counts, node distribution, score stats, and any anomalies.
+  Codex-native CyClaw audit-log analyzer workflow. Use when working in CGFixIT/CyClaw and the user asks to audit CyClaw logs, summarize logs/audit.jsonl, run metrics.py, inspect node distribution, check retrieval score statistics, or flag audit anomalies and privacy issues.
 ---
 
-# Cyclaw Command Audit
+# CyClaw Command Audit
 
-Imported from `.claude/commands/audit.md` for Codex use in this repository. Do not edit the `.claude` source files when updating this Codex adapter; update this `.codex/skills` copy instead unless the user explicitly asks otherwise.
+Use this skill to summarize `logs/audit.jsonl` with the repository's metrics
+analyzer and report anomalies without exposing private query content.
 
-Use Codex-native tools for Claude tool names when following the original instructions:
+Run commands only when the user asks to execute the audit workflow. For
+explanation or planning requests, inspect files and describe the workflow.
 
-- `Glob` -> `rg --files` or PowerShell file enumeration
-- `Grep` -> `rg`
-- `Read` -> file reads through available shell or editor tools
-- `Bash` -> `functions.shell_command`, respecting this session sandbox and approval rules
-- Claude subagents/commands -> Codex skills, tool discovery, or normal Codex workflow as available
+## Workflow
 
-Do not run command-like steps from this imported workflow unless the user explicitly asks to run them.
+1. Read `AGENTS.md` for repository rules.
+2. Check whether `logs/audit.jsonl` exists.
+3. If it is missing, report that no audit log exists yet and that the server
+   must run and receive at least one query before metrics are available.
+4. If a date or time filter is requested, prefer a small, scoped JSONL filter
+   before invoking `metrics.py`.
+5. Run the analyzer:
 
-## Original Claude Instructions
+```bash
+GROK_API_KEY=dummy python -m metrics
+```
 
-Run the CyClaw audit log analyzer. $ARGUMENTS
+If installed entry points are available, `cyclaw-metrics` is an equivalent
+runtime path.
 
-## Steps
+For date-scoped inspection, keep output bounded and avoid dumping raw audit
+records into chat:
 
-1. Check the audit log exists:
-   ```bash
-   test -f logs/audit.jsonl && echo "EXISTS" || echo "MISSING"
-   ```
-   If missing: report that no audit log exists yet — start the server and make at least one query to generate it.
+```bash
+rg '"2026-06-20"' logs/audit.jsonl | GROK_API_KEY=dummy python -m metrics
+```
 
-2. Run the metrics analyzer:
-   ```bash
-   GROK_API_KEY=dummy python3 -m metrics
-   # or via entry point:
-   cyclaw-metrics
-   ```
+## Report
 
-3. If `$ARGUMENTS` contains a date or time filter (e.g. "today", "last hour", "2026-06-20"), filter the JSONL before analysis:
-   ```bash
-   grep '"2026-06-20"' logs/audit.jsonl | python3 -m metrics
-   ```
+Include:
 
-4. Report the following from the output:
-   - Total queries processed
-   - Graph node distribution (which paths were exercised)
-   - Retrieval score statistics (min, max, mean)
-   - Injection attempts blocked
-   - Any anomalies or error entries
+- total queries processed
+- graph node distribution
+- retrieval score statistics: min, max, mean
+- injection attempts blocked
+- errors or unusual entries
+- whether any `grok_fallback` path was triggered
 
-5. Flag if:
-   - Any raw query text appears in the log (PII/privacy violation — should be SHA-256 hashed)
-   - Error rate exceeds 10%
-   - Any entries with `grok_fallback` node were triggered (means hybrid mode was active)
+Flag as risk:
 
-## Notes
+- raw query text in logs, because CyClaw should store hashed query values
+- error rate above 10%
+- unexpected Grok fallback activity
+- missing or malformed audit records
 
-- Audit log is append-only JSONL at `logs/audit.jsonl`
-- Query text is SHA-256 hashed — raw queries are never stored by design
-- `GROK_API_KEY` must be set even for offline metrics runs
+## Guardrails
+
+- Do not paste private corpus data or raw user queries into the response unless
+  the user explicitly requests that exact content and it is safe to show.
+- Treat `logs/` as local runtime data; never commit audit logs.
+- Respect the active Codex sandbox and approval rules for command execution.

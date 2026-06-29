@@ -6,7 +6,26 @@ This folder holds Codex-specific operating material for CyClaw. Repo-wide instru
 
 Use `.codex/` to help future Codex agents start safely and consistently without copying large project docs. Keep material short, practical, and linked to canonical sources such as `AGENTS.md`, `CLAUDE.md`, `.github/copilot-instructions.md`, and the CI workflows.
 
-Existing `.codex/skills/` content is project-specific skill material. Do not rewrite it as part of routine onboarding unless the maintainer explicitly asks.
+Existing `.codex/skills/` content is project-specific skill material. Keep it
+Codex-native: avoid hard-coding legacy agent tools, stale `.claude` execution
+paths, or connector function names that may not exist in a given session.
+
+## Available Skills
+
+- `skills/cyclaw-project-guidance/` - load CyClaw operating context,
+  invariants, and canonical reference docs before substantial work.
+- `skills/cyclaw-run-cyclaw/` - prepare, run, smoke-test, and interact with the
+  local CyClaw FastAPI RAG server.
+- `skills/cyclaw-command-status/` - run a read-only environment, config, index,
+  soul, telemetry, and live-health status check.
+- `skills/cyclaw-command-run/` - run focused smoke checks for local server
+  endpoints and repo-native runtime verification.
+- `skills/cyclaw-command-audit/` - summarize `logs/audit.jsonl` through
+  `metrics.py` and flag audit anomalies or privacy risks.
+- `skills/cyclaw-command-check-soul/` - verify soul file presence, hash,
+  readability, and drift without mutating it.
+- `skills/cyclaw-optimize/` - scan `main` for optimization opportunities and
+  open focused draft PRs when the user asks for that workflow.
 
 ## Available Routines
 
@@ -17,6 +36,9 @@ Existing `.codex/skills/` content is project-specific skill material. Do not rew
 - `routines/test-and-verify.md` - choose and run verification commands.
 - `routines/pr-review.md` - review a PR or diff with risk-first findings.
 - `routines/security-review.md` - assess security-sensitive changes.
+
+For quick selection, `AGENTS.md` contains a map of skills and routines with
+their intended trigger conditions.
 
 ## Prompt Templates
 
