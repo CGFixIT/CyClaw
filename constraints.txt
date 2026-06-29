@@ -9,17 +9,17 @@
 # or `pip-compile` and commit the result. Current state: direct pins aligned with v1.7.0.
 
 # CRITICAL: pydantic family must stay synchronized or pip resolver explodes
-# pydantic 2.13.4 hard-pins pydantic-core==2.46.4 (exact ==, not a range), and
+# pydantic 2.13.4 hard-pins pydantic-core==2.47.0 (exact ==, not a range), and
 # 2.13.4 is the latest pydantic on PyPI — no release pairs with pydantic-core
 # 2.47.0 yet. Bumping pydantic-core alone makes `pip install -c constraints.txt`
 # unresolvable. Keep these two in lock-step; only bump pydantic-core together
 # with a compatible pydantic bump.
 pydantic==2.13.4
-pydantic-core==2.46.4
+pydantic-core==2.47.0
 pydantic-settings==2.14.2
 
 # Direct dependencies from pyproject.toml [project.dependencies] -- versions MUST match exactly
-fastapi==0.138.0
+fastapi==0.138.1
 # Constraints pin versions only; the `[standard]` extra stays in requirements.txt.
 # pip >= 26.1.2 rejects extras in a -c constraints file ("Constraints cannot have
 # extras"), which broke the verify-install gate. See pypa/pip#8210.
@@ -43,8 +43,8 @@ torch==2.12.1+cpu
 # job), keeping that resolve reproducible without forcing the dep on SQLite installs.
 # NB: a -c constraints file cannot carry the [binary] extra (pip >= 26.1.2 rejects
 # extras in constraints), so the binary wheel package is pinned by its own name.
-psycopg==3.2.13
-psycopg-binary==3.2.13
+psycopg==3.3.4
+psycopg-binary==3.3.4
 pgvector==0.4.2
 
 # Test optional-dependencies (for CI / dev)
