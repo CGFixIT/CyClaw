@@ -28,7 +28,17 @@ models:
     base_url: "http://127.0.0.1:1234/v1"  # DevSkim: ignore DS162092,DS137138 - LMStudio loopback, offline-only
 #    api_key: 123456 # placeholder
     model: "qwen2.5-7b-instruct"
-    max_tokens: 5000
+    # IMPORTANT: LM Studio must load the model with a context length >
+    # (prompt tokens + max_tokens). The local_llm node injects soul preamble +
+    # up to 5 full untruncated corpus chunks, so the prompt alone can reach
+    # ~1000 tokens on a vault hit. max_tokens is the RESERVED OUTPUT BUDGET —
+    # LM Studio allocates it up front before generating token #1. If
+    # prompt + max_tokens > loaded context, LM Studio stalls at "0% processing"
+    # non-deterministically (vault hits stall reliably; vault misses may squeak
+    # through because their prompt is smaller). Keep max_tokens well below the
+    # context window to leave headroom. At context=5000: 2048 leaves ~3000
+    # tokens for the prompt. Raise LM Studio context to 8192+ for more output.
+    max_tokens: 2048
     temperature: 0.3
     timeout_sec: 720
     retry:                  # bounded exp-backoff on transient failures (timeout/5xx/429); 4xx fails fast
