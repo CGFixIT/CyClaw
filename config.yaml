@@ -26,7 +26,11 @@ models:
   local_llm:
     provider: "lmstudio"
     base_url: "http://127.0.0.1:1234/v1"  # DevSkim: ignore DS162092,DS137138 - LMStudio loopback, offline-only
-#    api_key: 123456 # placeholder
+    # Optional. Leave commented for a default (unauthenticated) LM Studio server —
+    # no Authorization header is sent. Only set this if LM Studio's "Require API
+    # Key" is enabled, and QUOTE it as a string (api_key: "your-key") so YAML
+    # doesn't parse a bare number as an int.
+#    api_key: "your-lm-studio-key"
     model: "qwen2.5-7b-instruct"
     # IMPORTANT: LM Studio must load the model with a context length >
     # (prompt tokens + max_tokens). The local_llm node injects soul preamble +
@@ -40,7 +44,11 @@ models:
     # tokens for the prompt. Raise LM Studio context to 8192+ for more output.
     max_tokens: 2048
     temperature: 0.3
-    timeout_sec: 720
+    # Hard per-attempt HTTP timeout. A bounded context (retrieval.max_context_tokens)
+    # means local inference finishes in seconds-to-low-minutes; 300s is a backstop
+    # so a genuine LM Studio stall surfaces as an error in 5 min rather than 12.
+    # Raise it if you run very large models on slow CPU-only hardware.
+    timeout_sec: 300
     retry:                  # bounded exp-backoff on transient failures (timeout/5xx/429); 4xx fails fast
       max_retries: 2        # extra attempts beyond the first
       backoff_base_sec: 0.5 # delay = min(backoff_base_sec * 2**attempt, backoff_max_sec) (0.5s, 1s)
@@ -86,7 +94,13 @@ retrieval:
   top_k_semantic: 5
   top_k_keyword: 5
   rrf_k: 60                # Authoritative RRF k — read by hybrid_search.py
-  max_context_tokens: 5000
+  # Token budget for the retrieved-context block injected into the local_llm
+  # prompt (graph.py local_llm_node, via _format_context_chunks). Converted to a
+  # char budget (~4 chars/token) and used to truncate context so that
+  # context + max_tokens + soul/framing fits inside the LM Studio context window.
+  # Keep this comfortably below (LM Studio context length - max_tokens). At a
+  # 5000 context with max_tokens=2048: 2000 leaves headroom for soul + framing.
+  max_context_tokens: 2000
 
   # min_score: routing threshold used by route_by_score_node (graph.py).
   # Scores are RRF-fused ranks in [0, 1]; 0.028 is intentionally permissive —

@@ -185,7 +185,10 @@ class LocalLLMClient:
         self.temperature = llm_cfg["temperature"]
         self.timeout = llm_cfg["timeout_sec"]
         self.retry_max, self.retry_backoff, self.retry_backoff_max = _read_retry(llm_cfg)
-        self.api_key = llm_cfg.get("api_key", "")
+        # Coerce to a stripped str so a bare YAML number (parsed as int) or an
+        # accidental whitespace value can't produce a malformed header. Empty /
+        # whitespace-only -> "" -> no Authorization header is sent (see generate).
+        self.api_key = str(llm_cfg.get("api_key") or "").strip()
         self._client = httpx.Client(timeout=self.timeout)
 
     def close(self) -> None:

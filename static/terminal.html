@@ -894,10 +894,13 @@ async function submitQuery(confirmedOnline = null) {
       body.user_confirmed_online = confirmedOnline;
     }
 
+    // Bound the wait so a stalled LLM surfaces an error instead of hanging the
+    // UI forever. 300s matches the server-side timeout_sec backstop.
     const resp = await fetch(`${API}/query`, {
       method: 'POST',
       headers: authHeaders(),
-      body: JSON.stringify(body)
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(300000)
     });
 
     const elapsed = Math.round(performance.now() - startTime);
@@ -936,7 +939,11 @@ async function submitQuery(confirmedOnline = null) {
     footerRight.textContent = `queries: ${queryCount} · last: ${elapsed}ms`;
   } catch (e) {
     removeEntry(loadingId);
-    addEntry('error', 'ERROR', `Network error: ${e.message}`);
+    if (e.name === 'TimeoutError' || e.name === 'AbortError') {
+      addEntry('error', 'ERROR', 'Request timed out (300s). The local LLM may be stalled — check that LM Studio is running and that its context length exceeds the prompt + max_tokens.');
+    } else {
+      addEntry('error', 'ERROR', `Network error: ${e.message}`);
+    }
   } finally {
     sendBtn.disabled = false;
     input.focus();

@@ -55,11 +55,12 @@ class HealthResponse(BaseModel):
     services: dict
     index_ready: bool
     graph_ready: bool
+    mode: str  # app.mode ("offline" | "hybrid") — surfaced for the console mode badge
 
 class SoulEvolutionRequest(BaseModel):
     model_config = ConfigDict(extra='forbid', strict=True)
     new_soul: str = Field(min_length=1, max_length=65536)
-    reason: str = Field(min_length=1)
+    reason: str = Field(min_length=1, max_length=4096)
 
 
 # --- Ops console request models -------------------------------------------------
