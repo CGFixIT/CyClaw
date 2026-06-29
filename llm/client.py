@@ -257,7 +257,10 @@ class GrokClient:
         self.temperature = grok_cfg["temperature"]
         self.timeout = grok_cfg["timeout_sec"]
         self.retry_max, self.retry_backoff, self.retry_backoff_max = _read_retry(grok_cfg)
-        self.api_key = os.environ.get("GROK_API_KEY", "")
+        # Normalize the env var the same way the local client normalizes config:
+        # whitespace-only should count as missing, and padded values should not
+        # leak spaces into the Authorization header.
+        self.api_key = str(os.environ.get("GROK_API_KEY", "") or "").strip()
         self._client = httpx.Client(timeout=self.timeout)
 
     def close(self) -> None:
