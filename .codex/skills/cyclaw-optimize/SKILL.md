@@ -1,302 +1,243 @@
 ---
 name: cyclaw-optimize
 description: >-
-  CyClaw repository skill adapted from .claude/skills/CyClaw-Optimize/SKILL.md. Use when working in CGFixIT/CyClaw and the user asks for this Claude skill workflow: Methodically scan the CyClaw main branch for code, CI, security, financial-risk, and maintainability optimization opportunities, then open focused, reviewable pull requests for each. Use when asked to optimize CyClaw, find competitive/trade-bot advantages, harden CI, audit for risk, propose improvements, or open optimization PRs against main.
+  Codex-native CyClaw optimization workflow. Use when working in CGFixIT/CyClaw and the user asks Codex to optimize CyClaw, find competitive or trade-bot advantages, harden CI, audit code/security/financial-risk assumptions, propose focused improvements, or open optimization PRs against main.
 ---
 
-# Cyclaw Optimize
+# CyClaw Optimize
 
-Imported from `.claude/skills/CyClaw-Optimize/SKILL.md` for Codex use in this repository. Do not edit the `.claude` source files when updating this Codex adapter; update this `.codex/skills` copy instead unless the user explicitly asks otherwise.
+Use this skill to scan the CyClaw `main` branch for concrete optimization,
+security, reliability, financial-risk, auditability, and maintainability
+opportunities, then turn the best findings into focused draft pull requests.
 
-Use Codex-native tools for Claude tool names when following the original instructions:
+This is the Codex adapter for an earlier agent workflow. Treat the instructions
+below as authoritative for Codex. Do not edit legacy agent source files unless
+the user explicitly asks for that.
 
-- `Glob` -> `rg --files` or PowerShell file enumeration
-- `Grep` -> `rg`
-- `Read` -> file reads through available shell or editor tools
-- `Bash` -> `functions.shell_command`, respecting this session sandbox and approval rules
-- Claude subagents/commands -> Codex skills, tool discovery, or normal Codex workflow as available
+## Codex Operating Rules
 
-Do not run command-like steps from this imported workflow unless the user explicitly asks to run them.
+- Run command steps only when the user's request clearly asks Codex to execute
+  the workflow, make changes, or open PRs. For read-back, explanation, or review
+  requests, inspect only.
+- All shell, network, git, and GitHub actions remain governed by the active
+  Codex sandbox, approval, and authentication rules. User intent to open PRs is
+  not a bypass for required approvals.
+- Use `.codex/skills/cyclaw-optimize/bootstrap.sh` as the bundled harness path.
+- Use local `git` for branch creation, commits, and pushes.
+- Prefer the GitHub app/plugin for PR and issue data when available. Use `gh`
+  as the fallback for listing PRs, checking auth, and creating draft PRs.
+- Do not rely on legacy agent tool names or hard-coded MCP function names. Use
+  Codex tools, `rg`, shell file reads, GitHub plugin tools, or `gh`
+  equivalents.
+- Do the initial scan directly in Codex. If a Codex multi-agent tool is
+  available and appropriate, it may be used for an independent read-only pass,
+  but the workflow must still work without it.
 
-## Original Claude Instructions
+## CyClaw Context
 
-# CyClaw-Optimize
+CyClaw includes a FastAPI RAG gateway (`gate.py`), LangGraph security topology
+(`graph.py`), ChromaDB + BM25 hybrid retrieval, local LLM via LM Studio with a
+triple-gated Grok/xAI fallback, an MCP hybrid server, the `agentic/` GitHub
+layer, and the out-of-band `sync/` Dropbox pipeline.
 
-**Persona:** You are a modern AI engineer specializing in Python and extremely
-familiar with the CyClaw architecture — FastAPI RAG gateway (`gate.py`),
-LangGraph 7-node security topology (`graph.py`), ChromaDB + BM25 hybrid
-retrieval, local LLM via LM Studio with a triple-gated Grok (xAI) fallback,
-the MCP hybrid server, the `agentic/` GitHub layer, and the out-of-band
-`sync/` Dropbox pipeline. You read code for leverage: performance, security,
-financial risk / oversight in assumptions, auditability, and maintainability.
+Read code for leverage:
 
-**What this skill does:** drives a time-boxed scan of the **main** branch,
-groups findings into ~5 small/medium PR-sized chunks, and opens one focused
-pull request per chunk **against a working branch cut from `main`** — never
-committing to `main` directly. A human decides when to merge/close.
+- performance
+- security
+- financial-risk and oversight assumptions
+- auditability
+- maintainability
 
-**How it's driven:** the deterministic setup + scan-seed is a committed
-harness, `bootstrap.sh`. The scan itself is a read-only subagent. PR dedup and
-PR creation are GitHub MCP tool calls. Paths below are relative to the repo
-root (the `<unit>` dir).
+## Step 0 - Bootstrap
 
----
-
-## Run (agent path)
-
-### Step 0 — Bootstrap (harness)
-
-Run the harness. It pins the git identity the stop hook requires, fetches
-`origin/main`, positions you on a fresh working branch cut from `origin/main`
-(creating it if you pass a name), and prints a repo inventory that seeds the
-scan:
+From the repo root, run the bundled harness when the user has asked to execute
+the optimization workflow:
 
 ```bash
-bash .claude/skills/CyClaw-Optimize/bootstrap.sh claude/cyclaw-optimize-<topic>
+bash .codex/skills/cyclaw-optimize/bootstrap.sh codex/cyclaw-optimize-<topic>
 ```
 
-Omit the branch argument to run read-only against the current branch. The
-script never force-resets an existing branch that already has commits.
+Omit the branch argument for a read-only inventory against the current branch.
+With a branch argument, the script fetches `origin/main` and creates or checks
+out the requested branch without force-resetting existing branch work.
 
-> Verified this session: the harness ran clean, reported the branch /
-> merge-base / commits-ahead, and printed file counts, the largest-Python-file
-> list (refactor candidates), the CI workflow list, dependency manifests, Grok
-> touchpoints, and recent `main` commits.
+The harness does not force a Claude git identity. It prints the current git
+identity and only changes it when explicit `CODEX_GIT_USER_NAME` or
+`CODEX_GIT_USER_EMAIL` environment variables are set.
 
-### Step 1 — Time-boxed scan (subagent, ~4 minutes)
+## Step 1 - Read-Only Scan
 
-Dispatch **one read-only `Explore` subagent** to scan for ~4 minutes. Do not
-let it edit anything. Give it the persona and the concrete areas to sweep.
-This is the prompt that worked this session (adapt the topic, keep the
-structure):
+Spend a short, time-boxed pass on concrete findings. Keep the scan read-only:
+do not edit files while discovering candidates.
 
-> You are a modern AI engineer specializing in Python and deeply familiar with
-> the CyClaw architecture. Repo root is the CWD. Spend ~4 minutes on a
-> READ-ONLY scan for concrete optimization / fix opportunities suitable for
-> small-to-medium focused PRs. Sweep: `.github/workflows/*.yml` (caching,
-> action SHA pinning, `cancel-in-progress`, matrix gaps — **nothing needing a
-> license/secret/key**); `tests/` (coverage gaps, logic errors, brittle
-> fixtures, missing assertions); `agentic/` and `sync/` (bugs, inefficient
-> loops, redundant logic, error-handling and financial/oversight-assumption
-> risk); `llm/client.py` + `graph.py` (outdated Grok/xAI model names &
-> endpoints, retry/timeout, performance); `config.yaml` (risky defaults);
-> `requirements.txt` / `constraints.txt` / `pyproject.toml` (loose/outdated
-> pins, missing imports); readability/auditability anywhere. Return 6–10
-> DISTINCT findings, each with: title, file path(s) + line numbers, one-line
-> description, category, effort (small/medium). End with a suggested grouping
-> into ~5 PR-sized chunks. Cite real code — do not invent.
+Sweep these areas:
 
-You may keep reading code after the 4 minutes; the time-box only governs the
-initial sweep.
+- `.github/workflows/*.yml`: caching, action SHA pinning, concurrency,
+  `cancel-in-progress`, matrix gaps, and license/secret-free hardening
+- `tests/`: coverage gaps, brittle fixtures, logic errors, missing assertions
+- `agentic/` and `sync/`: inefficient loops, redundant logic, weak
+  error-handling, and financial or oversight-assumption risk
+- `llm/client.py` and `graph.py`: Grok/xAI model names, endpoints, retry,
+  timeout, and performance behavior
+- `config.yaml`: risky defaults and configuration drift
+- `requirements.txt`, `constraints.txt`, and `pyproject.toml`: loose or stale
+  pins, missing dependencies, and test/tooling mismatch
+- readability and auditability issues anywhere in the repo
 
-### Step 2 — Dedup against open PRs (MCP) — do this BEFORE picking focus areas
+Return 6-10 distinct findings. Each finding must include:
 
-List open PRs and drop any candidate area already covered by an open PR. Also
-explicitly skip the known-stale "null allowed origins in `config.yaml`" idea —
-it is out of scope.
+- title
+- file path and line number
+- one-line description
+- category
+- effort: small or medium
 
-```text
-mcp__github__list_pull_requests(owner="CGFixIT", repo="CyClaw", state="open")
+End the scan with a suggested grouping into about five PR-sized chunks. Cite
+real code only. Do not invent findings.
+
+## Step 2 - Deduplicate Against Open PRs
+
+Before choosing focus areas, list open PRs and drop candidate areas already
+covered by an open PR. Also skip the known-stale "null allowed origins in
+`config.yaml`" idea.
+
+Use the best available GitHub path:
+
+```bash
+gh pr list --repo CGFixIT/CyClaw --state open --json number,title
 ```
 
-> Gotcha (verified): this call returns a very large payload. Parse it down to
-> `number` + `title` only — e.g. read the saved tool-result file with a small
-> `python3 -c "import json; ..."` over `number`/`title` — rather than dumping
-> it into context. This session it showed 2 open PRs (#175, #176), both
-> dependency/pinning chores, so no overlap with the scan findings.
+If using a GitHub connector, request only `number` and `title` when possible.
+Do not dump large raw PR payloads into context.
 
-### Step 3 — Select ~5 focus areas and announce them
+## Step 3 - Select Focus Areas
 
-From the deduped findings, choose ~5 PR-sized chunks. Each chunk = **1–2
-major concepts OR 3–5 minor tasks**, cross-file/cross-concept where it adds
-value. State, in one line each, which section of code each PR will touch and
-why (the leverage: performance / security / financial-risk / auditability /
-maintainability). Prefer chunks that are independently reviewable and easily
-restorable through GitHub.
+Choose about five deduplicated chunks. Each chunk should be independently
+reviewable:
 
-### Step 3.5 — Plan branch topology for shared files (prevents merge-loss / conflicts)
+- one or two major concepts, or
+- three to five closely related minor tasks
 
-Always START from `origin/main` (Step 0 / the bootstrap cuts the first branch
-there — that is correct). The strategy below only changes **where you cut the
-2nd-and-later branch when it edits a file an earlier chunk also edits.**
+For each chunk, state one line covering the files touched and why the change has
+leverage: performance, security, financial-risk, auditability, or
+maintainability.
 
-Before creating any branches, build a **file → chunks** map and find every file
-touched by more than one chunk. The usual shared files: `.github/workflows/ci.yml`
-(everyone appends to the pytest list / `--cov` list), `config.yaml`,
-`requirements.txt` / `constraints.txt` / `pyproject.toml`, `CLAUDE.md`. For each
-shared file pick ONE strategy:
+If no clear opportunities remain after deduplication, say so and stop. Do not
+manufacture low-value PRs.
 
-- **(A) Consolidate** — put *all* edits to that shared file in a single chunk/PR
-  (or a dedicated "CI wiring" PR). Best when the edits are small and related
-  (e.g. each chunk only appends one line to the ci.yml test list). The other
-  chunks then touch only their own new files and carry no ci.yml edit.
-- **(B) Stack** — cut the later branch from the *earlier branch* instead of
-  `origin/main`, so the later PR already contains the earlier's edit to the
-  shared file. Set the later PR's **base to the earlier branch** on GitHub (not
-  `main`). Stacked PRs must merge parent-first; rebase the child after the
-  parent merges. Best when chunks are large and otherwise independent.
+## Step 3.5 - Plan Shared Files
 
-**Why it matters:** two branches cut from the same base that edit the **same or
-adjacent lines** of a shared file produce a merge **conflict** — GitHub blocks
-the merge button until a human resolves it, and a careless resolution can drop
-one side's edit (the "lost changes" failure mode). Non-adjacent edits to the same
-file 3-way-merge cleanly, but verify rather than trust luck.
+Before creating implementation branches, build a file-to-chunks map and find
+files touched by multiple chunks. Common shared files are
+`.github/workflows/ci.yml`, `config.yaml`, `requirements.txt`,
+`constraints.txt`, `pyproject.toml`, and `CLAUDE.md`.
 
-**Verify before opening PRs** — for every pair of branches that share a file, do
-a throwaway 3-way merge locally and confirm both edits survive with no conflict:
+For each shared file, choose one strategy:
+
+- Consolidate all edits to that file in one chunk or a dedicated wiring PR.
+- Stack later branches on earlier branches and set the child PR base to the
+  parent branch.
+
+If two branches edit the same shared file, trial-merge them locally before
+opening PRs. Confirm both edits survive, no conflict markers exist, and any
+structured file still parses.
+
+Example checks:
 
 ```bash
 git checkout -B _trial origin/main
-git merge --no-ff origin/<branch-A> && git merge --no-ff origin/<branch-B>
-grep -q '<A-marker>' <shared-file> && grep -q '<B-marker>' <shared-file> && echo "both present"
-grep -rc '<<<<<<<' <shared-file>           # must be 0
-python -c "import yaml; yaml.safe_load(open('.github/workflows/ci.yml'))"  # still valid
-git checkout main && git branch -D _trial
+git merge --no-ff origin/<branch-a>
+git merge --no-ff origin/<branch-b>
+grep -q '<a-marker>' <shared-file>
+grep -q '<b-marker>' <shared-file>
+grep -rc '<<<<<<<' <shared-file>
+python -c "import yaml; yaml.safe_load(open('.github/workflows/ci.yml'))"
+git checkout main
+git branch -D _trial
 ```
 
-> Verified this session: two PRs both appended to `ci.yml` (one to the pytest
-> list, one to the `--cov` list) in **non-adjacent** regions. Trial merges in
-> both orders combined cleanly — both edits present, valid YAML, zero conflict
-> markers — so no consolidation/stacking was needed. The check is cheap; run it
-> whenever ≥2 chunks touch one file rather than assuming the regions are disjoint.
+## Step 4 - Implement One Draft PR Per Chunk
 
-### Step 4 — One focused PR per chunk
+For each chunk:
 
-For each chunk, on its own working branch (cut from `origin/main` by default —
-but see **Step 3.5** when the chunk shares a file with another chunk):
+1. Create a focused branch. Default branch names should look like
+   `codex/cyclaw-optimize-<topic>`.
+2. Make the smallest coherent change set for the chunk.
+3. Verify the touched area.
+4. Stage only intended files.
+5. Commit with a clear message.
+6. Push the branch.
+7. Open a draft PR against `main`, unless Step 3.5 requires a stacked base.
 
-1. Make the focused change(s). Keep the diff minimal and on-topic; avoid
-   touching unrelated files (CLAUDE.md operating contract).
-2. Verify (see **Verify** below).
-3. Commit with a clear message, then push with upstream tracking:
+Draft PR bodies should include:
 
-   ```bash
-   git add -p
-   git commit -m "<type>: <what changed and why>"
-   git push -u origin <branch-name>
-   ```
+- what changed
+- why it helps
+- validation performed
+- risk to monitor
 
-   On network failure only, retry up to 4× with exponential backoff
-   (2s, 4s, 8s, 16s).
-4. Open a **draft** PR via MCP with a clear title and a body covering: the
-   change, its benefit, and any risk to monitor.
+With `gh`, a typical fallback is:
 
-   ```text
-   mcp__github__create_pull_request(
-     owner="CGFixIT", repo="CyClaw",
-     base="main", head="<branch-name>",
-     draft=true,
-     title="<concise title>",
-     body="## What\n...\n## Why / benefit\n...\n## Risk to monitor\n...")
-   ```
+```bash
+gh pr create --repo CGFixIT/CyClaw --base main --head <branch> --draft \
+  --title "<concise title>" --body-file <body-file>
+```
 
-If, after scanning, no clear optimization opportunities remain (all covered by
-open PRs or out of scope), **confirm that briefly and stop** — do not
-manufacture low-value PRs.
+On network failure during push, retry up to four times with exponential backoff:
+2s, 4s, 8s, and 16s.
 
----
+## Verification
 
-## Verify (per PR, before pushing)
-
-The repo's documented gate (from `CLAUDE.md`):
+Prefer the narrowest meaningful check for the touched area. The documented
+CyClaw Python gate is:
 
 ```bash
 GROK_API_KEY=dummy pytest tests/ -q --tb=short
-# scope to the touched area when faster, e.g.:
+```
+
+Use a narrower test file when appropriate, for example:
+
+```bash
 GROK_API_KEY=dummy pytest tests/test_graph.py -q --tb=short
 ```
 
-> Gotcha (verified this session): a freshly-cloned web container has **no
-> Python deps installed** — `pytest` import fails outright. Install first via
-> the `/run-cyclaw` or `/sandbox-runtime-verification` skill (note the CyClaw
-> install quirks: `torch==2.12.1+cpu` before `requirements.txt`, and
-> `pip install -r requirements.txt --ignore-installed PyYAML`). For
-> CI-/docs-/workflow-only PRs that touch no Python, the YAML/lint changes are
-> validated by the repo's own CI on push — a local pytest run is not required.
+Fresh clones may not have Python dependencies installed. If dependencies are
+missing, install them only when the task requires runtime validation and the
+active approval rules allow it. For docs, skill, or workflow-only PRs, prefer
+static validation such as markdown review, YAML parsing, or shell syntax checks.
 
-Optionally run `/code-review` on the diff before opening the PR.
+## Guardrails
 
----
-
-## Branch Permissions (pre-granted for this skill)
-
-When **CyClaw-Optimize** is invoked, the user pre-authorises creation and push
-of per-chunk branches named `claude/cyclaw-optimize-<topic>` cut from
-`origin/main`. Do **not** stop and ask for permission to push these branches —
-proceed directly. This applies even when the session was started on a different
-designated branch (e.g. `claude/<name>` from a session-start hook). Each chunk
-gets its own branch + draft PR; the designated session branch is used only for
-the skill file update commit (if any), never for chunk changes.
-
----
-
-## Guardrails (CyClaw invariants — do not violate)
-
-- **Never commit to `main` directly** via git or MCP when a feature branch +
-  PR exist — it causes add/add rebase conflicts. Always branch → PR → human
-  merges.
-- **All PRs are draft**; the human decides when to merge/close.
-- Do not re-open an area already covered by an open PR; skip the
-  null-allowed-origins `config.yaml` item.
-- Respect the five security invariants — RAG-first, topology=policy,
-  triple-gated external (Grok), audit convergence, soul governance. Never
-  weaken a graph-edge policy to "optimize."
-- Workflow enhancements must need **no license, secret, or key**.
-- Never mutate `data/personality/soul.md` without an explicit human `reason`.
-
----
+- Never commit directly to `main`.
+- Open draft PRs; the human decides when to merge or close them.
+- Keep each PR reviewable and restorable.
+- Do not re-open work already covered by an open PR.
+- Skip the stale null-allowed-origins `config.yaml` item.
+- Respect the CyClaw invariants: RAG-first, topology-as-policy,
+  triple-gated external Grok, audit convergence, and soul governance.
+- Do not weaken graph-edge policy in the name of optimization.
+- Workflow enhancements must not require a new license, secret, or key.
+- Never mutate `data/personality/soul.md` without an explicit human reason.
 
 ## Gotchas
 
-- **MCP PR-list payload is huge** — always reduce to `number`/`title` before
-  reading (see Step 2). Reading it raw blows the token budget.
-- **No deps in a fresh container** — the test gate needs an install pass first
-  (see Verify).
-- **Largest-file ≠ worst-file.** `bootstrap.sh` flags big Python files
-  (`sync/runner.py`, `graph.py`, `gate.py`, `utils/personality.py`) as
-  refactor candidates, but size alone isn't a defect — confirm a real issue
-  before proposing a refactor PR.
-- **Stay in scope per PR.** The whole point is reviewable, restorable chunks;
-  resist bundling unrelated fixes because they're "right there."
-- **The 4-minute box is for the initial sweep only** — keep reading code
-  afterward to confirm each finding before it becomes a PR.
-- **Shared-file PRs can collide.** When ≥2 chunks edit one file (most often
-  `.github/workflows/ci.yml`, `config.yaml`, the dependency manifests, or
-  `CLAUDE.md`), branches all cut from `origin/main` will *conflict* if their
-  edits touch the same/adjacent lines — and a sloppy conflict resolution drops
-  one side. See **Step 3.5**: consolidate the shared-file edits into one PR, or
-  stack the later branch on the earlier one, and always trial-merge the pair
-  before opening the PRs.
-- **A broken `main` poisons every child PR.** If `main` itself is red (e.g. a
-  bad committed data file or a failing test landed earlier), *every* branch cut
-  from it inherits those failures, so the optimize PRs show red CI for reasons
-  unrelated to their own diffs. Land the root-cause fix PR first, then rebase /
-  re-run the rest. Diagnose a child PR's CI red against `main`'s own state before
-  assuming the PR caused it.
+- Large PR-list payloads waste context; reduce to PR number and title.
+- Largest file does not mean worst file. Confirm a real defect before proposing
+  refactors of `sync/runner.py`, `graph.py`, `gate.py`, or
+  `utils/personality.py`.
+- Shared-file PRs can conflict even when each change is valid. Use the
+  consolidate-or-stack plan before opening PRs.
+- A broken `main` poisons child PR CI. Check whether failures reproduce on
+  `main` before attributing them to a child PR.
 
----
+## Example Finding Groups
 
-## Example output (this session's scan, for shape — re-scan; do not reuse blindly)
+This example shows the desired shape only. Re-scan current `main` instead of
+reusing these findings blindly.
 
-The Step-1 subagent returned 10 grounded findings and proposed this grouping
-(real file paths, current `main`):
-
-1. **Test-coverage completeness** — add `gate`, `retrieval.{hybrid_search,
-   indexer,stemmer}`, `utils.personality_db`, and `agentic.*` to `--cov` in
-   `.github/workflows/ci.yml`; add the TestClient/httpx deprecation filter to
-   `pyproject.toml`. *(tests/CI, small)*
-2. **CI action pinning + concurrency** — pin unpinned actions to full SHAs in
-   `codeql.yml`/`devskim.yml`/`defender-for-devops.yml`; add
-   `cancel-in-progress: true` to `codeql.yml` and `pip-audit.yml`.
-   *(CI/security, small)*
-3. **LLM client resilience** — exponential-backoff retry in
-   `llm/client.py` `LocalLLMClient.generate`/`GrokClient.generate` + tests.
-   *(reliability, medium)*
-4. **Audit hardening** — redact resolved paths in `agentic/config.py` error
-   details; verify the current xAI `grok-4` model name in `config.yaml`; add a
-   platform-detection fallback in `sync/scheduler.py`. *(security/robustness,
-   small)*
-5. **Docs** — record the action-pinning rationale and the grok model-name
-   monitoring note. *(maintainability, small)*
-
-Each is independently reviewable and small/medium — exactly the target shape.
+1. Test coverage wiring for gateway, retrieval, personality DB, and `agentic/`.
+2. CI action pinning plus concurrency hardening.
+3. LLM client retry and timeout resilience.
+4. Audit hardening around path redaction, Grok model monitoring, and scheduler
+   platform detection.
+5. Documentation for security-sensitive CI and Grok model-name monitoring.
