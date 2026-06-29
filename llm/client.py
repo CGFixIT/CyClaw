@@ -95,6 +95,7 @@ def _post_with_retry(
     on_timeout: Callable[[httpx.TimeoutException], RAGError],
     on_other: Callable[[Exception], RAGError],
     backoff_max: float = _DEFAULT_BACKOFF_MAX_SEC,
+    retry_on_timeout: bool = True,
 ) -> str:
     """POST with bounded exponential-backoff retry on transient failures.
 
@@ -106,6 +107,16 @@ def _post_with_retry(
     ``max_retries == 0`` reproduces the original single-attempt behavior. The
     ``on_*`` callables map the terminal failure to the caller's typed error so
     messages/codes stay unchanged.
+
+    ``retry_on_timeout=False`` makes a read timeout fail fast (no retry), while
+    transport/5xx/429 still retry. This is the right policy for a local LM Studio
+    backend: a read timeout there means inference is *stalled* (the classic
+    "0% processing"), so a retry just issues a second request that waits the full
+    per-call ``timeout_sec`` again — and, because the gateway wraps the whole graph
+    in a shorter ``api.graph_timeout_sec`` deadline, the extra attempt is already
+    unreachable (the client returns 504 first) and only orphans a worker thread on
+    a second stalled call. Cloud Grok keeps the default (transient network blips
+    behind its short timeout are worth a retry).
 
     Each transient retry logs a WARNING and each terminal give-up / fail-fast a
     ERROR, tagged with ``service`` (e.g. ``lm_studio`` / ``grok``), the attempt
@@ -136,7 +147,7 @@ def _post_with_retry(
             log.error("%s call failed: HTTP %s after %d attempt(s)", service, status, attempt + 1)
             raise on_http(e) from e
         except httpx.TimeoutException as e:
-            if attempt < max_retries:
+            if retry_on_timeout and attempt < max_retries:
                 delay = _delay(attempt)
                 log.warning(
                     "%s call timed out (attempt %d/%d); retrying in %.1fs",
@@ -220,6 +231,10 @@ class LocalLLMClient:
             max_retries=self.retry_max,
             backoff_base=self.retry_backoff,
             backoff_max=self.retry_backoff_max,
+            # A local read timeout = a stalled model; retrying just burns another
+            # full timeout_sec on an orphaned thread (the graph deadline already
+            # returned 504). Transport/5xx/429 still retry — those fail fast.
+            retry_on_timeout=False,
             on_http=lambda e: LLMServiceError(
                 f"LM Studio HTTP error: {e.response.status_code}",
                 details={"status": e.response.status_code},

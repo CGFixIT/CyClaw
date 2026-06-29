@@ -339,13 +339,31 @@ class TestRetryBehavior:
         assert no_sleep == []
         client.close()
 
-    def test_timeout_is_retried(self, tmp_path, no_sleep):
-        client = LocalLLMClient(_write_config(tmp_path, retry={"max_retries": 1, "backoff_base_sec": 2.0}))
+    def test_grok_timeout_is_retried(self, tmp_path, monkeypatch, no_sleep):
+        # Grok keeps retry-on-timeout: a transient network blip behind its short
+        # cloud timeout is worth one more attempt.
+        monkeypatch.setenv("GROK_API_KEY", "xai-secret")
+        client = GrokClient(_write_config(tmp_path, retry={"max_retries": 1, "backoff_base_sec": 2.0}))
         fake = _ScriptedPost([httpx.TimeoutException("slow"), _ok_response("ok after timeout")])
         client._client.post = fake
         assert client.generate("p") == "ok after timeout"
         assert len(fake.calls) == 2
         assert no_sleep == [2.0]
+        client.close()
+
+    def test_local_timeout_fails_fast_without_retry(self, tmp_path, no_sleep):
+        # A local read timeout means LM Studio is stalled ("0% processing");
+        # retrying just burns another full timeout_sec on an orphaned thread while
+        # the gateway's graph deadline has already returned 504. So local fails
+        # fast on timeout even with retries configured — unlike transport/5xx.
+        client = LocalLLMClient(_write_config(tmp_path, retry={"max_retries": 2, "backoff_base_sec": 2.0}))
+        fake = _ScriptedPost([httpx.TimeoutException("slow"), _ok_response("would-be recovery")])
+        client._client.post = fake
+        with pytest.raises(LLMServiceError) as exc:
+            client.generate("p")
+        assert exc.value.details.get("timeout_sec") is not None
+        assert len(fake.calls) == 1  # single attempt, no retry on timeout
+        assert no_sleep == []
         client.close()
 
     def test_transport_error_is_retried(self, tmp_path, no_sleep):

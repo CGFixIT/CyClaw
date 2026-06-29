@@ -48,10 +48,14 @@ models:
     # so a genuine LM Studio stall surfaces as an error in 5 min rather than 12.
     # Raise it if you run very large models on slow CPU-only hardware.
     timeout_sec: 300
-    retry:                  # bounded exp-backoff on transient failures (timeout/5xx/429); 4xx fails fast
-      max_retries: 2        # extra attempts beyond the first
+    retry:                  # bounded exp-backoff on transport/5xx/429; 4xx AND read-timeouts fail fast
+      max_retries: 2        # extra attempts beyond the first (applies to transport/5xx/429 only)
       backoff_base_sec: 0.5 # delay = min(backoff_base_sec * 2**attempt, backoff_max_sec) (0.5s, 1s)
       backoff_max_sec: 30.0 # hard ceiling on a single backoff sleep; guards against a mis-tuned base/retries blocking the worker
+      # NOTE: a local read timeout is NOT retried (retry_on_timeout=False in
+      # llm/client.py). It means LM Studio is stalled ("0% processing"); a retry
+      # would just wait another full timeout_sec and, since api.graph_timeout_sec
+      # cuts the request first, only orphans a worker thread on a 2nd stalled call.
   embeddings:
     provider: "sentence-transformers"
     model: "all-MiniLM-L6-v2"
