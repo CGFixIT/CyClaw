@@ -14,11 +14,6 @@
 
 [![Screenshots: local AI](https://i.imgur.com/kGZBkIj.png)](https://github.com/CGFixIT/CyClaw/tree/main/docs/screenshots)
 
----
-
-## Contributors
-
-- [OpenAI Codex](https://openai.com/codex/) - AI coding agent for repository maintenance, CI fixes, and workflow automation.
 
 ---
 
