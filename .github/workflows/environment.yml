@@ -32,8 +32,6 @@ dependencies:
   - pytest-cov
   - pip:
       - langgraph==1.2.6
-      - ".[test,dev]"  # pulls from pyproject.toml extras
-      - "cyclaw @ ."  # editable for source testing
 
 # Optional: Create with mamba for speed
 # mamba env create -f environment.yml
