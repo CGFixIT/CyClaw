@@ -32,17 +32,16 @@ models:
     # doesn't parse a bare number as an int.
 #    api_key: "your-lm-studio-key"
     model: "qwen2.5-7b-instruct"
-    # IMPORTANT: LM Studio must load the model with a context length >
-    # (prompt tokens + max_tokens). The local_llm node injects soul preamble +
-    # up to 5 full untruncated corpus chunks, so the prompt alone can reach
-    # ~1000 tokens on a vault hit. max_tokens is the RESERVED OUTPUT BUDGET —
-    # LM Studio allocates it up front before generating token #1. If
-    # prompt + max_tokens > loaded context, LM Studio stalls at "0% processing"
-    # non-deterministically (vault hits stall reliably; vault misses may squeak
-    # through because their prompt is smaller). Keep max_tokens well below the
-    # context window to leave headroom. At context=5000: 2048 leaves ~3000
-    # tokens for the prompt. Raise LM Studio context to 8192+ for more output.
-    max_tokens: 2048
+    # max_tokens = RESERVED OUTPUT BUDGET. LM Studio allocates it up front before
+    # generating token #1, so if (prompt tokens + max_tokens) > the loaded context
+    # length, LM Studio stalls at "0% processing". The graph bounds the prompt
+    # INPUT to retrieval.max_context_tokens (query/soul-aware budget in
+    # graph.py local_llm_node / offline_best_effort_node), so the stall is
+    # prevented deterministically as long as:
+    #   LM Studio context length  >=  max_context_tokens + max_tokens + ~1500 headroom
+    # RECOMMENDED LM Studio context length: 10000-12288 (10k-12k).
+    # With max_context_tokens=4000 + max_tokens=3000 that is 7000 + headroom -> fits.
+    max_tokens: 3000
     temperature: 0.3
     # Hard per-attempt HTTP timeout. A bounded context (retrieval.max_context_tokens)
     # means local inference finishes in seconds-to-low-minutes; 300s is a backstop
@@ -94,13 +93,16 @@ retrieval:
   top_k_semantic: 5
   top_k_keyword: 5
   rrf_k: 60                # Authoritative RRF k — read by hybrid_search.py
-  # Token budget for the retrieved-context block injected into the local_llm
-  # prompt (graph.py local_llm_node, via _format_context_chunks). Converted to a
-  # char budget (~4 chars/token) and used to truncate context so that
-  # context + max_tokens + soul/framing fits inside the LM Studio context window.
-  # Keep this comfortably below (LM Studio context length - max_tokens). At a
-  # 5000 context with max_tokens=2048: 2000 leaves headroom for soul + framing.
-  max_context_tokens: 2000
+  # Token budget for the prompt INPUT to the local LLM. graph.py reserves room for
+  # the soul preamble + query + framing and gives the rest to retrieved context
+  # (query/soul-aware budget, ~4 chars/token), so the assembled prompt input stays
+  # within this many tokens. This bounds both the RAG (local_llm) and offline
+  # best-effort paths. The no-stall guarantee:
+  #   LM Studio context length  >=  max_context_tokens + models.local_llm.max_tokens + ~1500
+  # 4000 + max_tokens 3000 + headroom -> recommend LM Studio context 10000-12288.
+  # NOTE: the guarantee assumes policy.prompt_filter.enabled stays true (it caps
+  # the query at max_input_chars); disabling it lets a huge query exceed the budget.
+  max_context_tokens: 4000
 
   # min_score: routing threshold used by route_by_score_node (graph.py).
   # Scores are RRF-fused ranks in [0, 1]; 0.028 is intentionally permissive —

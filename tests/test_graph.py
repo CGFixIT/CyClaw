@@ -15,7 +15,8 @@ from pathlib import Path
 
 from graph import (
     build_graph, retrieve_node, local_llm_node,
-    offline_best_effort_node, grok_fallback_node
+    offline_best_effort_node, grok_fallback_node,
+    CHARS_PER_TOKEN, _MIN_CONTEXT_CHARS,
 )
 from tests.conftest import (
     MockRetriever, MockLocalLLM, MockGrokClient,
@@ -452,3 +453,64 @@ class TestNodeErrorRecovery:
         out = local_llm_node({"query": "q", "retrieved_docs": []}, llm=_OkLLM(), cfg={})
         assert out["answer"] == "ok answer"
         assert "error" not in out
+
+
+class TestLocalLlmPromptBudget:
+    """The assembled local_llm / offline prompt INPUT must stay within the
+    retrieval.max_context_tokens budget (query/soul-aware), so prompt + max_tokens
+    fits the LM Studio context window and cannot stall at 0% on a vault hit."""
+
+    def _docs(self, n, size):
+        return [
+            {"text": "Z" * size, "score": 0.9, "source": f"d{i}.md", "chunk_id": i}
+            for i in range(n)
+        ]
+
+    def test_total_prompt_bounded_with_oversized_chunks(self):
+        # 5 huge chunks (25k chars) + a normal query, small token budget.
+        llm = MockLocalLLM()
+        cfg = {"retrieval": {"max_context_tokens": 1000}}  # 1000 * 4 = 4000 char budget
+        local_llm_node(
+            {"query": "what is cyclaw?", "retrieved_docs": self._docs(5, 5000)},
+            llm=llm, cfg=cfg,
+        )
+        budget = 1000 * CHARS_PER_TOKEN
+        # Query/soul/framing is reserved out of the budget, so the WHOLE prompt
+        # input lands within it (framing constant is >= the real framing, so the
+        # total is strictly under budget).
+        assert len(llm.last_prompt) <= budget
+
+    def test_large_query_shrinks_context_to_floor(self):
+        # A query large enough to exhaust the budget -> context collapses to the
+        # floor (it must not *add* to an operator-caused overflow).
+        llm = MockLocalLLM()
+        cfg = {"retrieval": {"max_context_tokens": 1000}}
+        local_llm_node(
+            {"query": "q" * 4000, "retrieved_docs": self._docs(5, 5000)},
+            llm=llm, cfg=cfg,
+        )
+        # The 'Z' payload is the retrieved-context text; it must be capped at the
+        # floor regardless of how big the chunks are.
+        assert llm.last_prompt.count("Z") <= _MIN_CONTEXT_CHARS
+
+    def test_small_docs_preserved(self):
+        # Regression: with ample budget, small docs are injected in full.
+        llm = MockLocalLLM()
+        cfg = {"retrieval": {"max_context_tokens": 4000}}
+        local_llm_node(
+            {"query": "hi", "retrieved_docs": [
+                {"text": "alpha beta gamma", "score": 0.9, "source": "a.md", "chunk_id": 0}]},
+            llm=llm, cfg=cfg,
+        )
+        assert "alpha beta gamma" in llm.last_prompt
+        assert "[Source: a.md" in llm.last_prompt
+
+    def test_offline_prompt_bounded(self):
+        # The offline / Qwen best-effort path is bounded by the same budget.
+        llm = MockLocalLLM()
+        cfg = {"retrieval": {"max_context_tokens": 1000}}
+        offline_best_effort_node(
+            {"query": "explain", "retrieved_docs": self._docs(5, 5000)},
+            llm=llm, cfg=cfg,
+        )
+        assert len(llm.last_prompt) <= 1000 * CHARS_PER_TOKEN
