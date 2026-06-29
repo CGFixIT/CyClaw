@@ -103,6 +103,72 @@ User Query (HTTP POST /query or MCMC tool call)
 | 4 | Audit Convergence | All 6 execution paths converge at `audit_logger` — no shortcut path exists |
 | 5 | Soul Governance | Soul evolution requires explicit human reason string; no autonomous modification from any path |
 
+### LangGraph Topology (rendered)
+
+```mermaid
+flowchart TD
+    A(["🌐 Client\nHTTP POST /query\nor MCP tool call"])
+    A --> B
+
+    subgraph GATEWAY ["gate.py — FastAPI 127.0.0.1:8787"]
+        B["TrustedHostMiddleware\nHost header allowlist"]
+        B --> C["Rate Limiter\n60 req/min per IP"]
+        C --> D["Prompt Injection Filter\n33 patterns · config-driven · lru_cache"]
+        D --> E["Build GraphState\nquery + user_confirmed_online"]
+    end
+
+    E --> F
+
+    subgraph GRAPH ["graph.py — LangGraph 7-node State Machine"]
+        F(["① retrieve\nChroma + BM25 + RRF"])
+        F --> G["② route_by_score\ntop_score ≥ 0.028?"]
+        G -->|"YES — local context"| H["③ local_llm\nLM Studio :1234\nQwen2.5-7b"]
+        G -->|"NO — vault miss"| I["④ user_gate\nneeds_confirm = true"]
+        I -->|"confirmed=true\n+ hybrid + grok.enabled"| J["⑤ grok_fallback\nxAI grok-4.3\ntriple-gated"]
+        I -->|"confirmed=false\nor offline mode"| K["⑥ offline_best_effort\nlocal LLM · no RAG gate"]
+        H --> L
+        J --> L
+        K --> L
+        L(["⑦ audit_logger\nSHA-256 hash · PII redact\n→ logs/audit.jsonl"])
+    end
+
+    L --> M(["📤 QueryResponse\nanswer · sources · model_used\nretrieval_mode · needs_confirm"])
+
+    subgraph RETRIEVAL ["retrieval/hybrid_search.py"]
+        N["ChromaDB\nsemantic · 384-dim cosine"]
+        O["BM25Okapi\nkeyword · Porter stemming"]
+        P["RRF fusion\nk=60 · equal weighting"]
+        N --> P
+        O --> P
+    end
+
+    F <-->|"hybrid search"| P
+
+    subgraph SOUL ["utils/personality.py"]
+        Q["soul.md\nSHA-256 drift detection"]
+        R["SQLite / Postgres\nversion history · TTL prune"]
+        Q <--> R
+    end
+
+    H <-->|"soul preamble\n≤ 8000 chars"| Q
+    K <-->|"soul preamble"| Q
+
+    subgraph OOB ["Out-of-band — never imported by gate/graph/MCP"]
+        S["agentic/cli.py\nGitHub read ops"]
+        T["agentic/fsconnect/\nscoped FS read/write"]
+        U["sync/cli.py\nDropbox corpus pull"]
+        V["guardrails/\nNeMo rails skeleton"]
+    end
+
+    style GATEWAY fill:#1a3a5c,color:#ffffff,stroke:#4a90d9
+    style GRAPH fill:#1a3a2a,color:#ffffff,stroke:#4a9d5a
+    style RETRIEVAL fill:#3a2a1a,color:#ffffff,stroke:#d9904a
+    style SOUL fill:#3a1a3a,color:#ffffff,stroke:#d94ad9
+    style OOB fill:#2a2a2a,color:#aaaaaa,stroke:#666666,stroke-dasharray:5 5
+    style J fill:#5c1a1a,color:#ffffff
+    style L fill:#1a1a3a,color:#ffffff
+```
+
 ---
 
 ## API Key Setup (Soul Mutations)
