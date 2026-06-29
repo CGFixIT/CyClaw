@@ -346,6 +346,11 @@ class TestSoulAndErrorPaths:
         data = resp.json()
         assert data["index_ready"] is True
         assert data["graph_ready"] is True
+        # graph_timeout_sec is surfaced so the web console can bound its /query
+        # fetch ABOVE the server deadline (else the browser aborts first and hides
+        # the truthful 504 GRAPH_TIMEOUT message).
+        assert isinstance(data["graph_timeout_sec"], int)
+        assert data["graph_timeout_sec"] > 0
 
 
 class TestAuditSummaryEndpoint:

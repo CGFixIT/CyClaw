@@ -330,8 +330,10 @@ async def query_endpoint(request: Request, req: QueryRequest):
             detail={
                 "error": (
                     f"Request exceeded the {graph_timeout}s server deadline. The local LLM or "
-                    f"retrieval likely stalled — check that LM Studio is running and its context "
-                    f"length exceeds prompt + max_tokens."
+                    f"retrieval likely stalled — check that LM Studio is running and that its "
+                    f"loaded context length >= retrieval.max_context_tokens + "
+                    f"models.local_llm.max_tokens + ~1500 headroom (see config.yaml), or it can "
+                    f"stall at '0% processing'."
                 ),
                 "code": "GRAPH_TIMEOUT",
             },
@@ -453,7 +455,8 @@ async def health():
         services={s.name: {"healthy": s.healthy, "latency_ms": s.latency_ms, "error": s.error} for s in statuses},
         index_ready=retriever is not None,
         graph_ready=compiled_graph is not None,
-        mode=cfg["app"]["mode"]
+        mode=cfg["app"]["mode"],
+        graph_timeout_sec=cfg.get("api", {}).get("graph_timeout_sec", 330),
     )
 
 
