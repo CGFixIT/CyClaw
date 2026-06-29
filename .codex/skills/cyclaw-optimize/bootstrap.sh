@@ -1,24 +1,23 @@
 #!/usr/bin/env bash
-# bootstrap.sh — CyClaw-Optimize harness.
+# bootstrap.sh - CyClaw-Optimize harness.
 #
 # Deterministic setup + scan-seed for the CyClaw-Optimize workflow. It does the
 # boring, scriptable parts so the agent can spend its budget on the parts only an
 # agent can do: reading code for optimization opportunities and authoring PRs.
 #
 # What it does:
-#   1. Pins the git identity the stop hook requires.
+#   1. Prints the git identity, optionally applying explicit Codex overrides.
 #   2. Ensures `main` is fetched and that we are on a fresh working branch cut
 #      from origin/main (creates one if missing; never force-resets an existing
 #      branch that already has work).
 #   3. Prints a repo inventory to seed the time-boxed scan (dirs, file counts,
 #      LOC, largest files, dependency manifests, CI workflows, recent commits).
 #
-# It deliberately does NOT: call the GitHub API (PR dedup is an MCP step the
-# agent runs), edit any code, or commit. Read-only except for git config + an
-# optional branch create.
+# It deliberately does NOT: call the GitHub API, edit code, or commit.
+# Read-only except for optional git config updates and branch checkout/create.
 #
 # Usage:
-#   bash .claude/skills/CyClaw-Optimize/bootstrap.sh [work-branch-name]
+#   bash .codex/skills/cyclaw-optimize/bootstrap.sh [work-branch-name]
 #
 # If a branch name is given and it does not exist, it is created from
 # origin/main. With no argument the script only reports the current branch.
@@ -30,22 +29,29 @@ WORK_BRANCH="${1:-}"
 hr() { printf '%s\n' "------------------------------------------------------------"; }
 
 # ---------------------------------------------------------------------------
-# 1. Git identity (stop hook rejects any other committer email)
+# 1. Git identity visibility and optional explicit override
 # ---------------------------------------------------------------------------
-git config user.email noreply@anthropic.com
-git config user.name Claude
+if [ -n "${CODEX_GIT_USER_NAME:-}" ]; then
+  git config user.name "$CODEX_GIT_USER_NAME"
+fi
+
+if [ -n "${CODEX_GIT_USER_EMAIL:-}" ]; then
+  git config user.email "$CODEX_GIT_USER_EMAIL"
+fi
+
 hr
 echo "git identity: $(git config user.name) <$(git config user.email)>"
+echo "set CODEX_GIT_USER_NAME / CODEX_GIT_USER_EMAIL to override for this repo"
 
 # ---------------------------------------------------------------------------
 # 2. Fetch main + position on a working branch cut from origin/main
 # ---------------------------------------------------------------------------
 echo "fetching origin/main ..."
-git fetch origin main --quiet || echo "WARN: fetch failed (offline?) — using local refs"
+git fetch origin main --quiet || echo "WARN: fetch failed (offline?) - using local refs"
 
 if [ -n "$WORK_BRANCH" ]; then
   if git show-ref --verify --quiet "refs/heads/${WORK_BRANCH}"; then
-    echo "branch '${WORK_BRANCH}' already exists — checking it out (no reset)"
+    echo "branch '${WORK_BRANCH}' already exists - checking it out (no reset)"
     git checkout "$WORK_BRANCH"
   else
     echo "creating '${WORK_BRANCH}' from origin/main"
@@ -58,7 +64,7 @@ echo "merge-base with origin/main: $(git merge-base HEAD origin/main 2>/dev/null
 echo "commits ahead of origin/main: $(git rev-list --count origin/main..HEAD 2>/dev/null || echo '?')"
 
 # ---------------------------------------------------------------------------
-# 3. Repo inventory — seeds the time-boxed scan
+# 3. Repo inventory - seeds the time-boxed scan
 # ---------------------------------------------------------------------------
 hr
 echo "REPO INVENTORY (scan seed)"
@@ -67,7 +73,7 @@ hr
 echo "## File counts by area"
 for d in gate.py graph.py mcp_hybrid_server.py metrics.py \
          agentic sync retrieval utils schemas llm \
-         tests .github .claude config.yaml requirements.txt pyproject.toml; do
+         tests .github .codex config.yaml requirements.txt pyproject.toml; do
   if [ -d "$d" ]; then
     n=$(find "$d" -type f 2>/dev/null | wc -l | tr -d ' ')
     printf '  %-22s %s files\n' "$d/" "$n"
@@ -78,7 +84,7 @@ for d in gate.py graph.py mcp_hybrid_server.py metrics.py \
 done
 
 echo
-echo "## Largest Python files (LOC) — god-module / refactor candidates"
+echo "## Largest Python files (LOC) - god-module / refactor candidates"
 find . -name '*.py' -not -path './.git/*' -not -path './*/node_modules/*' \
   -exec wc -l {} + 2>/dev/null | sort -rn | sed -n '2,16p'
 
@@ -103,6 +109,6 @@ echo "## Recent commits on main (avoid re-doing landed work)"
 git log origin/main --oneline -n 12 2>/dev/null | sed 's/^/  /'
 
 hr
-echo "Bootstrap complete. Next: dispatch the 4-minute scan subagent (see SKILL.md)."
-echo "Then run the PR-dedup MCP step BEFORE selecting focus areas:"
-echo "  mcp__github__list_pull_requests(owner=CGFixIT, repo=CyClaw, state=open)"
+echo "Bootstrap complete. Next: run the read-only scan directly with Codex (see SKILL.md)."
+echo "Then run the PR-dedup GitHub step BEFORE selecting focus areas:"
+echo "  gh pr list --repo CGFixIT/CyClaw --state open --json number,title"
