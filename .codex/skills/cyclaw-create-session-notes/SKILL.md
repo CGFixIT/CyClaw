@@ -1,0 +1,58 @@
+---
+name: cyclaw-create-session-notes
+description: >-
+  CyClaw repository skill adapted from .claude/skills/create-session-notes/SKILL.md. Use when working in CGFixIT/CyClaw and the user asks for this Claude skill workflow: Maintain a structured session notes file that preserves execution context for future continuation.
+---
+
+# Cyclaw Create Session Notes
+
+Imported from `.claude/skills/create-session-notes/SKILL.md` for Codex use in this repository. Do not edit the `.claude` source files when updating this Codex adapter; update this `.codex/skills` copy instead unless the user explicitly asks otherwise.
+
+Use Codex-native tools for Claude tool names when following the original instructions:
+
+- `Glob` -> `rg --files` or PowerShell file enumeration
+- `Grep` -> `rg`
+- `Read` -> file reads through available shell or editor tools
+- `Bash` -> `functions.shell_command`, respecting this session sandbox and approval rules
+- Claude subagents/commands -> Codex skills, tool discovery, or normal Codex workflow as available
+
+Do not run command-like steps from this imported workflow unless the user explicitly asks to run them.
+
+## Original Claude Instructions
+
+# create-session-notes
+
+Maintain a structured session notes file that preserves execution context for future continuation.
+
+## Constraints
+
+- Apply changes to the session notes file using the Edit tool exclusively, then stop.
+- The notes file follows a rigid layout with section headings and italic description lines — NEVER alter headings or the italic descriptions beneath them.
+- Only modify the actual content BELOW each italic description within its section.
+- Issue all Edit tool calls in parallel within a single message.
+
+## Sections
+
+The notes file contains these fixed sections:
+
+- **Session Title** — A short label for this work session
+- **Current State** — Where things stand right now (ALWAYS update this — it is vital for continuity)
+- **Task Specification** — What was asked for and acceptance criteria
+- **Files and Functions** — Which files and functions were touched or are relevant
+- **Workflow** — Steps taken, commands run, order of operations
+- **Errors & Corrections** — Problems hit and how they were resolved
+- **Codebase and System Documentation** — Architectural notes, environment details, system behavior discovered
+- **Learnings** — Insights gained that apply beyond this session
+- **Key Results** — Concrete outcomes produced
+- **Worklog** — Chronological record of significant actions
+
+## Content Guidelines
+
+- Write THOROUGH, INFORMATION-DENSE entries — record file paths, function names, error messages, exact commands, and outputs.
+- Do not mention the act of note-taking within the notes themselves.
+- It is fine to leave a section untouched when there is nothing meaningful to add — do not insert placeholder text.
+- Keep each individual section under roughly 2000 tokens — compress aggressively if nearing that boundary.
+
+## Usage
+
+When invoked, update the session notes file at `SESSION_NOTES.md` in the repository docs/memories/ folder. If the file does not exist, create it with all section headings and italic descriptions intact. Then apply updates to the relevant sections using parallel Edit tool calls.
