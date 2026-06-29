@@ -28,6 +28,13 @@ models:
     base_url: "http://127.0.0.1:1234/v1"  # DevSkim: ignore DS162092,DS137138 - LMStudio loopback, offline-only
 #    api_key: 123456 # placeholder
     model: "qwen2.5-7b-instruct"
+    # IMPORTANT: LM Studio must load the model with a context length >=
+    # (prompt tokens + max_tokens). The local_llm graph node injects the soul
+    # preamble + up to 5 full retrieved corpus chunks into the prompt, so the
+    # real prompt is far larger than the user's question. If max_tokens (the
+    # reserved OUTPUT budget) plus the prompt exceeds the loaded context window,
+    # LM Studio stalls at "0% processing" and never generates. Raise the LM Studio
+    # context length (8192+) or lower this value if you see that hang.
     max_tokens: 5000
     temperature: 0.3
     timeout_sec: 720
