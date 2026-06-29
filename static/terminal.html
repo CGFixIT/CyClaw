@@ -815,6 +815,12 @@ const agenticConfirm = document.getElementById('agenticConfirm');
 const agenticApplyBtn = document.getElementById('agenticApplyBtn');
 
 let queryCount = 0;
+// Client-side /query abort, in ms. MUST stay above the server's graph_timeout_sec
+// (api.graph_timeout_sec) so the browser never aborts first — otherwise the user
+// sees a generic client timeout instead of the server's truthful 504 GRAPH_TIMEOUT
+// message. Synced from /health (graph_timeout_sec + 10s buffer); the default here
+// already clears the 330s server default in case /health hasn't responded yet.
+let queryDeadlineMs = 340000;
 let pendingConfirmQuery = null;
 let pendingSoulProposal = null;
 let entryCounter = 0;
@@ -860,6 +866,11 @@ async function checkHealth() {
     statusDot.className = 'status-dot';
     statusText.textContent = `gateway ${data.status}`;
     modeBadge.textContent = data.mode || 'offline';
+    // Keep the /query client deadline above the server deadline so the server's
+    // truthful 504 surfaces before the browser aborts. +10s covers the round trip.
+    if (Number.isFinite(data.graph_timeout_sec) && data.graph_timeout_sec > 0) {
+      queryDeadlineMs = (data.graph_timeout_sec + 10) * 1000;
+    }
     if (data.status !== 'ok') {
       statusDot.classList.add('error');
     }
@@ -895,12 +906,14 @@ async function submitQuery(confirmedOnline = null) {
     }
 
     // Bound the wait so a stalled LLM surfaces an error instead of hanging the
-    // UI forever. 300s matches the server-side timeout_sec backstop.
+    // UI forever. queryDeadlineMs is synced from /health to stay just ABOVE the
+    // server's graph_timeout_sec, so the server's truthful 504 GRAPH_TIMEOUT
+    // message wins the race instead of being masked by a premature client abort.
     const resp = await fetch(`${API}/query`, {
       method: 'POST',
       headers: authHeaders(),
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(300000)
+      signal: AbortSignal.timeout(queryDeadlineMs)
     });
 
     const elapsed = Math.round(performance.now() - startTime);
@@ -940,7 +953,7 @@ async function submitQuery(confirmedOnline = null) {
   } catch (e) {
     removeEntry(loadingId);
     if (e.name === 'TimeoutError' || e.name === 'AbortError') {
-      addEntry('error', 'ERROR', 'Request timed out (300s). The local LLM may be stalled — check that LM Studio is running and that its context length exceeds the prompt + max_tokens.');
+      addEntry('error', 'ERROR', `Request timed out (${Math.round(queryDeadlineMs / 1000)}s, client-side). The local LLM may be stalled — check that LM Studio is running and that its loaded context length exceeds the prompt + max_tokens.`);
     } else {
       addEntry('error', 'ERROR', `Network error: ${e.message}`);
     }
