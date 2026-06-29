@@ -12,7 +12,7 @@
 [![Gitleaks Secret Scan](https://github.com/cgfixit/CyClaw/actions/workflows/gitleaks.yml/badge.svg)](https://github.com/cgfixit/CyClaw/actions/workflows/gitleaks.yml)
 [![OSV-Scanner](https://github.com/cgfixit/CyClaw/actions/workflows/osv-scanner.yml/badge.svg)](https://github.com/cgfixit/CyClaw/actions/workflows/osv-scanner.yml)
 
-[![Screenshots: local AI](https://imgur.com/a/xfW29G0?s=sms#M4SY0Q6)](https://github.com/CGFixIT/CyClaw/tree/main/docs/screenshots)
+[![Screenshots: local AI](https://imgur.com/a/xfW29G0s=sms#M4SY0Q6)](https://github.com/CGFixIT/CyClaw/tree/main/docs/screenshots)
 
 
 ---
