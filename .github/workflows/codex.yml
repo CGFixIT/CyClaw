@@ -8,6 +8,7 @@ jobs:
   codex:
     name: Codex Agent
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     if: |
       github.event.issue.pull_request != null &&
       contains(github.event.comment.body, '@codex') &&
@@ -26,7 +27,7 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
         with:
           ref: refs/pull/${{ github.event.issue.number }}/merge
-          fetch-depth: 0
+          fetch-depth: 1
           persist-credentials: false
 
       - name: Run Codex
@@ -43,6 +44,7 @@ jobs:
   post_feedback:
     name: Post Codex feedback
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     needs: codex
     if: needs.codex.outputs.final_message != ''
 
