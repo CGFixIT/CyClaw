@@ -16,6 +16,12 @@
 
 ---
 
+## Contributors
+
+- [OpenAI Codex](https://openai.com/codex/) - AI coding agent for repository maintenance, CI fixes, and workflow automation.
+
+---
+
 ## What It Does
 
 CyClaw is a personal RAG (Retrieval-Augmented Generation) backend that:
