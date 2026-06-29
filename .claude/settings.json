@@ -4,7 +4,7 @@
     "ponytail": {
       "source": {
         "source": "file",
-        "path": "/root/.claude/uploads/0484a41f-e7ec-5b8a-bc8c-e9849058126a/530433b8-marketplace.json"
+        "path": ".claude/ponytail-marketplace.json"
       }
     }
   },
