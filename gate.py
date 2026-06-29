@@ -424,7 +424,8 @@ async def health():
         status="ok" if all(s.healthy for s in statuses) else "degraded",
         services={s.name: {"healthy": s.healthy, "latency_ms": s.latency_ms, "error": s.error} for s in statuses},
         index_ready=retriever is not None,
-        graph_ready=compiled_graph is not None
+        graph_ready=compiled_graph is not None,
+        mode=cfg["app"]["mode"]
     )
 
 
