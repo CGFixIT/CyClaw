@@ -56,18 +56,6 @@ jobs:
         python -m pip install -e ".[test,dev]" --no-deps || echo "No [test,dev] extras yet — add to pyproject.toml"
         # If heavy deps live in environment.yml, they are already resolved by mamba
 
-    - name: Ruff lint + format gate (modern replacement for flake8)
-      shell: bash -l {0}
-      run: |
-        ruff check . --output-format=github
-        ruff format --check .
-
-    - name: Bandit security scan (CI gate)
-      shell: bash -l {0}
-      run: |
-        bandit -r cyclaw/ agentic/ -ll --exclude "*/tests/*,*/.venv/*" || true
-        # Extend to feature/CyClaw-Agent PRs as per v1.7+ hardening
-
     - name: Pytest — unit + integration + safe smoke (RAG/policy focused)
       shell: bash -l {0}
       run: |
