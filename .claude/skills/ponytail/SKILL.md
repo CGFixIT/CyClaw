@@ -1,53 +1,98 @@
 ---
 name: ponytail
-description: Activate lazy-senior-dev mode for the current task — enforces YAGNI, stdlib-first, and minimal-abstraction constraints on every code change. Use when asked to "keep it simple", "no over-engineering", or "ponytail mode".
+description: Activate lazy-senior-dev mode — enforces YAGNI, stdlib-first, and minimal-abstraction constraints. Args: (none) full mode | checklist | review
 ---
 
 # Ponytail — Lazy Senior Dev Mode
 
-You are operating under **ponytail** constraints. Apply all seven rules to every line of code you write or review in this task.
+## Argument Dispatch
 
-## The Seven Rules
+Read the `ARGUMENTS` value at the bottom of this prompt and follow the matching branch. If no arguments or unrecognised arguments, use **Full Mode**.
 
-1. **YAGNI** — You Aren't Gonna Need It.
-   Do not add features, options, or flexibility that the current task does not require.
-   If a caller doesn't exist yet, don't design for it.
+| Argument | Action |
+|---|---|
+| *(none)* | Full Mode — apply all seven rules going forward |
+| `checklist` | Print the 7-item pre-commit checklist only, then stop |
+| `review` | Audit the current branch vs `origin/main` using the seven rules; produce a structured report |
 
-2. **stdlib-first** — Prefer Python standard library over third-party packages.
-   Only reach for a dependency when the stdlib alternative is genuinely inadequate
-   (e.g., `pathlib` beats `click.Path`, `logging` beats `loguru` unless structlog is already in the stack).
+---
 
-3. **Minimal abstraction** — Three similar lines is better than a premature helper.
-   Extract a function or class only when the same logic appears in **four or more** call sites,
-   or when the abstraction has a name that is obviously more informative than the code it wraps.
+## Full Mode (default)
 
-4. **No dead code** — Never add commented-out blocks, unused imports, `# TODO: implement later`,
-   or placeholder stubs that do nothing. If it's not needed now, it does not exist.
+You are operating under ponytail constraints for this task. Apply all seven rules to every line of code you write or review.
 
-5. **No speculative generality** — Do not design for hypothetical future requirements.
-   "We might need X" is not a reason to add X. Add it when a real caller exists.
+### The Seven Rules
 
-6. **Correctness over cleverness** — A boring, readable solution beats an elegant one.
-   If you have to explain why the smart version is safe, write the dumb version instead.
+1. **YAGNI** — No features, options, or flexibility without a current caller.
+2. **stdlib-first** — No third-party dep when stdlib is adequate (`pathlib`, `logging`, `json`, `subprocess`, `dataclasses` cover most cases).
+3. **Minimal abstraction** — Three similar lines beats a premature helper. Extract only when four or more call sites exist.
+4. **No dead code** — No commented-out blocks, unused imports, or `# TODO: implement later` stubs.
+5. **No speculative generality** — No design for hypothetical future needs. Add it when a real caller exists.
+6. **Correctness over cleverness** — Boring and readable beats elegant. If you need to explain why it's safe, write the dull version.
+7. **No half-measures** — Every function is complete or absent. Partial implementations that require caller awareness are bugs.
 
-7. **No half-measures** — Either implement it properly or do not implement it at all.
-   Partial implementations that require the caller to know their limitations are bugs.
+### Violation Protocol
 
-## Violation Protocol
+State: which rule, the concrete reason (not "cleaner" or "might be useful"), and keep the violation as narrow as possible.
 
-If you must violate a rule, you must:
-- Name which rule is being violated.
-- State the concrete reason the violation is justified (not "might be useful", not "cleaner").
-- Keep the violation as narrow as possible.
+### Pre-Commit Checklist
 
-## Checklist (apply before finalising any diff)
+- [ ] Every added line has a caller that exists right now (YAGNI)
+- [ ] No third-party package where stdlib would work (stdlib-first)
+- [ ] No helper/class/base with fewer than four call sites (minimal abstraction)
+- [ ] No commented-out code, unused imports, or TODO stubs (no dead code)
+- [ ] No design for a future requirement no one has stated (no speculative generality)
+- [ ] The dull solution was considered and rejected for a concrete reason (correctness over cleverness)
+- [ ] Every function written is complete (no half-measures)
 
-- [ ] Does every added line have a caller that exists right now?
-- [ ] Did I reach for a third-party package when stdlib would have worked?
-- [ ] Did I add a helper, base class, or abstraction with fewer than four call sites?
-- [ ] Is there any commented-out code, unused import, or TODO stub?
-- [ ] Did I design for a future requirement no one has stated?
-- [ ] Is the clever solution the only option, or is there a dull one that also works?
-- [ ] Is every function I wrote either complete or absent?
+---
 
-All seven boxes must be clear before the diff is final.
+## Checklist Mode (`/ponytail checklist`)
+
+Print only the pre-commit checklist above, then stop. Do not load the rules or review instructions.
+
+---
+
+## Review Mode (`/ponytail review`)
+
+Audit the current branch against `origin/main` using the seven ponytail rules.
+
+**Steps:**
+
+1. Run `git diff origin/main...HEAD` to get the full diff. If already on main with no divergence, run `git log -1 --format=%H` then `git diff HEAD~1` to review the last commit.
+2. For each changed file, check every **added** line (`+` prefix) against the seven rules.
+3. Ignore removed lines, test files under `tests/`, and documentation (`docs/`, `*.md`) — focus on production code and config.
+4. Report findings grouped by rule. For each violation, quote the file, line range, and the offending addition. Explain which rule it breaks and why.
+5. If a violation is justifiable, say so — but require a concrete reason.
+6. End with an overall verdict.
+
+**Output format:**
+
+```
+## Rule 1 — YAGNI
+PASS  (or)  VIOLATION: <file>:<lines> — <quoted code> — <why it breaks YAGNI>
+
+## Rule 2 — stdlib-first
+...
+
+## Rule 3 — Minimal abstraction
+...
+
+## Rule 4 — No dead code
+...
+
+## Rule 5 — No speculative generality
+...
+
+## Rule 6 — Correctness over cleverness
+...
+
+## Rule 7 — No half-measures
+...
+
+---
+## Overall verdict: PASS | FAIL
+<one-sentence summary of what must change, or "no violations found">
+```
+
+Begin the review now using the diff from `origin/main`.
