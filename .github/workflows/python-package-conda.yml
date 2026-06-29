@@ -1,4 +1,4 @@
-name: CyClaw CI (Conda-hardened)
+name: CyClaw Conda CI 
 
 on:
   push:
