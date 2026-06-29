@@ -1,4 +1,4 @@
-name: CyClaw CI (Conda-hardened)
+name: CyClaw Conda CI 
 
 on:
   push:
@@ -24,29 +24,29 @@ jobs:
 
     steps:
     - name: Checkout
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
       with:
         fetch-depth: 0
 
     - name: Setup Miniconda + mamba (fast solver)
-      uses: conda-incubator/setup-miniconda@v3
+      uses: conda-incubator/setup-miniconda@v4
       with:
         miniforge-version: latest
         python-version: ${{ matrix.python-version }}
         channels: conda-forge
         channel-priority: strict
-        activate-environment: cyclaw-ci
-        environment-file: environment.yml   # create from pyproject.toml if missing
+        activate-environment: cyclaw
+        environment-file: .github/workflows/environment.yml
         auto-activate-base: false
         use-mamba: true
 
     - name: Cache conda environment
-      uses: actions/cache@v4
+      uses: actions/cache@v6
       with:
         path: |
-          /home/runner/miniconda3/envs/cyclaw-ci
+          /home/runner/miniconda3/envs/cyclaw
           /home/runner/miniconda3/pkgs
-        key: conda-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('environment.yml', 'pyproject.toml', '**/requirements*.txt') }}
+        key: conda-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('.github/workflows/environment.yml', 'pyproject.toml', '**/requirements*.txt') }}
         restore-keys: |
           conda-${{ runner.os }}-${{ matrix.python-version }}-
 
@@ -91,9 +91,9 @@ jobs:
         fi
 
     - name: Initialize CodeQL (Python security)
-      uses: github/codeql-action/init@v3
+      uses: github/codeql-action/init@v4
       with:
         languages: python
 
     - name: Perform CodeQL Analysis
-      uses: github/codeql-action/analyze@v3
+      uses: github/codeql-action/analyze@v4
