@@ -1,93 +1,90 @@
 ---
 name: cyclaw-command-status
 description: >-
-  CyClaw repository skill adapted from .claude/commands/status.md. Use when working in CGFixIT/CyClaw and the user asks for this Claude command workflow: Full environment and server status check — validates prerequisites, config, index, soul file, and live server health in one pass.
+  Codex-native CyClaw status workflow. Use when working in CGFixIT/CyClaw and the user asks for environment status, server status, prerequisite checks, config validation, index/soul readiness, telemetry-kill verification, or local health diagnostics.
 ---
 
-# Cyclaw Command Status
+# CyClaw Command Status
 
-Imported from `.claude/commands/status.md` for Codex use in this repository. Do not edit the `.claude` source files when updating this Codex adapter; update this `.codex/skills` copy instead unless the user explicitly asks otherwise.
+Use this skill for a read-only status pass over the local CyClaw environment and
+server. Report missing prerequisites and risky defaults without changing files.
 
-Use Codex-native tools for Claude tool names when following the original instructions:
+Run commands only when the user asks to execute the status check.
 
-- `Glob` -> `rg --files` or PowerShell file enumeration
-- `Grep` -> `rg`
-- `Read` -> file reads through available shell or editor tools
-- `Bash` -> `functions.shell_command`, respecting this session sandbox and approval rules
-- Claude subagents/commands -> Codex skills, tool discovery, or normal Codex workflow as available
+## Workflow
 
-Do not run command-like steps from this imported workflow unless the user explicitly asks to run them.
+1. Read `AGENTS.md`.
+2. Check Python version and core dependency presence.
+3. Check required files and directories.
+4. Parse `config.yaml` and flag risky defaults.
+5. Report relevant environment variables.
+6. Probe live server health if `127.0.0.1:8787` is running.
+7. Verify telemetry-kill environment variables are unset or disabled.
 
-## Original Claude Instructions
+## Commands
 
-Run a full CyClaw environment status check.
+Python and packages:
 
-## Steps
-
-### 1. Python Environment
 ```bash
-python3 --version          # Must be 3.12.x
-pip show fastapi uvicorn chromadb langchain-core | grep -E 'Name|Version'
+python --version
+python -c "import fastapi, uvicorn, chromadb, langchain_core; print('core imports OK')"
 ```
-Flag if Python is not 3.12 or any core package is missing.
 
-### 2. Required Files
-Check each path exists:
+Required files:
+
 ```bash
 for f in data/personality/soul.md index/chroma_db index/bm25.json config.yaml requirements.txt; do
-  test -e $f && echo "OK: $f" || echo "MISSING: $f"
+  test -e "$f" && echo "OK: $f" || echo "MISSING: $f"
 done
 ```
 
-### 3. Configuration
+Configuration:
+
 ```bash
-python3 -c "
-import yaml
-cfg = yaml.safe_load(open('config.yaml'))
-print('mode:', cfg['app']['mode'])
-print('host:', cfg['api']['host'])
-print('port:', cfg['api']['port'])
-print('top_k:', cfg['retrieval']['top_k'])
-print('min_score:', cfg['retrieval']['min_score'])
-print('grok_enabled:', cfg['models']['grok'].get('enabled', False))
-"
+python -c "import yaml; cfg=yaml.safe_load(open('config.yaml')); print('mode:', cfg['app']['mode']); print('host:', cfg['api']['host']); print('port:', cfg['api']['port']); print('top_k:', cfg['retrieval']['top_k']); print('min_score:', cfg['retrieval']['min_score']); print('grok_enabled:', cfg['models']['grok'].get('enabled', False))"
 ```
-Flag if `host` is not `127.0.0.1` (loopback requirement) or if `grok_enabled=true` unexpectedly.
 
-### 4. Environment Variables
+Environment:
+
 ```bash
-echo "GROK_API_KEY: $([ -n "$GROK_API_KEY" ] && echo SET || echo MISSING)"
-echo "CYCLAW_MODE: ${CYCLAW_MODE:-not set (config.yaml value used)}"
+python -c "import os; print('GROK_API_KEY:', 'SET' if os.environ.get('GROK_API_KEY') else 'MISSING'); print('CYCLAW_MODE:', os.environ.get('CYCLAW_MODE', 'not set'))"
 ```
 
-### 5. Server Health (if running)
+Live health:
+
 ```bash
-curl -s --connect-timeout 2 http://127.0.0.1:8787/health | python3 -m json.tool 2>/dev/null \
-  || echo "Server not running"
+curl -s --connect-timeout 2 http://127.0.0.1:8787/health | python -m json.tool
 ```
-If running, report: `status`, `index_ready`, `graph_ready`, `mode`.
 
-### 6. Telemetry Kill Verification
+Telemetry kill:
+
 ```bash
-python3 -c "
-import os
-kill_vars = ['LANGCHAIN_TRACING_V2','LANGCHAIN_API_KEY','CHROMA_TELEMETRY','ANONYMIZED_TELEMETRY','OTEL_EXPORTER_OTLP_ENDPOINT']
-for v in kill_vars:
-    print(f'{v}: {os.environ.get(v, "not set")}')
-"
+python -c "import os; vars=['LANGCHAIN_TRACING_V2','LANGCHAIN_API_KEY','CHROMA_TELEMETRY','ANONYMIZED_TELEMETRY','OTEL_EXPORTER_OTLP_ENDPOINT']; [print(f'{v}: {os.environ.get(v, \"not set\")}') for v in vars]"
 ```
 
-## Output Format
+## Flag Conditions
 
-```
+- Python is not 3.12.x.
+- Core imports fail.
+- `data/personality/soul.md`, `index/chroma_db`, or `index/bm25.json` is
+  missing when runtime checks are requested.
+- `api.host` is not `127.0.0.1`.
+- Grok is unexpectedly enabled.
+- Telemetry/tracing variables are enabled.
+- Live health reports graph or index not ready.
+
+## Output Shape
+
+```text
 === CyClaw Environment Status ===
-Python:        3.12.x  ✅
-Soul file:     EXISTS  ✅
-ChromaDB:      EXISTS  ✅
-BM25 index:    EXISTS  ✅
-Config mode:   offline ✅
+Python:        3.12.x / mismatch / unavailable
+Soul file:     EXISTS / MISSING
+ChromaDB:      EXISTS / MISSING
+BM25 index:    EXISTS / MISSING
+Config mode:   offline / hybrid / other
 Server:        RUNNING / NOT RUNNING
-Health status: healthy / degraded (normal without LM Studio)
+Health status: healthy / degraded / unavailable
 ```
 
-List any ❌ failures with remediation steps.
+Include remediation steps for failures and list checks that were skipped because
+dependencies, network, or server state were unavailable.

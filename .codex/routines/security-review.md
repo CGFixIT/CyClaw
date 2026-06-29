@@ -17,7 +17,9 @@ Use this for auth, secrets, telemetry, network exposure, LangGraph routing, retr
 3. Inspect configuration defaults and env var handling.
 4. Check for secrets, unsafe logging, network exposure, trust boundary crossings, and optional-layer imports into core paths.
 5. For dependency changes, review security workflows and documented exceptions.
-6. Recommend minimal mitigations before broad redesigns.
+6. Use Codex Security skills when the user asks for a full repository, diff, or
+   finding-specific security workflow and those skills are available.
+7. Recommend minimal mitigations before broad redesigns.
 
 ## Verification Checklist
 
@@ -33,3 +35,4 @@ Use this for auth, secrets, telemetry, network exposure, LangGraph routing, retr
 - Affected files/components.
 - Suggested fixes and verification commands.
 - Residual risk.
+- Whether a deeper Codex Security scan is warranted.

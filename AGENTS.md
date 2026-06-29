@@ -49,6 +49,48 @@ The main security invariants are RAG-first retrieval, graph topology as policy, 
 - `.codex/skills/` - existing Codex skills ported from project guidance.
 - `docs/` - setup, threat model, audits, agentic docs, sync docs, planning.
 
+## Codex Skills And Routines Map
+
+Use this map to choose the narrowest reusable `.codex` workflow before opening
+large docs or making edits.
+
+Skills:
+
+- `.codex/skills/cyclaw-project-guidance/` - use before substantial CyClaw work
+  to load repository invariants, architecture, test expectations, and canonical
+  reference docs.
+- `.codex/skills/cyclaw-run-cyclaw/` - use when asked to prepare, start, run,
+  smoke-test, or interact with the local FastAPI RAG server.
+- `.codex/skills/cyclaw-command-status/` - use for read-only environment,
+  config, index, soul, telemetry, and live health status checks.
+- `.codex/skills/cyclaw-command-run/` - use for focused endpoint smoke checks
+  and local runtime verification.
+- `.codex/skills/cyclaw-command-audit/` - use to summarize
+  `logs/audit.jsonl` with `metrics.py` and flag audit anomalies.
+- `.codex/skills/cyclaw-command-check-soul/` - use to validate
+  `data/personality/soul.md` presence, hash, readability, and drift without
+  mutating it.
+- `.codex/skills/cyclaw-optimize/` - use when asked to scan `main` for
+  optimization opportunities and open focused draft PRs.
+
+Routines:
+
+- `.codex/routines/first-pass-repo-review.md` - orient in a new subsystem or
+  verify setup before edits.
+- `.codex/routines/bugfix.md` - reproduce, diagnose, fix, and verify a reported
+  defect or failing check.
+- `.codex/routines/feature.md` - implement new behavior while preserving
+  CyClaw invariants and optional-layer isolation.
+- `.codex/routines/refactor.md` - improve structure while preserving behavior
+  and keeping review diffs narrow.
+- `.codex/routines/test-and-verify.md` - choose targeted, CI-parity, or static
+  checks and report skipped verification honestly.
+- `.codex/routines/pr-review.md` - review a PR, local diff, or patch with
+  findings first and summaries second.
+- `.codex/routines/security-review.md` - assess auth, secrets, telemetry,
+  network exposure, LangGraph routing, retrieval boundaries, dependencies, or
+  optional-layer changes.
+
 ## Setup Commands
 
 Preferred local setup from `.github/copilot-instructions.md`:

@@ -18,7 +18,9 @@ Use this for a reported bug, failing test, runtime error, or CI failure with a l
 4. Add or adjust a focused test when behavior changes.
 5. Make the minimal fix.
 6. Run the targeted test first, then Ruff or broader CI parity when risk warrants it.
-7. Document residual risk and unverified paths.
+7. Respect Codex sandbox and approval rules for dependency installs, network,
+   server processes, GitHub operations, and git ref writes.
+8. Document residual risk and unverified paths.
 
 ## Verification Checklist
 
@@ -33,4 +35,5 @@ Use this for a reported bug, failing test, runtime error, or CI failure with a l
 - Root cause.
 - Files changed.
 - Commands run and results.
+- Any approval-limited or unavailable checks.
 - Remaining uncertainty or follow-up.

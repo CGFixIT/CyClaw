@@ -19,6 +19,8 @@ Use this for structure, readability, duplication, or maintainability improvement
 5. Preserve graph security invariants and optional-layer isolation.
 6. Run the same baseline checks after the edit.
 7. If behavior changes are discovered, stop and reclassify as a feature/bugfix.
+8. Keep mechanical rewrites separate from semantic cleanup when either diff
+   would be hard to review.
 
 ## Verification Checklist
 
@@ -34,3 +36,4 @@ Use this for structure, readability, duplication, or maintainability improvement
 - Files changed.
 - Behavior-preservation evidence.
 - Checks run and any unverified areas.
+- Any intentional non-goals left for a separate PR.

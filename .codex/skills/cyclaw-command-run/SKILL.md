@@ -1,58 +1,88 @@
 ---
 name: cyclaw-command-run
 description: >-
-  CyClaw repository skill adapted from .claude/commands/run.md. Use when working in CGFixIT/CyClaw and the user asks for this Claude command workflow: Run the CyClaw smoke test suite. Starts the server if needed, executes all 6 smoke checks, and reports pass/fail with endpoint details.
+  Codex-native CyClaw smoke-run workflow. Use when working in CGFixIT/CyClaw and the user asks to run CyClaw checks, smoke-test the local server, verify endpoints, confirm the app works, or exercise health/query/soul/static routes.
 ---
 
-# Cyclaw Command Run
+# CyClaw Command Run
 
-Imported from `.claude/commands/run.md` for Codex use in this repository. Do not edit the `.claude` source files when updating this Codex adapter; update this `.codex/skills` copy instead unless the user explicitly asks otherwise.
+Use this skill to run or guide CyClaw smoke verification against the local
+FastAPI server. Prefer repo-native tests and explicit endpoint probes over
+legacy agent scripts.
 
-Use Codex-native tools for Claude tool names when following the original instructions:
+Run commands only when the user asks to execute the checks. Starting a server or
+probing local endpoints may require sandbox approval depending on the session.
 
-- `Glob` -> `rg --files` or PowerShell file enumeration
-- `Grep` -> `rg`
-- `Read` -> file reads through available shell or editor tools
-- `Bash` -> `functions.shell_command`, respecting this session sandbox and approval rules
-- Claude subagents/commands -> Codex skills, tool discovery, or normal Codex workflow as available
+## Prerequisites
 
-Do not run command-like steps from this imported workflow unless the user explicitly asks to run them.
+Confirm these exist before live endpoint checks:
 
-## Original Claude Instructions
+- `index/chroma_db/`
+- `index/bm25.json`
+- `data/personality/soul.md`
+- Python dependencies for FastAPI, retrieval, and tests
 
-Run the CyClaw smoke test against the local server.
+If index files are missing, build them first when approved:
 
-## Steps
+```bash
+mkdir -p data/personality index logs
+GROK_API_KEY=dummy python -m retrieval.indexer
+```
 
-1. Verify prerequisites exist:
-   - `index/chroma_db/` directory
-   - `index/bm25.json` file
-   - `data/personality/soul.md` file
-   If any are missing, stop and report what needs to be built first.
+## Preferred Verification
 
-2. Execute the smoke script:
-   ```bash
-   bash .claude/skills/run-cyclaw/smoke.sh
-   ```
+Use the fastest meaningful check first:
 
-3. Report results for all 6 checks:
-   - `GET /health` — index_ready + graph_ready
-   - `POST /query` — vault-miss path (needs_confirm=true)
-   - `POST /query` with `user_confirmed_online=false` — offline_best_effort node
-   - Prompt injection blocked → HTTP 400
-   - `GET /soul` — personality endpoint
-   - `GET /static/terminal.html` — static UI
+```bash
+python -m tests.ci_rag_smoke
+GROK_API_KEY=dummy pytest tests/ -q --tb=short
+```
 
-4. Exit summary:
-   - ✅ All checks passed — server is healthy
-   - ❌ N checks failed — list each failure with the actual vs expected response
+For endpoint-level smoke, run the server:
 
-## Notes
+```bash
+GROK_API_KEY=dummy uvicorn gate:app --host 127.0.0.1 --port 8787
+```
 
-- `status: degraded` in `/health` is **normal** without LM Studio running. `index_ready` and `graph_ready` are the meaningful fields.
-- `needs_confirm: true` on `/query` is **correct** behavior when retrieval score is below `min_score` (0.028).
-- `TELEMETRY KILL` messages on stdout are intentional.
-- `GROK_API_KEY=dummy` is sufficient for all offline smoke checks.
-- `soul.md` is backed up and restored by the smoke script — your personality file is never modified.
+Then probe:
 
-For full server setup instructions see `.claude/skills/run-cyclaw/SKILL.md`.
+```bash
+curl -s http://127.0.0.1:8787/health
+curl -s -X POST http://127.0.0.1:8787/query \
+  -H "Content-Type: application/json" \
+  -d '{"query":"What is CyClaw?","user_confirmed_online":false}'
+curl -s http://127.0.0.1:8787/static/terminal.html
+```
+
+For `/soul`, use a dummy local key only when the server is configured for it:
+
+```bash
+curl -s http://127.0.0.1:8787/soul -H "Authorization: Bearer $CYCLAW_API_KEY"
+```
+
+## Expected Signals
+
+- `/health` may report `status: degraded` without LM Studio; focus on
+  `index_ready` and `graph_ready`.
+- Offline query paths should remain local and avoid Grok unless hybrid mode and
+  user confirmation gates are explicitly enabled.
+- Prompt injection tests should fail closed.
+- Static terminal UI should return HTTP 200 when static files are mounted.
+
+## Report
+
+Include:
+
+- checks run
+- pass/fail status
+- endpoint details for failures
+- whether LM Studio, Grok, Postgres, rclone, or `gh` were unavailable
+- residual risk and next verification step
+
+## Guardrails
+
+- Keep the server bound to `127.0.0.1`.
+- Use `GROK_API_KEY=dummy` for offline verification.
+- Do not require LM Studio, Grok, rclone, Postgres, or real GitHub tokens for
+  ordinary smoke checks.
+- Do not commit generated logs, indexes, caches, or local runtime files.

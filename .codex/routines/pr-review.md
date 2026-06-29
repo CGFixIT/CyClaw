@@ -17,7 +17,9 @@ Use this for reviewing a pull request, local diff, or proposed patch.
 3. For dependency/CI changes, compare `pyproject.toml`, `requirements.txt`, `constraints.txt`, and `Dockerfile`.
 4. Look first for bugs, regressions, security issues, missing tests, and CI gaps.
 5. Verify claims against code and tests; avoid style-only findings unless they block maintainability.
-6. If commenting on GitHub, use the connector PR comment/review tools when permissions allow.
+6. If commenting on GitHub, use the connector PR comment/review tools when
+   permissions allow; if they return permission errors, report the blocker
+   rather than retrying with unrelated tools.
 
 ## Verification Checklist
 
@@ -31,4 +33,4 @@ Use this for reviewing a pull request, local diff, or proposed patch.
 - Findings first, ordered by severity.
 - Open questions or assumptions.
 - Brief summary of reviewed scope.
-- Tests/checks inspected or run.
+- Tests/checks inspected, run, or explicitly not run.

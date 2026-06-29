@@ -19,6 +19,8 @@ Use this for new behavior, an endpoint, CLI capability, workflow enhancement, or
 5. Add tests for behavior, validation, and failure modes.
 6. Update docs only where users or future agents need the change.
 7. Run targeted tests, Ruff, and broader CI parity for cross-cutting work.
+8. Keep optional layers optional; do not make `sync/`, `agentic/`, or
+   `guardrails/` required by the core gateway unless explicitly requested.
 
 ## Verification Checklist
 
@@ -33,4 +35,5 @@ Use this for new behavior, an endpoint, CLI capability, workflow enhancement, or
 - What feature was added.
 - How it fits the existing architecture.
 - Tests/checks run.
+- Approval-limited checks or external services not exercised.
 - Any deployment or security notes.
