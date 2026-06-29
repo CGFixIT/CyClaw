@@ -189,6 +189,12 @@ class TestGrokClient:
         assert client2.is_available() is False
         client2.close()
 
+    def test_is_available_false_for_whitespace_only_key(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("GROK_API_KEY", "  \n\t  ")
+        client = GrokClient(_write_config(tmp_path))
+        assert client.is_available() is False
+        client.close()
+
     def test_generate_without_key_raises(self, tmp_path, monkeypatch):
         monkeypatch.delenv("GROK_API_KEY", raising=False)
         client = GrokClient(_write_config(tmp_path))
@@ -199,6 +205,16 @@ class TestGrokClient:
 
     def test_generate_success_sends_bearer(self, tmp_path, monkeypatch):
         monkeypatch.setenv("GROK_API_KEY", "xai-secret")
+        client = GrokClient(_write_config(tmp_path))
+        fake = _FakePost(response=_ok_response("grok answer"))
+        client._client.post = fake
+        assert client.generate("a prompt") == "grok answer"
+        _url, kwargs = fake.calls[0]
+        assert kwargs["headers"]["Authorization"] == "Bearer xai-secret"
+        client.close()
+
+    def test_generate_success_strips_env_key_before_bearer(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("GROK_API_KEY", "  xai-secret \n")
         client = GrokClient(_write_config(tmp_path))
         fake = _FakePost(response=_ok_response("grok answer"))
         client._client.post = fake
