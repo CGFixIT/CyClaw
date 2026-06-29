@@ -53,7 +53,7 @@ jobs:
             pip install poetry
             poetry install --no-root --no-interaction --no-ansi
           elif [ -f requirements.txt ]; then
-            pip install -r requirements.txt
+            pip install -r requirements.txt -c constraints.txt
           else
             echo "No dependency file found – continuing without install."
           fi

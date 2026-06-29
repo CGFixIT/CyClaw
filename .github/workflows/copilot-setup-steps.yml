@@ -40,7 +40,7 @@ jobs:
         run: pip install torch==2.12.1+cpu --index-url https://download.pytorch.org/whl/cpu
 
       - name: Install CyClaw dependencies + test tools
-        run: pip install -r requirements.txt pytest pytest-cov
+        run: pip install -r requirements.txt -c constraints.txt pytest pytest-cov
 
       - name: Prepare runtime directories
         run: |
