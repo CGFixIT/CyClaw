@@ -533,6 +533,7 @@ async def ops_sync(request: Request, req: OpsSyncRequest):
     except Exception as e:
         safe_msg = _sanitize_error(e)
         audit_log({"event": "ops_sync_error", "action": req.action, "error": safe_msg})
+        logger.exception("Unexpected error in /ops/sync action=%r", req.action)
         raise HTTPException(status_code=500, detail={"error": safe_msg, "code": "OPS_ERROR"}) from e
     audit_log({
         "event": "ops_sync_executed", "action": req.action, "dry_run": req.dry_run,
@@ -564,6 +565,7 @@ async def ops_agentic(request: Request, req: OpsAgenticRequest):
     except Exception as e:
         safe_msg = _sanitize_error(e)
         audit_log({"event": "ops_agentic_error", "action": req.action, "error": safe_msg})
+        logger.exception("Unexpected error in /ops/agentic action=%r", req.action)
         raise HTTPException(status_code=500, detail={"error": safe_msg, "code": "OPS_ERROR"}) from e
     audit_log({
         "event": "ops_agentic_executed", "action": req.action,
