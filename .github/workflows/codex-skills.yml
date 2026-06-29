@@ -1,0 +1,54 @@
+name: Codex Skills
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".codex/skills/**"
+      - ".github/workflows/codex-skills.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - ".codex/skills/**"
+      - ".github/workflows/codex-skills.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codex-skills-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  verify:
+    name: verify-codex-skills
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+
+      - name: Validate Codex skill metadata and shell assets
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          shopt -s nullglob globstar
+          found=0
+          for skill_dir in .codex/skills/*; do
+            [ -d "$skill_dir" ] || continue
+            found=1
+            test -f "$skill_dir/SKILL.md"
+            grep -q '^---$' "$skill_dir/SKILL.md"
+            grep -q '^name:' "$skill_dir/SKILL.md"
+            grep -q '^description:' "$skill_dir/SKILL.md"
+          done
+
+          if [ "$found" -eq 0 ]; then
+            echo "No .codex skills found"
+            exit 1
+          fi
+
+          for script in .codex/skills/**/*.sh; do
+            bash -n "$script"
+          done
