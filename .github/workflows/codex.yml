@@ -1,0 +1,66 @@
+name: Codex Agent (PR Comments)
+
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  codex:
+    name: Codex Agent
+    runs-on: ubuntu-latest
+    if: |
+      github.event.issue.pull_request != null &&
+      contains(github.event.comment.body, '@codex') &&
+      github.event.comment.user.login == 'CGFixIT'
+
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+
+    outputs:
+      final_message: ${{ steps.run_codex.outputs.final-message }}
+
+    steps:
+      - name: Checkout PR merge ref
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+        with:
+          ref: refs/pull/${{ github.event.issue.number }}/merge
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Run Codex
+        id: run_codex
+        uses: openai/codex-action@23cb67af8fc4ecba6f6dd5cdc61e1800176aca61  # v1
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          prompt-file: .github/codex/prompts/pr-agent.md
+          output-file: codex-output.md
+          sandbox: read-only
+          safety-strategy: drop-sudo
+          allow-users: CGFixIT
+
+  post_feedback:
+    name: Post Codex feedback
+    runs-on: ubuntu-latest
+    needs: codex
+    if: needs.codex.outputs.final_message != ''
+
+    permissions:
+      issues: write
+      pull-requests: write
+
+    steps:
+      - name: Comment on PR
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd  # v8
+        env:
+          CODEX_FINAL_MESSAGE: ${{ needs.codex.outputs.final_message }}
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.issue.number,
+              body: ["Codex", "", process.env.CODEX_FINAL_MESSAGE].join("\n"),
+            });

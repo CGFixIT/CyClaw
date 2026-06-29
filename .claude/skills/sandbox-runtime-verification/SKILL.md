@@ -115,10 +115,10 @@ No LLM is involved — this isolates the retrieval half of RAG.
 ### 4 — Windows smoke-bomb API test
 
 The bash driver runs the canonical smoke checks (launch server, then exercise
-`/health`, `/query` vault-miss, `/query` offline-best-effort, prompt-injection
-→ HTTP 400, `/soul`, and the static terminal UI). On a **Windows** host, run the
-PowerShell equivalent instead, which fires the same endpoints in rapid
-succession ("smoke bomb") via `Invoke-RestMethod`:
+`/health`, `/query` vault-hit, `/query` off-topic/declined-online,
+prompt-injection → HTTP 400, `/soul`, and the static terminal UI). On a
+**Windows** host, run the PowerShell equivalent instead, which fires the same
+endpoints in rapid succession ("smoke bomb") via `Invoke-RestMethod`:
 
 ```powershell
 # From the repo root in PowerShell, with the server running on :8787
@@ -153,9 +153,10 @@ and surface the path to the user.
 
 - **`status: degraded`** in `/health` is normal without LM Studio.
   `index_ready` and `graph_ready` are the meaningful smoke fields.
-- **`needs_confirm: true`** on a fresh `/query` is correct — the dev corpus is
-  tiny so scores hover near the gate. Re-submit with
-  `user_confirmed_online: false` to drive the offline path.
+- **Off-topic `/query` behavior can vary with corpus contents.** If retrieval
+  clears `retrieval.min_score`, `needs_confirm: false` with `model_used: local`
+  is correct. If it misses, `needs_confirm: true` is correct, and re-submitting
+  with `user_confirmed_online: false` should drive the offline path.
 - **PyYAML install conflict** — always pass `--ignore-installed PyYAML`.
 - **TELEMETRY KILL** lines on startup are intentional (gate.py kills phone-home
   hooks before importing LangChain/Chroma).

@@ -5,8 +5,8 @@ static/terminal.html performs in the browser, using httpx from the venv.
 Verifies:
   1. GET /health (3 s timeout, checks index_ready + graph_ready)
   2. POST /query  vault-hit path  (corpus query → needs_confirm=False, hit_count>0)
-  3. POST /query  vault-miss path (off-topic → needs_confirm=True, no hit)
-  4. POST /query  offline path    (off-topic + user_confirmed_online=False → offline-best-effort)
+  3. POST /query  off-topic path  (confirm prompt or confident local hit)
+  4. POST /query  declined-online path (offline-best-effort or confident local hit)
   5. GET /soul    (version present, soul text non-empty)
 
 Response field assertions match what terminal.html's JS reads:
@@ -109,22 +109,24 @@ def main() -> int:
             check("/query vault-hit", False, repr(exc))
         print()
 
-        # ── 3. POST /query — vault-miss (needs_confirm flow) ─────────────────
+        # ── 3. POST /query — off-topic flow ──────────────────────────────────
         OFFTOPIC_QUERY = "What is the boiling point of water at high altitude?"
-        print(f"[3] POST /query  (vault-miss — terminal.html confirm prompt)")
+        print(f"[3] POST /query  (off-topic — confirm prompt or confident local hit)")
         print(f"       query: {OFFTOPIC_QUERY}")
         try:
             r = client.post("/query", json={"query": OFFTOPIC_QUERY})
             d = r.json()
-            show_response("vault-miss", d)
-            check("/query vault-miss: needs_confirm=True",
-                  d.get("needs_confirm") is True,
-                  f"got needs_confirm={d.get('needs_confirm')}")
+            show_response("off-topic", d)
+            needs_confirm = d.get("needs_confirm")
+            model_used = d.get("model_used")
+            check("/query off-topic: confirm or local",
+                  needs_confirm is True or (needs_confirm is False and model_used == "local"),
+                  f"needs_confirm={needs_confirm}, model_used={model_used}")
         except Exception as exc:
-            check("/query vault-miss", False, repr(exc))
+            check("/query off-topic", False, repr(exc))
         print()
 
-        # ── 4. POST /query — offline-best-effort (user declines Grok) ─────────
+        # ── 4. POST /query — declined-online branch ──────────────────────────
         print(f"[4] POST /query  user_confirmed_online=false  (terminal.html 'No' branch)")
         print(f"       query: {OFFTOPIC_QUERY}")
         try:
@@ -133,12 +135,12 @@ def main() -> int:
                 "user_confirmed_online": False
             })
             d = r.json()
-            show_response("offline-best-effort", d)
-            check("/query offline: model_used=offline-best-effort",
-                  d.get("model_used") == "offline-best-effort",
+            show_response("declined-online", d)
+            check("/query declined-online: offline-best-effort or local",
+                  d.get("model_used") in {"offline-best-effort", "local"},
                   f"model_used={d.get('model_used')}")
         except Exception as exc:
-            check("/query offline-best-effort", False, repr(exc))
+            check("/query declined-online", False, repr(exc))
         print()
 
         # ── 5. GET /soul (terminal.html soul panel — API-key gated, PR #249) ──
