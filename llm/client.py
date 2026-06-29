@@ -185,6 +185,7 @@ class LocalLLMClient:
         self.temperature = llm_cfg["temperature"]
         self.timeout = llm_cfg["timeout_sec"]
         self.retry_max, self.retry_backoff, self.retry_backoff_max = _read_retry(llm_cfg)
+        self.api_key = llm_cfg.get("api_key", "")
         self._client = httpx.Client(timeout=self.timeout)
 
     def close(self) -> None:
@@ -198,8 +199,10 @@ class LocalLLMClient:
 
     def generate(self, prompt: str) -> str:
         def do_post() -> httpx.Response:
+            headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
             return self._client.post(
                 f"{self.base_url}/chat/completions",
+                headers=headers,
                 json={
                     "model": self.model,
                     "messages": [{"role": "user", "content": prompt}],
