@@ -2,6 +2,9 @@
 # CyClaw .gitignore
 # ==============================================================================
 
+# Git metadata
+.git/
+
 # Python
 __pycache__/
 **/__pycache__/
