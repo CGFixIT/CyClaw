@@ -1,0 +1,41 @@
+# CyClaw environment.yml
+# Generated for conda CI + reproducible local dev
+# Matches pyproject.toml + production invariants (Python 3.12, offline-first, hardened deps)
+# Use: conda env create -f environment.yml && conda activate cyclaw
+
+name: cyclaw
+
+channels:
+  - conda-forge
+  - defaults
+
+dependencies:
+  - python=3.12
+  - pip
+  # Core runtime (conda-forge versions for binary stability)
+  - fastapi
+  - uvicorn
+  - pydantic
+  - pyyaml
+  - httpx
+  - langchain-core
+  - chromadb  # Note: Use embedded/PersistentClient only. See SECURITY.md
+  - sentence-transformers
+  - numpy
+  - nltk
+  # Test & Dev tooling
+  - pytest
+  - pytest-asyncio
+  - ruff
+  - mypy
+  - bandit
+  - pytest-cov
+  - pip:
+      - langgraph==1.2.6
+
+# Optional: Create with mamba for speed
+# mamba env create -f environment.yml
+
+# After creation:
+# conda activate cyclaw
+# pip install -e ".[full]" --no-deps  # if wanting postgres/pgvector extras
