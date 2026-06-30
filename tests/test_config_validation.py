@@ -1,10 +1,10 @@
-"""Tests for utils.config_validation.validate_retrieval_config."""
+"""Tests for utils.config_validation validators."""
 
 from __future__ import annotations
 
 import pytest
 
-from utils.config_validation import validate_retrieval_config
+from utils.config_validation import validate_personality_config, validate_retrieval_config
 from utils.errors import ConfigError
 
 
@@ -64,3 +64,42 @@ def test_error_message_names_the_offending_key():
     with pytest.raises(ConfigError) as exc:
         validate_retrieval_config(cfg)
     assert "rrf_k" in str(exc.value)
+
+
+# ── validate_personality_config ──────────────────────────────────────────
+
+
+def _valid_personality() -> dict:
+    return {"personality": {"enabled": True, "soul_max_chars": 8000}}
+
+
+def test_personality_shipped_defaults_pass():
+    validate_personality_config(_valid_personality())
+
+
+def test_personality_disabled_skips_validation():
+    validate_personality_config({"personality": {"enabled": False, "soul_max_chars": -1}})
+
+
+def test_personality_absent_block_skips_validation():
+    validate_personality_config({})
+
+
+@pytest.mark.parametrize("bad", [0, -1, "8000", True, 0.5])
+def test_personality_soul_max_chars_rejects_bad_values(bad):
+    cfg = _valid_personality()
+    cfg["personality"]["soul_max_chars"] = bad
+    with pytest.raises(ConfigError):
+        validate_personality_config(cfg)
+
+
+def test_personality_soul_max_chars_omitted_passes():
+    validate_personality_config({"personality": {"enabled": True}})
+
+
+def test_personality_error_message_names_field():
+    cfg = _valid_personality()
+    cfg["personality"]["soul_max_chars"] = 0
+    with pytest.raises(ConfigError) as exc:
+        validate_personality_config(cfg)
+    assert "soul_max_chars" in str(exc.value)
