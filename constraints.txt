@@ -54,3 +54,11 @@ pytest-asyncio==1.4.0
 # was unpinned here, so coverage tooling floated to whatever the resolver picked —
 # defeating the reproducibility this file exists for. Pin it alongside its siblings.
 pytest-cov==7.1.0
+
+# Dev tools (pyproject [project.optional-dependencies].dev + full).
+# Previously unpinned, so `pip install -e ".[dev]" -c constraints.txt` could pull in
+# ruff/mypy/bandit releases that changed lint rules mid-CI or (for mypy) type-check
+# semantics — silently breaking a green run. Pinned to the currently-green versions.
+ruff==0.15.20
+mypy==2.1.0
+bandit==1.9.4

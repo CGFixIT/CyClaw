@@ -12,7 +12,8 @@ concurrency:
 
 permissions:
   contents: read
-  security-events: write  # for CodeQL
+  # security-events: write removed — CodeQL is owned by codeql.yml; no
+  # duplicate scan here means this workflow needs no SARIF-upload permission.
 
 jobs:
   ci:
@@ -24,12 +25,12 @@ jobs:
 
     steps:
     - name: Checkout
-      uses: actions/checkout@v7
+      uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
       with:
         fetch-depth: 0
 
     - name: Setup Miniconda + mamba (fast solver)
-      uses: conda-incubator/setup-miniconda@v4
+      uses: conda-incubator/setup-miniconda@8ee1f361103df19b6f8c8655fd3967a8ecb162d5  # v4.0.1
       with:
         miniforge-version: latest
         python-version: ${{ matrix.python-version }}
@@ -41,7 +42,7 @@ jobs:
         use-mamba: true
 
     - name: Cache conda environment
-      uses: actions/cache@v6
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
       with:
         path: |
           /home/runner/miniconda3/envs/cyclaw
@@ -96,10 +97,6 @@ jobs:
           bash .claude/skills/sandbox-runtime-verification/verify.sh
         fi
 
-    - name: Initialize CodeQL (Python security)
-      uses: github/codeql-action/init@v4
-      with:
-        languages: python
-
-    - name: Perform CodeQL Analysis
-      uses: github/codeql-action/analyze@v4
+    # CodeQL analysis is owned by .github/workflows/codeql.yml which runs on
+    # every push/PR to main. A duplicate scan here would double billing and
+    # upload a conflicting SARIF result to the same security tab. Removed.
