@@ -213,6 +213,19 @@ class TestGrokClient:
         assert kwargs["headers"]["Authorization"] == "Bearer xai-secret"
         client.close()
 
+    def test_generate_sends_model_and_prompt_in_body(self, tmp_path, monkeypatch):
+        # Verifies the model field in the request body matches config so a stale
+        # model name (e.g. a retired "grok-4" or "grok-beta") is caught by CI.
+        monkeypatch.setenv("GROK_API_KEY", "xai-secret")
+        client = GrokClient(_write_config(tmp_path))
+        fake = _FakePost(response=_ok_response("grok answer"))
+        client._client.post = fake
+        client.generate("a prompt")
+        _url, kwargs = fake.calls[0]
+        assert kwargs["json"]["model"] == "grok-4.3"
+        assert kwargs["json"]["messages"][0]["content"] == "a prompt"
+        client.close()
+
     def test_generate_success_strips_env_key_before_bearer(self, tmp_path, monkeypatch):
         monkeypatch.setenv("GROK_API_KEY", "  xai-secret \n")
         client = GrokClient(_write_config(tmp_path))
