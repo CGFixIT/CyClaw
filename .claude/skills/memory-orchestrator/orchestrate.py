@@ -16,8 +16,12 @@ import json
 import sys
 from pathlib import Path
 
-# Import the new node implementations (logic is now shared)
-from .memory_nodes import (
+# Allow running as a top-level script (python3 orchestrate.py ...) AND as part
+# of a package (from .memory_nodes import ...).  sys.path injection is done
+# before the import so either mode works without changing the call site.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from memory_nodes import (  # noqa: E402
     extract_node,
     consolidate_node,
     title_node,
@@ -28,11 +32,9 @@ from .memory_nodes import (
     _load_state,
     _now,
     CONSOLIDATION_INTERVAL_HOURS,
+    _snapshots,
+    _split_sections,
 )
-
-# Re-export the original helper for any external code that imported it
-# (keeps backward compat for anything doing "from orchestrate import ...")
-from .memory_nodes import _snapshots, _split_sections  # type: ignore
 
 
 # ── CLI wrappers that call the nodes (or original logic for hooks) ──────────
