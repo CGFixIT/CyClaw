@@ -432,7 +432,6 @@ def test_rag_error_writes_audit_event(retriever, tmp_path, monkeypatch):
 def test_generic_error_writes_audit_event(retriever, tmp_path, monkeypatch):
     """A non-RAGError on the MCP path must also produce an audit event, with the
     same redaction the JSON-RPC error body uses."""
-    import utils.logger as _logger_mod
     audit_file = tmp_path / "audit.jsonl"
     cfg = {
         "logging": {"audit_file": str(audit_file), "audit_fields": {"include_query_hash": True}},
@@ -449,7 +448,9 @@ def test_generic_error_writes_audit_event(retriever, tmp_path, monkeypatch):
     # in the generic-error branch — redact_sensitive uses the default config
     # path and the global cache is non-keyed on the arg, so a subsequent
     # audit_log(config_path=...) silently reuses whatever was cached first).
-    monkeypatch.setattr(_logger_mod, "_get_config", lambda *_a, **_kw: cfg)
+    # Dotted-string form so the file does not need a second utils.logger
+    # import alongside the existing `from utils.logger import ...` (CodeQL).
+    monkeypatch.setattr("utils.logger._get_config", lambda *_a, **_kw: cfg)
     monkeypatch.setattr(
         mcp_hybrid_server, "audit_log",
         lambda event: _real_audit_log(event, config_path=str(config_path)),

@@ -1,0 +1,17 @@
+# Gitleaks false-positive allow-list.
+#
+# Each entry has the form: <commit-sha>:<file>:<rule-id>:<line>. Listed here
+# only after manual review confirmed the match is a fixture/test value, never
+# a live credential.
+
+# tests/test_audit.py — synthetic AKIA0123456789ABCDEF strings in the
+# recursive-redaction tests added in PR #376 (commit 08d0cc5). The value's
+# only purpose was to feed the policy.privacy.redact_secrets_like AKIA
+# pattern so the redaction assertion has something to match. The follow-up
+# commit (63a6c6b) replaces them with the canonical AWS-docs example
+# AKIAIOSFODNN7EXAMPLE, but Gitleaks scans the whole branch history, so
+# the historical commit must still be allow-listed.
+08d0cc528451248bfeb4e128665dce2de83f2dae:tests/test_audit.py:aws-access-token:176
+08d0cc528451248bfeb4e128665dce2de83f2dae:tests/test_audit.py:aws-access-token:186
+08d0cc528451248bfeb4e128665dce2de83f2dae:tests/test_audit.py:aws-access-token:198
+08d0cc528451248bfeb4e128665dce2de83f2dae:tests/test_audit.py:aws-access-token:203
