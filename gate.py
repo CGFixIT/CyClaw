@@ -206,6 +206,16 @@ if not os.environ.get("CYCLAW_API_KEY", ""):
         "(fail-closed). Set CYCLAW_API_KEY to enable them."
     )
 
+_llm_timeout = cfg.get("models", {}).get("local_llm", {}).get("timeout_sec", 300)
+_graph_timeout = cfg.get("api", {}).get("graph_timeout_sec", 330)
+if _llm_timeout >= _graph_timeout:
+    logger.warning(
+        "local_llm.timeout_sec (%s) >= api.graph_timeout_sec (%s) — the graph "
+        "deadline will always fire first, making the per-call LLM timeout unreachable. "
+        "Lower timeout_sec or raise graph_timeout_sec.",
+        _llm_timeout, _graph_timeout,
+    )
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup: nothing extra needed — clients are already initialized at module level.
