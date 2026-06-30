@@ -100,12 +100,38 @@ class FsWriter:
 
     # --- operations -------------------------------------------------------
 
+    def _enforce_payload_cap(self, op: str, data: bytes) -> None:
+        """Refuse the call BEFORE any subprocess/syscall when len(data) exceeds
+        the configured ``max_write_bytes`` cap.
+
+        FsConnectConfig validates that ``max_write_bytes`` is a positive int
+        (config.py:_validate_caps), but the cap was never actually checked at
+        the write/append site — so the only operator-visible budget on a
+        single payload size was whatever the filesystem itself enforced. Fail
+        closed instead, before the bytes hit the disk, mirroring how the read
+        path bounds ``max_file_bytes``. Raised as ``FsWriteRefused`` so the
+        existing gate-failure plumbing surfaces it as a typed refusal rather
+        than a bare OSError mid-write.
+        """
+        if len(data) > self.fs_cfg.max_write_bytes:
+            raise FsWriteRefused(
+                f"payload exceeds fsconnect.max_write_bytes "
+                f"({len(data)} > {self.fs_cfg.max_write_bytes})",
+                details={
+                    "op": op,
+                    "failed_gate": "max_write_bytes",
+                    "bytes": len(data),
+                    "max": self.fs_cfg.max_write_bytes,
+                },
+            )
+
     def fs_write(
         self, target: str, data: bytes, *, reason: str = "", confirm: bool = False,
         overwrite: bool = False, root: str | None = None,
     ) -> dict:
         split_components(target)            # early path validation (pure)
         self._roots.pick_root(root)         # root must be in the write allow-list
+        self._enforce_payload_cap("fs_write", data)
         sha = hashlib.sha256(data).hexdigest()
         extra = {"target": target, "bytes": len(data), "sha256": sha, "overwrite": overwrite}
         if not self._executable("fs_write", reason, confirm, destructive=overwrite):
@@ -122,6 +148,7 @@ class FsWriter:
     ) -> dict:
         split_components(target)
         self._roots.pick_root(root)
+        self._enforce_payload_cap("fs_append", data)
         extra = {"target": target, "bytes": len(data)}
         if not self._executable("fs_append", reason, confirm, destructive=False):
             return self._dryrun("fs_append", reason, extra)

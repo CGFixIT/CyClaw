@@ -326,6 +326,76 @@ def test_rows_to_csv_empty_rows_gives_header_only():
     assert out.strip() == "col"
 
 
+# ---------------------------------------------------------------------------
+# CSV formula-injection neutralisation: a cell starting with =/+/-/@/tab/CR
+# would execute as a formula in Excel / LibreOffice / Google Sheets if the
+# export were opened in a spreadsheet. The cell is prefixed with a single
+# quote (OWASP-recommended fix) which spreadsheet apps silently drop on
+# display, so the cell renders as the original text but never as a formula.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        "=SUM(A1:A9)",
+        "+cmd|'/c calc'!A0",
+        "-2+5",
+        "@HYPERLINK",
+        "\tprefix",
+        "\rcarriage",
+    ],
+)
+def test_rows_to_csv_neutralises_formula_leads(payload):
+    """Each formula-lead payload must have a single quote prepended in the
+    rendered CSV (regardless of what splitlines / csv.reader do with the
+    embedded control character afterwards). Inspect the raw bytes."""
+    out = _rows_to_csv(["v"], [[payload]])
+    # The first byte of the data row (after the "v\r\n" header) is the cell
+    # contents. Skip the header line and any quoting csv adds for control
+    # chars by simply asserting the apostrophe-prefixed payload appears
+    # somewhere in the rendered output and the BARE payload does not.
+    assert "'" + payload in out
+    # The unprefixed payload must not appear at the very START of a cell —
+    # i.e. immediately after the row-separator '\n'. This is the position
+    # spreadsheet parsers read first.
+    assert ("\n" + payload) not in out
+    # Also confirm the header is intact (the neutraliser only fires on cell
+    # leads, not column names that contain no formula chars).
+    assert out.startswith("v\r\n")
+
+
+def test_rows_to_csv_does_not_alter_safe_strings():
+    """Cells that do NOT begin with a formula lead character pass through."""
+    safe_payloads = ["alice", "0", "hello world", "  =leading-space", "x=2", ""]
+    for s in safe_payloads:
+        out = _rows_to_csv(["v"], [[s]])
+        import csv as _csv
+        parsed = list(_csv.reader(out.splitlines()))
+        assert parsed[1][0] == s, s
+
+
+def test_rows_to_csv_neutralises_formula_in_header():
+    """A column name starting with a formula lead is also an injection vector
+    (an attacker who can name a SQL column can smuggle the formula through
+    the header row), so headers go through the same filter."""
+    out = _rows_to_csv(["=cmd|x"], [["v"]])
+    import csv as _csv
+    parsed = list(_csv.reader(out.splitlines()))
+    assert parsed[0][0] == "'=cmd|x"
+    assert parsed[1][0] == "v"  # data row unchanged
+
+
+def test_rows_to_csv_non_string_cells_pass_through():
+    """Numbers and other scalars must not get an apostrophe prefix."""
+    out = _rows_to_csv(["n"], [[42], [3.14], [True]])
+    import csv as _csv
+    parsed = list(_csv.reader(out.splitlines()))
+    assert parsed[1][0] == "42"
+    assert parsed[2][0] == "3.14"
+    assert parsed[3][0] == "True"
+
+
 def test_run_select_returns_csv_when_fmt_csv(monkeypatch):
     sc = SqlConnectConfig(driver="postgres")
     monkeypatch.setenv(sc.dsn_env, "postgresql://x")

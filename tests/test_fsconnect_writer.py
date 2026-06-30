@@ -156,3 +156,61 @@ def test_audit_records_dryrun_and_applied(env):
     events = [json.loads(ln)["event"] for ln in audit.read_text().strip().splitlines()]
     assert "fsconnect_write_dryrun" in events
     assert "fsconnect_write_applied" in events
+
+
+# ---------------------------------------------------------------------------
+# max_write_bytes is actually enforced (PR — was previously validated as a
+# config field but never checked against a payload)
+# ---------------------------------------------------------------------------
+
+
+def test_fs_write_refuses_payload_over_max_write_bytes(env):
+    cfg, fs_cfg, cp, wz, _audit = env
+    fs_cfg.writes_enabled = True
+    fs_cfg.max_write_bytes = 64
+    with FsWriter(cfg, fs_cfg, config_path=cp) as w:
+        with pytest.raises(FsWriteRefused) as ei:
+            w.fs_write("big.txt", b"X" * 65, reason="should refuse")
+    assert ei.value.details["failed_gate"] == "max_write_bytes"
+    assert ei.value.details["bytes"] == 65
+    assert ei.value.details["max"] == 64
+    # Nothing was written.
+    assert not (wz / "big.txt").exists()
+
+
+def test_fs_append_refuses_payload_over_max_write_bytes(env):
+    cfg, fs_cfg, cp, wz, _audit = env
+    fs_cfg.writes_enabled = True
+    fs_cfg.max_write_bytes = 8
+    with FsWriter(cfg, fs_cfg, config_path=cp) as w:
+        with pytest.raises(FsWriteRefused) as ei:
+            w.fs_append("a.txt", b"123456789", reason="should refuse")
+    assert ei.value.details["failed_gate"] == "max_write_bytes"
+    # File never created because the cap fired before the syscall.
+    assert not (wz / "a.txt").exists()
+
+
+def test_fs_write_under_cap_still_applies(env):
+    """Sanity: a payload at or under the cap proceeds normally."""
+    cfg, fs_cfg, cp, wz, _audit = env
+    fs_cfg.writes_enabled = True
+    fs_cfg.max_write_bytes = 64
+    with FsWriter(cfg, fs_cfg, config_path=cp) as w:
+        res = w.fs_write("ok.txt", b"X" * 64, reason="exactly at cap")
+    assert res["executed"] is True
+    assert (wz / "ok.txt").read_bytes() == b"X" * 64
+
+
+def test_fs_write_cap_enforced_before_reason_gate(env):
+    """The size cap fires BEFORE the reason gate so an oversized payload can
+    never sneak through as a dry-run plan (which would otherwise expose
+    bytes/sha256 in the audit log for a payload the operator already
+    promised never to write)."""
+    cfg, fs_cfg, cp, _wz, _audit = env
+    # writes_enabled stays False (default) — pre-fix the dry-run plan would
+    # have included the oversized bytes/sha; with the cap, FsWriteRefused.
+    fs_cfg.max_write_bytes = 4
+    with FsWriter(cfg, fs_cfg, config_path=cp) as w:
+        with pytest.raises(FsWriteRefused) as ei:
+            w.fs_write("dr.txt", b"x" * 99, reason="")  # empty reason too
+    assert ei.value.details["failed_gate"] == "max_write_bytes"

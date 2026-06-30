@@ -128,18 +128,50 @@ def quote_identifier(name: str, driver: str) -> str:
     return ".".join(f'"{p}"' for p in parts)
 
 
+# Lead characters that trigger formula evaluation when a CSV cell is opened in
+# Excel / LibreOffice / Google Sheets. A row exported from an untrusted DB that
+# starts with one of these is a CSV-injection vector: open in a spreadsheet and
+# the formula executes (e.g. `=HYPERLINK("...")`, `=cmd|'...'!A0`, `=2+2`). The
+# tab and carriage-return characters are also recognised by some spreadsheet
+# parsers as formula leads.
+_CSV_FORMULA_LEADS = frozenset(("=", "+", "-", "@", "\t", "\r"))
+
+
+def _neutralize_csv_cell(value: Any) -> Any:
+    """Prefix a single quote to any string cell that starts with a CSV formula
+    lead character. Other types pass through unchanged.
+
+    Defense for the SqlClient ``fmt="csv"`` export path. Raw DB rows are
+    untrusted from the spreadsheet's perspective even when CyClaw's SQL guard
+    has accepted the SELECT — the row contents come from whatever the
+    database holds. The leading apostrophe is the OWASP-recommended fix and
+    is silently dropped by spreadsheet apps on display, so the cell renders
+    as the original text but never as a formula.
+    """
+    if isinstance(value, str) and value and value[0] in _CSV_FORMULA_LEADS:
+        return "'" + value
+    return value
+
+
 def _rows_to_csv(columns: list[str], rows: list[list[Any]]) -> str:
     """Render *columns* + *rows* as an RFC 4180 CSV string (header + data rows).
 
     Uses :mod:`csv` with default dialect (comma delimiter, CRLF line terminator,
     quoting on demand). ``None`` values are rendered as the empty string, matching
     standard SQL NULL export behaviour. Pure — unit-tested without a live DB.
+
+    String cells whose first character is a spreadsheet formula lead (``=``,
+    ``+``, ``-``, ``@``, ``\\t``, ``\\r``) are prefixed with a single quote to
+    neutralise CSV-injection if the export is opened in Excel / LibreOffice /
+    Google Sheets. Headers are also passed through this filter — an attacker
+    who can name a SQL column can otherwise smuggle a formula in via the
+    header row.
     """
     buf = io.StringIO()
     writer = csv.writer(buf)
-    writer.writerow(columns)
+    writer.writerow([_neutralize_csv_cell(c) for c in columns])
     for row in rows:
-        writer.writerow(["" if v is None else v for v in row])
+        writer.writerow(["" if v is None else _neutralize_csv_cell(v) for v in row])
     return buf.getvalue()
 
 
