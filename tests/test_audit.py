@@ -161,3 +161,56 @@ class TestAuditLog:
         assert "leaktoken.123" not in event["error"]
         assert "ALSOLEAKED1" not in event["error"]
         assert "[REDACTED_SECRET]" in event["error"]
+
+    def test_nested_dict_strings_recursively_redacted(self, audit_config):
+        """Defense in depth: a string nested inside a dict value must be
+        redacted too. Pre-fix only top-level string fields were redacted, so
+        {"details": {"email": "u@example.com"}} landed in audit.jsonl with the
+        email intact."""
+        config_path, audit_file = audit_config
+        audit_log({
+            "event": "complex_event",
+            "details": {
+                "email": "user@example.com",
+                "ip": "192.168.1.1",
+                "secret": "AKIA0123456789ABCDEF",
+                "nested": {"more_email": "deeper@example.com"},
+            },
+        }, config_path)
+        event = json.loads(Path(audit_file).read_text().strip())
+        # Original payload values must NOT appear anywhere in the event JSON.
+        raw = json.dumps(event)
+        assert "user@example.com" not in raw
+        assert "deeper@example.com" not in raw
+        assert "192.168.1.1" not in raw
+        assert "AKIA0123456789ABCDEF" not in raw
+        # And the redaction placeholders MUST be present.
+        assert event["details"]["email"] == "[REDACTED_EMAIL]"
+        assert event["details"]["ip"] == "[REDACTED_IP]"
+        assert event["details"]["secret"] == "[REDACTED_SECRET]"
+        assert event["details"]["nested"]["more_email"] == "[REDACTED_EMAIL]"
+
+    def test_nested_list_strings_recursively_redacted(self, audit_config):
+        """A string inside a list element must also be redacted."""
+        config_path, audit_file = audit_config
+        audit_log({
+            "event": "batch_event",
+            "errors": ["contact admin@example.com", "AKIA0123456789ABCDEF"],
+        }, config_path)
+        event = json.loads(Path(audit_file).read_text().strip())
+        raw = json.dumps(event)
+        assert "admin@example.com" not in raw
+        assert "AKIA0123456789ABCDEF" not in raw
+        assert event["errors"][0] == "contact [REDACTED_EMAIL]"
+        assert event["errors"][1] == "[REDACTED_SECRET]"
+
+    def test_non_string_scalars_pass_through(self, audit_config):
+        """Recursive redaction must not coerce ints/floats/bools/None to str."""
+        config_path, audit_file = audit_config
+        audit_log({"event": "scalar", "count": 7, "ratio": 0.42,
+                   "ok": True, "missing": None}, config_path)
+        event = json.loads(Path(audit_file).read_text().strip())
+        assert event["count"] == 7
+        assert event["ratio"] == 0.42
+        assert event["ok"] is True
+        assert event["missing"] is None

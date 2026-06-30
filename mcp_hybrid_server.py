@@ -73,7 +73,14 @@ def _handle_search(msg_id, args: dict, retriever: HybridRetriever) -> dict:
     # mirror the HTTP audit-on-block; it is omitted by design today.
     query = args.get("query", "")
     top_k = _coerce_top_k(args.get("top_k", _DEFAULT_TOP_K))
-    mode = args.get("mode", "hybrid")
+    # Normalise mode BEFORE dispatch so the audit event and the response
+    # metadata record what was actually executed. Previously the raw client
+    # value passed through to both the audit and the metadata, while the
+    # dispatch fell back to hybrid for anything not in {semantic, keyword} —
+    # so a typo like mode="hybird" would run hybrid retrieval but be logged
+    # and reported as mode="hybird".
+    requested_mode = args.get("mode", "hybrid")
+    mode = requested_mode if requested_mode in ("semantic", "keyword") else "hybrid"
     try:
         if mode == "semantic":
             results = retriever.semantic_search(query, k=top_k)
@@ -100,13 +107,20 @@ def _handle_search(msg_id, args: dict, retriever: HybridRetriever) -> dict:
         }
         return {"jsonrpc": "2.0", "id": msg_id, "result": payload}
     except RAGError as e:
+        # Audit parity with the HTTP path (gate.py graph_error). The error body
+        # is already sanitised before it leaves the process; the audit field
+        # passes through utils.logger redactors as well.
+        audit_log({"event": "mcp_rag_error", "query": query, "mode": mode,
+                   "error": f"{e.code}: {e.message}"})
         return _error(msg_id, -32000, f"{e.code}: {e.message}")
     except Exception as e:
         # Privacy parity with the HTTP path (gate._sanitize_error): a raw
         # exception string can carry a filesystem path or a token surfaced from a
         # degraded dependency. Redact with the config-driven secret patterns
         # before it leaves the process in the JSON-RPC error body.
-        return _error(msg_id, -32000, f"Search error: {redact_sensitive(str(e))}")
+        safe_err = redact_sensitive(str(e))
+        audit_log({"event": "mcp_rag_error", "query": query, "mode": mode, "error": safe_err})
+        return _error(msg_id, -32000, f"Search error: {safe_err}")
 
 def handle_message(msg: dict, retriever: HybridRetriever) -> dict:
     method = msg.get("method")

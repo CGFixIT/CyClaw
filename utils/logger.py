@@ -102,6 +102,35 @@ def redact_sensitive(text: str, cfg: dict | None = None) -> str:
         text = pattern.sub(replacement, text)
     return text
 
+
+# Keys whose top-level value must NOT be redacted: query_hash is already a SHA-256
+# digest, timestamp is structural ISO-8601, and event is the event-type tag.
+# Applied only at the OUTER record level — nested fields named the same inside a
+# dict/list value have no special meaning and pass through normal redaction.
+_AUDIT_SKIP_KEYS = frozenset(("query_hash", "timestamp", "event"))
+
+
+def _redact_value(value: object, cfg: dict) -> object:
+    """Recursively redact strings inside dicts and lists.
+
+    audit_log previously only redacted top-level string fields, so an event
+    like {"details": {"email": "u@example.com"}} or {"errors": ["...@..."]}
+    landed in audit.jsonl with the email intact. Defense-in-depth: structured
+    payloads from CLI shims and exception details can contain redact-eligible
+    strings that the simple top-level loop walked past. Recurses through dict
+    values and list/tuple elements; tuples are returned as lists because
+    json.dumps emits both identically and the on-disk format must stay JSON.
+    Non-string scalars (int/float/bool/None) pass through unchanged.
+    """
+    if isinstance(value, str):
+        return redact_sensitive(value, cfg)
+    if isinstance(value, dict):
+        return {k: _redact_value(v, cfg) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_redact_value(v, cfg) for v in value]
+    return value
+
+
 def audit_log(event: dict, config_path: str = "config.yaml") -> None:
     cfg = _get_config(config_path)
     log_path = Path(cfg["logging"]["audit_file"])
@@ -112,8 +141,9 @@ def audit_log(event: dict, config_path: str = "config.yaml") -> None:
         raw_query = record.pop("query")
         record["query_hash"] = hash_query(raw_query)
     for key, value in list(record.items()):
-        if isinstance(value, str) and key not in ("query_hash", "timestamp", "event"):
-            record[key] = redact_sensitive(value, cfg)
+        if key in _AUDIT_SKIP_KEYS:
+            continue
+        record[key] = _redact_value(value, cfg)
     record["timestamp"] = datetime.now(UTC).isoformat()
     with open(log_path, "a", encoding="utf-8") as f:
         f.write(json.dumps(record) + "\n")

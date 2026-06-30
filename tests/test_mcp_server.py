@@ -347,3 +347,126 @@ def test_generic_error_is_redacted(retriever):
     assert secret not in message, "raw secret must not leak into the JSON-RPC error"
     assert "[REDACTED_SECRET]" in message
     reset_config_cache()
+
+
+# ---------------------------------------------------------------------------
+# 13. Mode normalization: audit + metadata record the mode actually executed
+# ---------------------------------------------------------------------------
+
+def test_unknown_mode_normalised_in_audit_and_metadata(retriever, tmp_path, monkeypatch):
+    """A mode value not in {semantic, keyword} falls through to the hybrid
+    branch in dispatch, but pre-fix the audit and the response metadata
+    recorded the raw client value (e.g. 'hybird'), causing the audit log to
+    disagree with what actually ran."""
+    audit_file = tmp_path / "audit.jsonl"
+    cfg = {
+        "logging": {"audit_file": str(audit_file), "audit_fields": {"include_query_hash": True}},
+        "policy": {"privacy": {"redact_emails": False, "redact_ips": False, "redact_secrets_like": []}},
+    }
+    config_path = tmp_path / "config.yaml"
+    with open(config_path, "w") as f:
+        yaml.dump(cfg, f)
+
+    reset_config_cache()
+    monkeypatch.setattr(
+        mcp_hybrid_server, "audit_log",
+        lambda event: _real_audit_log(event, config_path=str(config_path)),
+    )
+
+    msg = {
+        "jsonrpc": "2.0", "id": 13, "method": "tools/call",
+        "params": {"name": "hybrid_search",
+                   "arguments": {"query": "test", "mode": "hybird"}},  # typo
+    }
+    result = handle_message(msg, retriever)
+    assert result["result"]["metadata"]["retrieval_mode"] == "hybrid"
+
+    event = json.loads(audit_file.read_text().strip())
+    assert event["mode"] == "hybrid", "audit must record the mode that ran, not the typo"
+    reset_config_cache()
+
+
+# ---------------------------------------------------------------------------
+# 14. Audit parity on failure: MCP failures must write an audit event too
+# ---------------------------------------------------------------------------
+
+def test_rag_error_writes_audit_event(retriever, tmp_path, monkeypatch):
+    """A RAGError on the MCP path must produce an mcp_rag_error audit event so
+    the audit log captures failures alongside successes — parity with the
+    HTTP graph_error path. Pre-fix the error branch returned silently and the
+    failure left no audit trace."""
+    audit_file = tmp_path / "audit.jsonl"
+    cfg = {
+        "logging": {"audit_file": str(audit_file), "audit_fields": {"include_query_hash": True}},
+        "policy": {"privacy": {"redact_emails": False, "redact_ips": False, "redact_secrets_like": []}},
+    }
+    config_path = tmp_path / "config.yaml"
+    with open(config_path, "w") as f:
+        yaml.dump(cfg, f)
+
+    reset_config_cache()
+    monkeypatch.setattr(
+        mcp_hybrid_server, "audit_log",
+        lambda event: _real_audit_log(event, config_path=str(config_path)),
+    )
+
+    retriever.hybrid_search.side_effect = RAGError("no index", code="IDX")
+    msg = {
+        "jsonrpc": "2.0", "id": 14, "method": "tools/call",
+        "params": {"name": "hybrid_search",
+                   "arguments": {"query": "anything", "mode": "hybrid"}},
+    }
+    result = handle_message(msg, retriever)
+    assert result["error"]["code"] == -32000
+
+    event = json.loads(audit_file.read_text().strip())
+    assert event["event"] == "mcp_rag_error"
+    assert event["mode"] == "hybrid"
+    assert "IDX" in event["error"]
+    # Query field is hashed by audit_log, never persisted as raw text.
+    assert event.get("query_hash") == hash_query("anything")
+    assert "query" not in event
+    reset_config_cache()
+
+
+def test_generic_error_writes_audit_event(retriever, tmp_path, monkeypatch):
+    """A non-RAGError on the MCP path must also produce an audit event, with the
+    same redaction the JSON-RPC error body uses."""
+    import utils.logger as _logger_mod
+    audit_file = tmp_path / "audit.jsonl"
+    cfg = {
+        "logging": {"audit_file": str(audit_file), "audit_fields": {"include_query_hash": True}},
+        "policy": {"privacy": {"redact_emails": False, "redact_ips": False,
+                               "redact_secrets_like": [r"sk-[A-Za-z0-9]{20,}"]}},
+    }
+    config_path = tmp_path / "config.yaml"
+    with open(config_path, "w") as f:
+        yaml.dump(cfg, f)
+
+    reset_config_cache()
+    # Pin _get_config to the test config for both the audit write AND the
+    # in-flight redact_sensitive call (the latter is what poisons the cache
+    # in the generic-error branch — redact_sensitive uses the default config
+    # path and the global cache is non-keyed on the arg, so a subsequent
+    # audit_log(config_path=...) silently reuses whatever was cached first).
+    monkeypatch.setattr(_logger_mod, "_get_config", lambda *_a, **_kw: cfg)
+    monkeypatch.setattr(
+        mcp_hybrid_server, "audit_log",
+        lambda event: _real_audit_log(event, config_path=str(config_path)),
+    )
+
+    secret = "sk-" + "a" * 40
+    retriever.semantic_search.side_effect = RuntimeError(f"upstream token={secret}")
+    msg = {
+        "jsonrpc": "2.0", "id": 15, "method": "tools/call",
+        "params": {"name": "hybrid_search",
+                   "arguments": {"query": "anything", "mode": "semantic"}},
+    }
+    handle_message(msg, retriever)
+
+    event = json.loads(audit_file.read_text().strip())
+    assert event["event"] == "mcp_rag_error"
+    assert event["mode"] == "semantic"
+    assert secret not in event["error"], "audit must not persist the raw secret"
+    assert "[REDACTED_SECRET]" in event["error"]
+    reset_config_cache()
