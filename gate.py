@@ -209,11 +209,12 @@ if not os.environ.get("CYCLAW_API_KEY", ""):
 async def lifespan(app: FastAPI):
     # Startup: nothing extra needed — clients are already initialized at module level.
     yield
-    # Shutdown: close persistent httpx.Client connection pools so the OS reclaims
-    # file descriptors and TIME_WAIT sockets promptly on server restart.
+    # Shutdown: close persistent connection pools so the OS reclaims file
+    # descriptors and TIME_WAIT sockets promptly on server restart.
     local_llm.close()
     if grok is not None:
         grok.close()
+    _rate_limiter.close()
 
 
 app = FastAPI(
