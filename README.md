@@ -1,4 +1,4 @@
-# CyClaw
+# CyClaw: Local AI you can Trust.
 
 > **Offline-first, RAG-enforced, $ecure Local AI "Second Brain" with Dropbox Sync for data/corpus/ + secure, out-of-band, disabled by default agentic functionality**
 
