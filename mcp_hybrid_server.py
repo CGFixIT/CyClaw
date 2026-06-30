@@ -136,20 +136,23 @@ def main():
     except Exception as e:
         sys.stderr.write(f"[MCP] Failed to init retriever: {e}\n")
         sys.exit(1)
-    for line in sys.stdin:
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            msg = json.loads(line)
-            response = handle_message(msg, retriever)
-            if response is not None:
-                sys.stdout.write(json.dumps(response) + "\n")
+    try:
+        for line in sys.stdin:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                msg = json.loads(line)
+                response = handle_message(msg, retriever)
+                if response is not None:
+                    sys.stdout.write(json.dumps(response) + "\n")
+                    sys.stdout.flush()
+            except json.JSONDecodeError as e:
+                err = _error(None, -32700, f"Parse error: {str(e)}")
+                sys.stdout.write(json.dumps(err) + "\n")
                 sys.stdout.flush()
-        except json.JSONDecodeError as e:
-            err = _error(None, -32700, f"Parse error: {str(e)}")
-            sys.stdout.write(json.dumps(err) + "\n")
-            sys.stdout.flush()
+    finally:
+        retriever.close()
 
 if __name__ == "__main__":
     main()

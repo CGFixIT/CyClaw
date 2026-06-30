@@ -40,7 +40,7 @@ def parse_stem_tags(raw: object) -> list[str]:
     stem metadata rather than an HTTP 500.
     """
     if isinstance(raw, list):
-        return raw
+        return list(raw)
     try:
         parsed = json.loads(raw)
         return parsed if isinstance(parsed, list) else []

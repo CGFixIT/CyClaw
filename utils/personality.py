@@ -375,12 +375,14 @@ class PersonalityManager:
 
         Called by gate.py's lifespan shutdown so the OS reclaims file
         descriptors promptly on server restart. No-op if already closed.
+        Acquires _lock to avoid racing with record_interaction/maintenance.
         """
-        if self.conn is not None:
-            try:
-                self.conn.close()
-            finally:
-                self.conn = None
+        with self._lock:
+            if self.conn is not None:
+                try:
+                    self.conn.close()
+                finally:
+                    self.conn = None
 
     def maintenance(self, ttl_days: int | None = None) -> int:
         if ttl_days is None:

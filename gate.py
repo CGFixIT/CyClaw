@@ -222,14 +222,19 @@ async def lifespan(app: FastAPI):
     yield
     # Shutdown: close persistent connection pools so the OS reclaims file
     # descriptors and TIME_WAIT sockets promptly on server restart.
-    local_llm.close()
-    if grok is not None:
-        grok.close()
-    _rate_limiter.close()
-    if personality is not None:
-        personality.close()
-    if retriever is not None:
-        retriever.close()
+    # Each close is isolated so one failure does not skip the rest.
+    for _name, _obj in [
+        ("local_llm", local_llm),
+        ("grok", grok),
+        ("rate_limiter", _rate_limiter),
+        ("personality", personality),
+        ("retriever", retriever),
+    ]:
+        if _obj is not None:
+            try:
+                _obj.close()
+            except Exception:
+                logger.warning("shutdown close failed for %s", _name, exc_info=True)
 
 
 app = FastAPI(

@@ -1005,7 +1005,6 @@ function addConfirmEntry(message) {
   el.id = id;
   el.setAttribute('role', 'dialog');
   el.setAttribute('aria-modal', 'true');
-  el.setAttribute('aria-label', 'Grok fallback confirmation');
 
   // Build via DOM + addEventListener rather than an innerHTML template with an
   // inline onclick string: textContent escapes the message natively and no
@@ -1042,6 +1041,19 @@ function addConfirmEntry(message) {
   resultsEl.appendChild(el);
   resultsEl.scrollTop = resultsEl.scrollHeight;
   noBtn.focus();
+
+  // Trap focus within the modal dialog (Tab cycles between Yes and No).
+  const focusable = [yesBtn, noBtn];
+  el.addEventListener('keydown', (e) => {
+    if (e.key !== 'Tab') return;
+    const idx = focusable.indexOf(document.activeElement);
+    if (e.shiftKey) {
+      focusable[idx <= 0 ? focusable.length - 1 : idx - 1].focus();
+    } else {
+      focusable[(idx + 1) % focusable.length].focus();
+    }
+    e.preventDefault();
+  });
 }
 
 function handleConfirm(confirmed, entryId) {
@@ -1051,6 +1063,7 @@ function handleConfirm(confirmed, entryId) {
     btns.forEach(b => b.disabled = true);
     el.removeAttribute('role');
     el.removeAttribute('aria-modal');
+    el.removeAttribute('aria-labelledby');
   }
   addEntry('system', '', confirmed ? '→ Escalating to Grok...' : '→ Staying offline (best-effort local)');
   submitQuery(confirmed);
