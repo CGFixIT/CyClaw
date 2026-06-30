@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import dataclasses
 import hashlib
+import logging
 import os
 import re
 import shutil
@@ -42,6 +43,8 @@ from utils.errors import (
     SyncRuntimeError,
 )
 from utils.logger import audit_log
+
+log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Version handling
@@ -560,9 +563,10 @@ def _acquire_sync_lock(lock_dir: str) -> None:
         try:
             os.rmdir(lock_dir)
             os.mkdir(lock_dir)
+            log.info("Reclaimed stale sync lock at %s (age %.0f s)", lock_dir, age)
             return
         except OSError:
-            pass
+            log.warning("Stale sync lock reclamation failed at %s (age %.0f s); raising", lock_dir, age)
     raise SyncRuntimeError(
         "Another CyClaw sync appears to be running",
         details={
