@@ -39,6 +39,17 @@ DEFAULT_MIN_GH = (2, 40, 0)
 # `gh version 2.55.0 (2024-08-21)` -> capture the X.Y.Z triple.
 _GH_VERSION_RE = re.compile(r"gh version\s+(\d+)\.(\d+)\.(\d+)", re.IGNORECASE)
 
+# A repo slug is ``owner/name``; each segment must START with an alphanumeric.
+# Anchoring the first character (rather than the looser ``[A-Za-z0-9_.-]+``)
+# rejects a leading-dash slug like ``-X/y``: ``repo`` flows POSITIONALLY into
+# ``gh repo view <repo>`` (and as the value of ``--repo``), so a value gh reads as
+# a flag is argument injection (argv is a list, so not shell injection).
+# ``agentic.config`` already validates this at config-load, but ``build_read_argv``
+# is a public boundary -- reused by ``run_read`` and callable with an arbitrary
+# ``repo`` -- so it re-validates here. This is the same belt-and-suspenders the
+# sync layer applies to ``remote_name`` / ``remote_path`` (sync/config.py).
+_REPO_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9][A-Za-z0-9_.-]*$")
+
 
 def check_gh_version(
     gh_bin: str = "gh",
@@ -166,6 +177,15 @@ def build_read_argv(
         raise AgenticError(
             f"Unknown or non-read-only gh op: {op!r}",
             details={"op": op, "allowed": sorted(_READ_OPS)},
+        )
+
+    # Re-validate the repo slug at this argv boundary (defense in depth). A value
+    # like "-X/y" would otherwise reach gh as a positional/`--repo` argument and be
+    # parsed as a flag -- argument injection. See the _REPO_RE rationale above.
+    if not _REPO_RE.match(repo):
+        raise AgenticError(
+            f"invalid repo slug (must be 'owner/name', alphanumeric-leading): {repo!r}",
+            details={"repo": repo},
         )
 
     if op in ("pr_view", "pr_diff", "issue_view") and number is None:

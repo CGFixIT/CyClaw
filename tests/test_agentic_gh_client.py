@@ -93,6 +93,46 @@ def test_build_requires_number_for_view():
         build_read_argv("pr_view", "owner/repo")
 
 
+@pytest.mark.parametrize(
+    "bad_repo",
+    [
+        "-X/y",            # leading-dash owner -> gh would parse as a flag
+        "owner/-rf",       # leading-dash name
+        "--repo=x/y",      # whole slug shaped like a flag
+        "owner",           # missing '/name'
+        "owner/name/extra",  # too many segments
+        "owner /name",     # space (would split argv)
+        "owner;rm -rf/name",  # shell-metachar shape
+        "",                # empty
+    ],
+)
+def test_build_rejects_argument_injection_repo(bad_repo):
+    """A repo slug that gh could parse as a flag (or that splits argv) is refused."""
+    with pytest.raises(AgenticError):
+        build_read_argv("repo_view", bad_repo)
+
+
+def test_build_rejects_injection_repo_across_all_ops():
+    # The guard runs for every read op, not just repo_view.
+    for op, kwargs in (
+        ("pr_view", {"number": 1}),
+        ("pr_diff", {"number": 1}),
+        ("issue_view", {"number": 1}),
+        ("pr_list", {}),
+        ("issue_list", {}),
+        ("repo_view", {}),
+    ):
+        with pytest.raises(AgenticError):
+            build_read_argv(op, "-evil/repo", **kwargs)
+
+
+def test_build_accepts_valid_repo_slugs():
+    # Dots, hyphens and underscores are fine when not leading a segment.
+    for good in ("owner/repo", "My-Org/Cy.Claw_1", "a/b"):
+        argv = build_read_argv("repo_view", good)
+        assert good in argv
+
+
 # --- version check ---------------------------------------------------------
 
 def test_check_gh_version_parses():
