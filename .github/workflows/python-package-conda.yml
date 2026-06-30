@@ -56,14 +56,32 @@ jobs:
         python -m pip install -e ".[test,dev]" --no-deps || echo "No [test,dev] extras yet — add to pyproject.toml"
         # If heavy deps live in environment.yml, they are already resolved by mamba
 
+    - name: Prepare hermetic test env
+      shell: bash -l {0}
+      run: |
+        mkdir -p data/personality index logs
+        echo '# Soul' > data/personality/soul.md
+        echo 'GROK_API_KEY=dummy' >> $GITHUB_ENV
+
     - name: Pytest — unit + integration + safe smoke (RAG/policy focused)
       shell: bash -l {0}
       run: |
         pytest tests/ \
           -v \
-          --cov=cyclaw --cov-report=xml --cov-report=term-missing \
+          --cov=gate \
+          --cov=graph \
+          --cov=mcp_hybrid_server \
+          --cov=metrics \
+          --cov=llm \
+          --cov=retrieval \
+          --cov=utils \
+          --cov=sync \
+          --cov=agentic \
+          --cov=guardrails \
+          --cov-report=xml \
+          --cov-report=term-missing \
           -m "not slow and not agentic" \
-          --tb=short || true
+          --tb=short
         # agentic/ and heavy fsconnect/sqlconnect paths remain human-reason gated (off-by-default in CI)
 
     - name: Run verify harness / smoke (if present)
