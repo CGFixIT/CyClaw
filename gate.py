@@ -228,6 +228,8 @@ async def lifespan(app: FastAPI):
     _rate_limiter.close()
     if personality is not None:
         personality.close()
+    if retriever is not None:
+        retriever.close()
 
 
 app = FastAPI(

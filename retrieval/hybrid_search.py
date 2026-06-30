@@ -73,6 +73,14 @@ class HybridRetriever:
         self.top_k_keyword = self.cfg["retrieval"]["top_k_keyword"]
         self.rrf_k = self.cfg["retrieval"]["rrf_k"]
 
+    def close(self) -> None:
+        """Close the underlying vector store connection.
+
+        No-op for ChromaDB (embedded, no persistent connection). For pgvector
+        the psycopg connection is released so the OS reclaims the socket.
+        """
+        self._vector_reader.close()
+
     def semantic_search(self, query: str, k: int | None = None) -> list[SearchResult]:
         if k is None:
             k = self.top_k_semantic
