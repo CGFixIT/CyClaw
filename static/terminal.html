@@ -637,7 +637,9 @@
     <button class="toolbar-btn" id="soulToggleBtn" onclick="toggleSoulPanel()">Soul Console</button>
     <button class="toolbar-btn" id="syncToggleBtn" onclick="toggleSyncPanel()">Sync Console</button>
     <button class="toolbar-btn" id="agenticToggleBtn" onclick="toggleAgenticPanel()">Agentic Console</button>
-    <span class="toolbar-hint">soul · corpus sync · agentic ops — all loopback, audited, API-key gated</span>
+    <button class="toolbar-btn" id="fsToggleBtn" onclick="toggleFsPanel()">FS Console</button>
+    <button class="toolbar-btn" id="sqlToggleBtn" onclick="toggleSqlPanel()">SQL Console</button>
+    <span class="toolbar-hint">soul · corpus sync · agentic · fs · sql — all loopback, audited, API-key gated</span>
     <input id="apiKeyInput" type="password" placeholder="API key (optional)"
            style="margin-left:auto;background:var(--bg-input);border:1px solid var(--border);
            border-radius:var(--radius);padding:4px 8px;font-family:var(--mono);font-size:10px;
@@ -742,6 +744,75 @@
     </div>
   </div>
 
+  <!-- FS CONSOLE — drives the out-of-band agentic/fsconnect/ CLI via POST /ops/fsconnect -->
+  <div class="soul-panel" id="fsPanel">
+    <div class="soul-header">
+      <div class="soul-title">Filesystem Console</div>
+      <div class="soul-meta">
+        <span id="fsEnabled">enabled: --</span>
+        <span id="fsWritesEnabled">writes: --</span>
+      </div>
+    </div>
+    <div class="soul-actions">
+      <input class="soul-reason" id="fsRoot" type="text" placeholder="root path (allowed root)" style="max-width:300px;">
+      <input class="soul-reason" id="fsPath" type="text" placeholder="relative path" style="max-width:300px;">
+    </div>
+    <div class="soul-actions">
+      <button class="soul-btn" onclick="fsStatusCmd()">Status</button>
+      <button class="soul-btn" onclick="fsListCmd()">List</button>
+      <button class="soul-btn" onclick="fsReadCmd()">Read</button>
+      <button class="soul-btn" onclick="fsStatCmd()">Stat</button>
+    </div>
+    <div class="soul-actions">
+      <input class="soul-reason" id="fsPattern" type="text" placeholder="pattern (grep/glob)" style="max-width:300px;">
+      <label class="gate-confirm-label"><input type="checkbox" id="fsRegex"> regex</label>
+      <button class="soul-btn" onclick="fsGrepCmd()">Grep</button>
+      <button class="soul-btn" onclick="fsGlobCmd()">Glob</button>
+    </div>
+    <div class="soul-status" id="fsStatus"></div>
+    <div class="proposal-box" id="fsBox">
+      <div class="proposal-meta" id="fsMeta"></div>
+      <div class="proposal-warning" id="fsWarning"></div>
+      <pre class="proposal-preview" id="fsPreview"></pre>
+    </div>
+  </div>
+
+  <!-- SQL CONSOLE — drives the out-of-band agentic/sqlconnect/ CLI via POST /ops/sqlconnect -->
+  <div class="soul-panel" id="sqlPanel">
+    <div class="soul-header">
+      <div class="soul-title">SQL Console</div>
+      <div class="soul-meta">
+        <span id="sqlEnabled">enabled: --</span>
+        <span id="sqlDriver">driver: --</span>
+        <span id="sqlReadOnly">read_only: --</span>
+      </div>
+    </div>
+    <div class="soul-actions">
+      <button class="soul-btn" onclick="sqlStatusCmd()">Status</button>
+      <button class="soul-btn" onclick="sqlSchemaCmd()">Schema</button>
+    </div>
+    <div class="soul-actions">
+      <input class="soul-reason" id="sqlTable" type="text" placeholder="schema.table (for preview / count)" style="max-width:300px;">
+      <button class="soul-btn" onclick="sqlPreviewCmd()">Preview</button>
+      <button class="soul-btn" onclick="sqlCountCmd()">Count</button>
+    </div>
+    <textarea class="soul-editor" id="sqlQuery" placeholder="SELECT ... (read-only query)" style="min-height:80px;"></textarea>
+    <div class="soul-actions">
+      <button class="soul-btn" onclick="sqlRunCmd()">Run Query</button>
+      <button class="soul-btn" onclick="sqlExplainCmd()">Explain</button>
+      <select id="sqlFmt" style="background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);padding:4px 8px;font-family:var(--mono);font-size:10px;color:var(--text-secondary);">
+        <option value="json">JSON</option>
+        <option value="csv">CSV</option>
+      </select>
+    </div>
+    <div class="soul-status" id="sqlStatus"></div>
+    <div class="proposal-box" id="sqlBox">
+      <div class="proposal-meta" id="sqlMeta"></div>
+      <div class="proposal-warning" id="sqlWarning"></div>
+      <pre class="proposal-preview" id="sqlPreview"></pre>
+    </div>
+  </div>
+
   <div class="results" id="results">
     <div class="empty-state" id="emptyState">
       <div class="logo-large">CyClaw</div>
@@ -813,6 +884,22 @@ const agenticPreview = document.getElementById('agenticPreview');
 const agenticToggleBtn = document.getElementById('agenticToggleBtn');
 const agenticConfirm = document.getElementById('agenticConfirm');
 const agenticApplyBtn = document.getElementById('agenticApplyBtn');
+
+// FS + SQL console refs (mirror sync/agentic naming).
+const fsPanel = document.getElementById('fsPanel');
+const fsStatus = document.getElementById('fsStatus');
+const fsBox = document.getElementById('fsBox');
+const fsMeta = document.getElementById('fsMeta');
+const fsWarning = document.getElementById('fsWarning');
+const fsPreview = document.getElementById('fsPreview');
+const fsToggleBtn = document.getElementById('fsToggleBtn');
+const sqlPanel = document.getElementById('sqlPanel');
+const sqlStatus = document.getElementById('sqlStatus');
+const sqlBox = document.getElementById('sqlBox');
+const sqlMeta = document.getElementById('sqlMeta');
+const sqlWarning = document.getElementById('sqlWarning');
+const sqlPreview = document.getElementById('sqlPreview');
+const sqlToggleBtn = document.getElementById('sqlToggleBtn');
 
 let queryCount = 0;
 // Client-side /query abort, in ms. MUST stay above the server's graph_timeout_sec
@@ -1452,6 +1539,155 @@ async function toggleAgenticPanel() {
   agenticToggleBtn.textContent = open ? 'Hide Agentic' : 'Agentic Console';
   if (open) refreshAgenticGates();
   if (open && !agenticLoaded && apiKeyInput.value.trim()) { agenticLoaded = true; await runAgentic('status'); }
+}
+
+// ---- FS Console --------------------------------------------------------------
+
+function setFsStatus(message, tone = '') {
+  fsStatus.textContent = message || '';
+  fsStatus.className = `soul-status${tone ? ` ${tone}` : ''}`;
+}
+
+function fsLabelMsg(data) {
+  switch (data.exit_code) {
+    case 0:  return 'OK';
+    case 2:  return 'operation failed';
+    case 3:  return 'env/config error';
+    case 4:  return 'WRITE REFUSED by gate';
+    default: return `exit ${data.exit_code}`;
+  }
+}
+
+function applyFsConfig(config) {
+  if (!config) return;
+  document.getElementById('fsEnabled').textContent = `enabled: ${config.enabled}`;
+  document.getElementById('fsWritesEnabled').textContent = `writes: ${config.writes_enabled}`;
+}
+
+async function runFs(action, opts = {}) {
+  setFsStatus(`Running fsconnect ${action}...`);
+  try {
+    const data = await callOps('/ops/fsconnect', { action, ...opts });
+    applyFsConfig(data.config);
+    renderOps(fsBox, fsMeta, fsWarning, fsPreview, data);
+    setFsStatus(`[${action}] ${fsLabelMsg(data)}`, data.ok ? 'success' : 'error');
+    addEntry('system', '', `→ ops/fsconnect ${action} exit ${data.exit_code} (${data.label})`);
+  } catch (e) {
+    setFsStatus(e.message, 'error');
+  }
+}
+
+function fsStatusCmd() { return runFs('status'); }
+function fsListCmd() {
+  return runFs('list', {
+    root: document.getElementById('fsRoot').value.trim() || null,
+    path: document.getElementById('fsPath').value.trim() || null,
+  });
+}
+function fsReadCmd() {
+  return runFs('read', {
+    root: document.getElementById('fsRoot').value.trim() || null,
+    path: document.getElementById('fsPath').value.trim() || null,
+  });
+}
+function fsStatCmd() {
+  return runFs('stat', {
+    root: document.getElementById('fsRoot').value.trim() || null,
+    path: document.getElementById('fsPath').value.trim() || null,
+  });
+}
+function fsGrepCmd() {
+  const pattern = document.getElementById('fsPattern').value.trim();
+  if (!pattern) { setFsStatus('Enter a grep pattern first.', 'error'); return; }
+  return runFs('grep', {
+    root: document.getElementById('fsRoot').value.trim() || null,
+    path: document.getElementById('fsPath').value.trim() || null,
+    pattern,
+    regex: document.getElementById('fsRegex').checked,
+  });
+}
+function fsGlobCmd() {
+  const pattern = document.getElementById('fsPattern').value.trim();
+  if (!pattern) { setFsStatus('Enter a glob pattern first.', 'error'); return; }
+  return runFs('glob', {
+    root: document.getElementById('fsRoot').value.trim() || null,
+    pattern,
+  });
+}
+
+let fsLoaded = false;
+async function toggleFsPanel() {
+  fsPanel.classList.toggle('open');
+  const open = fsPanel.classList.contains('open');
+  fsToggleBtn.textContent = open ? 'Hide FS' : 'FS Console';
+  if (open && !fsLoaded && apiKeyInput.value.trim()) { fsLoaded = true; await runFs('status'); }
+}
+
+// ---- SQL Console -------------------------------------------------------------
+
+function setSqlStatus(message, tone = '') {
+  sqlStatus.textContent = message || '';
+  sqlStatus.className = `soul-status${tone ? ` ${tone}` : ''}`;
+}
+
+function sqlLabelMsg(data) {
+  switch (data.exit_code) {
+    case 0:  return 'OK';
+    case 2:  return 'operation failed';
+    case 3:  return 'env/config error (driver missing, DSN unset, or config invalid)';
+    default: return `exit ${data.exit_code}`;
+  }
+}
+
+function applySqlConfig(config) {
+  if (!config) return;
+  document.getElementById('sqlEnabled').textContent = `enabled: ${config.enabled}`;
+  document.getElementById('sqlDriver').textContent = `driver: ${config.driver}`;
+  document.getElementById('sqlReadOnly').textContent = `read_only: ${config.read_only}`;
+}
+
+async function runSql(action, opts = {}) {
+  setSqlStatus(`Running sqlconnect ${action}...`);
+  try {
+    const data = await callOps('/ops/sqlconnect', { action, ...opts });
+    applySqlConfig(data.config);
+    renderOps(sqlBox, sqlMeta, sqlWarning, sqlPreview, data);
+    setSqlStatus(`[${action}] ${sqlLabelMsg(data)}`, data.ok ? 'success' : 'error');
+    addEntry('system', '', `→ ops/sqlconnect ${action} exit ${data.exit_code} (${data.label})`);
+  } catch (e) {
+    setSqlStatus(e.message, 'error');
+  }
+}
+
+function sqlStatusCmd()  { return runSql('status'); }
+function sqlSchemaCmd()  { return runSql('schema'); }
+function sqlPreviewCmd() {
+  const table = document.getElementById('sqlTable').value.trim();
+  if (!table) { setSqlStatus('Enter a table name first.', 'error'); return; }
+  return runSql('query', { table });
+}
+function sqlCountCmd() {
+  const table = document.getElementById('sqlTable').value.trim();
+  if (!table) { setSqlStatus('Enter a table name first.', 'error'); return; }
+  return runSql('query', { table, count: true });
+}
+function sqlRunCmd() {
+  const sql = document.getElementById('sqlQuery').value.trim();
+  if (!sql) { setSqlStatus('Enter a SQL query first.', 'error'); return; }
+  return runSql('query', { sql, fmt: document.getElementById('sqlFmt').value });
+}
+function sqlExplainCmd() {
+  const sql = document.getElementById('sqlQuery').value.trim();
+  if (!sql) { setSqlStatus('Enter a SQL query first.', 'error'); return; }
+  return runSql('query', { sql, explain: true });
+}
+
+let sqlLoaded = false;
+async function toggleSqlPanel() {
+  sqlPanel.classList.toggle('open');
+  const open = sqlPanel.classList.contains('open');
+  sqlToggleBtn.textContent = open ? 'Hide SQL' : 'SQL Console';
+  if (open && !sqlLoaded && apiKeyInput.value.trim()) { sqlLoaded = true; await runSql('status'); }
 }
 
 function escHtml(str) {
