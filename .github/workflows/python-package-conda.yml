@@ -89,11 +89,11 @@ jobs:
       run: |
         if [ -x ./verify.sh ]; then
           echo "Running project verify.sh harness..."
-          ./verify.sh || true
+          ./verify.sh
         fi
         if [ -f .claude/skills/sandbox-runtime-verification/verify.sh ]; then
           echo "Running sandbox verification harness..."
-          bash .claude/skills/sandbox-runtime-verification/verify.sh || true
+          bash .claude/skills/sandbox-runtime-verification/verify.sh
         fi
 
     - name: Initialize CodeQL (Python security)
