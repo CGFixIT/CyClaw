@@ -140,15 +140,18 @@ jobs:
             tests/test_fsconnect_indexer.py \
             tests/test_fsconnect_selftest.py \
             tests/test_fsconnect_cli.py \
+            tests/test_fsconnect_osutil.py \
             tests/test_sqlconnect_config.py \
             tests/test_sqlconnect_client.py \
             tests/test_sqlconnect_cli.py \
+            tests/test_sqlconnect_context.py \
             tests/test_guardrails_config.py \
             tests/test_guardrails_rails.py \
             tests/test_guardrails_integration.py \
             tests/test_guardrails_metrics.py \
             tests/test_guardrails_isolation.py \
             tests/test_guardrails_cli.py \
+            tests/test_guardrails_selftest.py \
             tests/test_rag_integration.py \
             tests/test_startup_robustness.py \
             tests/test_clear_cache.py \
@@ -173,6 +176,7 @@ jobs:
             --cov=retrieval.hybrid_search \
             --cov=retrieval.indexer \
             --cov=retrieval.stemmer \
+            --cov=retrieval.vector_store \
             --cov=retrieval.clear_cache \
             --cov=mcp_hybrid_server \
             --cov=metrics \
