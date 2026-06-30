@@ -30,8 +30,6 @@ CyClaw is a personal RAG (Retrieval-Augmented Generation) backend that:
 7. **Extends the agentic layer to local data** (v1.8) with an opt-in **filesystem connector** (`agentic/fsconnect/` — scoped reads + gated writes over local/SMB shares, TOCTOU-safe) and a read-only **SQL connector** (`agentic/sqlconnect/` — SELECT-only Postgres/MSSQL scaffold) — both disabled by default and out-of-band
 8. **Adds an optional NeMo Guardrails content-safety layer** (v1.8, `guardrails/`) that soft-imports `nemoguardrails` and degrades to offline heuristic rails — defense-in-depth only, never a routing authority (graph topology stays the sole policy)
 
-Zero telemetry. Binds to `127.0.0.1:8787` only. All embeddings run locally via `sentence-transformers`. No cloud dependency for offline operation. Reproducible containerized deployment via Docker is available, while agentic and sync features remain explicitly opt-in.
-
 ---
 
 ## Version History
@@ -92,16 +90,6 @@ User Query (HTTP POST /query or MCMC tool call)
     │  • Per-chunk provenance metadata in every result    │
     └─────────────────────────────────────────────────────┘
 ```
-
-**Five security invariants enforced by graph edges — not prompts:**
-
-| # | Invariant | Enforcement |
-|---|---|---|
-| 1 | RAG-First | `retrieve` is the unconditional graph entry point — no LLM call can precede it |
-| 2 | Topology = Policy | Routing is graph edges, not LLM decisions or if/else code |
-| 3 | Triple-Gated External | Grok requires: `mode=hybrid` AND `grok.enabled=true` AND `user_confirmed_online=true` — simultaneously |
-| 4 | Audit Convergence | All 6 execution paths converge at `audit_logger` — no shortcut path exists |
-| 5 | Soul Governance | Soul evolution requires explicit human reason string; no autonomous modification from any path |
 
 ### LangGraph Topology (rendered)
 
@@ -492,11 +480,7 @@ python -m agentic.cli apply-skill --name deploy --desc "..." --body-file s.md --
 
 The **Agentic Console** panel drives these from the terminal UI via `POST /ops/agentic`; skill-Apply stays disabled behind a 4-gate checklist (`mode=write` + `writes_enabled` + reason + `--confirm`) — dry-run only under shipped defaults.
 
-### `.claude/` workflows and utility surfaces
-
-The `.claude/` tree is the local operator layer for guided workflows and reusable helper assets.
-
-**Key areas**
+**Key areas in agentic folders**
 - `skills/` — reusable project skills / workflows
 - `commands/` — shortcut command entry points
 - `patterns/` — repeatable operating patterns
@@ -510,16 +494,6 @@ The `.claude/` tree is the local operator layer for guided workflows and reusabl
 - architecture, tests, logging, and speed refactor loops
 - wrap-up / session-end workflows
 - memory orchestration support patterns
-
-### Patterns and tool-call model
-
-Use the agentic layer for:
-- repo context gathering
-- PR / issue inspection
-- governed local skill proposals
-- human-reviewed workflow execution support
-
-Do **not** use it to bypass CyClaw's core RAG-first runtime or to inject autonomous write paths into the gateway.
 
 ---
 
@@ -649,21 +623,6 @@ The MCP server exposes a retrieval-only `hybrid_search` tool. It has **no sampli
 | Container | Non-root, `no-new-privileges`, `cap_drop: ALL`, read-only rootfs, seccomp, resource limits; optional eBPF/Falco detection (`deploy/falco/`, off by default) |
 
 > **Scope:** CyClaw is a single-operator, loopback-bound local server. The full threat model — what the sandbox does and does **not** cover (no microVM by design) and why — is documented in [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md).
-
----
-
-## Validation Commands
-
-```bash
-ruff check --select E,F,I,B,C4,S .
-python -m tests.ci_rag_smoke
-pytest tests/test_sanitizer.py tests/test_security.py tests/test_rate_limit.py tests/test_audit.py tests/test_client.py tests/test_personality.py
-GROK_API_KEY=dummy pytest tests/test_agentic_*.py tests/test_fsconnect_*.py tests/test_sqlconnect_*.py tests/test_guardrails_*.py -q
-python -m agentic.cli test
-python -m agentic.fsconnect.cli test
-python -m agentic.sqlconnect.cli test
-python -m guardrails.cli test
-```
 
 ---
 
