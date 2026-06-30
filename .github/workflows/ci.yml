@@ -66,13 +66,38 @@ jobs:
         run: |
           python -m pip install --upgrade "pip>=26.1.2"
 
-      - name: Install deps (torch CPU + project + test tools)
+      - name: Cache torch CPU wheel
+        # Torch (~2GB) is pinned infrequently; caching its wheel separately means
+        # a requirements.txt or constraints.txt change only busts the lighter
+        # runtime-deps cache (via the setup-python pip cache), not this one.
+        # The wheel is downloaded once per (os, pin) pair and reused on every
+        # subsequent run until the pin changes in pyproject.toml.
+        id: torch-wheel-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: .torch-wheels
+          key: torch-cpu-2.12.1-${{ runner.os }}-py312
+          restore-keys: |
+            torch-cpu-2.12.1-${{ runner.os }}-
+
+      - name: Download torch wheel (cache miss only)
+        if: steps.torch-wheel-cache.outputs.cache-hit != 'true'
         shell: bash
         run: |
           # CVE-2025-32434 (weights_only=True RCE bypass) was fixed in torch 2.6.0.
-          # 2.12.1 is within the patched range; install order still matters so the
-          # CPU wheel from the PyTorch index wins over the default CUDA build.
-          pip install torch==2.12.1+cpu --index-url https://download.pytorch.org/whl/cpu
+          # 2.12.1 is within the patched range. --no-deps avoids pulling the default
+          # CUDA build; only the CPU wheel is fetched and cached.
+          pip download "torch==2.12.1+cpu" \
+            --index-url https://download.pytorch.org/whl/cpu \
+            --no-deps -d .torch-wheels
+
+      - name: Install deps (torch CPU + project + test tools)
+        shell: bash
+        run: |
+          # Install torch from the per-version local wheel (no network fetch when
+          # cache hits). --no-index / --find-links keeps pip from querying the
+          # PyTorch index on cache-hit runs, speeding up the step significantly.
+          pip install --no-index --no-deps --find-links .torch-wheels "torch==2.12.1+cpu"
           pip install -r requirements.txt -c constraints.txt pytest pytest-cov
 
       - name: Prepare hermetic test env
@@ -95,70 +120,11 @@ jobs:
       - name: Run tests + coverage
         shell: bash
         run: |
-          # test_security.py guards the S3 BM25-pickle-RCE rejection (JSON-only
-          # loader) and the S9 API-key auth on /soul/* endpoints. It mocks
-          # ChromaDB and uses FastAPI's TestClient, so it needs no live service
-          # and runs in the same hermetic env as the rest of the suite.
-          pytest \
-            tests/test_sanitizer.py \
-            tests/test_security.py \
-            tests/test_config_validation.py \
-            tests/test_rate_limit.py \
-            tests/test_audit.py \
-            tests/test_client.py \
-            tests/test_personality.py \
-            tests/test_conftest_fixtures.py \
-            tests/test_stemmer.py \
-            tests/test_hybrid_search.py \
-            tests/test_indexer.py \
-            tests/test_embeddings.py \
-            tests/test_graph.py \
-            tests/test_gate.py \
-            tests/test_telemetry_kill.py \
-            tests/test_health.py \
-            tests/test_mcp_server.py \
-            tests/test_metrics.py \
-            tests/test_personality_changes.py \
-            tests/test_sync_config.py \
-            tests/test_sync_filters.py \
-            tests/test_sync_runner.py \
-            tests/test_sync_cli.py \
-            tests/test_sync_scheduler.py \
-            tests/test_sync_selftest.py \
-            tests/test_agentic_config.py \
-            tests/test_agentic_cli.py \
-            tests/test_agentic_registry.py \
-            tests/test_agentic_isolation.py \
-            tests/test_agentic_selftest.py \
-            tests/test_agentic_writer.py \
-            tests/test_agentic_gh_client.py \
-            tests/test_agentic_context.py \
-            tests/test_fsconnect_config.py \
-            tests/test_fsconnect_pathsafe.py \
-            tests/test_fsconnect_client.py \
-            tests/test_fsconnect_writer.py \
-            tests/test_fsconnect_indexer.py \
-            tests/test_fsconnect_selftest.py \
-            tests/test_fsconnect_cli.py \
-            tests/test_fsconnect_osutil.py \
-            tests/test_sqlconnect_config.py \
-            tests/test_sqlconnect_client.py \
-            tests/test_sqlconnect_cli.py \
-            tests/test_sqlconnect_context.py \
-            tests/test_guardrails_config.py \
-            tests/test_guardrails_rails.py \
-            tests/test_guardrails_integration.py \
-            tests/test_guardrails_metrics.py \
-            tests/test_guardrails_isolation.py \
-            tests/test_guardrails_cli.py \
-            tests/test_guardrails_selftest.py \
-            tests/test_rag_integration.py \
-            tests/test_startup_robustness.py \
-            tests/test_clear_cache.py \
-            tests/test_ops_runner.py \
-            tests/test_personality_postgres.py \
-            tests/test_ratelimit_postgres.py \
-            tests/test_pgvector_store.py \
+          # tests/ glob auto-discovers all test_*.py files — new test files are
+          # picked up without a manual ci.yml edit. ci_rag_smoke.py is excluded
+          # by pytest's default discovery pattern (it doesn't match test_*.py)
+          # and runs separately in the RAG smoke step above.
+          pytest tests/ \
             -q --tb=short \
             --cov=gate \
             --cov=utils.sanitizer \

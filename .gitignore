@@ -81,3 +81,6 @@ docs/memories/.orchestrator-state.json
 # source. The dated snapshot files (docs/memories/<date_time>.md) remain tracked.
 docs/memories/INDEX.md
 docs/memories/CONSOLIDATED.md
+
+# Selective torch wheel cache (CI artifact, never commit wheels)
+.torch-wheels/
