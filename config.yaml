@@ -47,7 +47,7 @@ models:
     # means local inference finishes in seconds-to-low-minutes; 300s is a backstop
     # so a genuine LM Studio stall surfaces as an error in 5 min rather than 12.
     # Raise it if you run very large models on slow CPU-only hardware.
-    timeout_sec: 300
+    timeout_sec: 300  # Per-call LLM timeout. Must be < api.graph_timeout_sec (330) to avoid orphaned graph invocations.
     retry:                  # bounded exp-backoff on transport/5xx/429; 4xx AND read-timeouts fail fast
       max_retries: 2        # extra attempts beyond the first (applies to transport/5xx/429 only)
       backoff_base_sec: 0.5 # delay = min(backoff_base_sec * 2**attempt, backoff_max_sec) (0.5s, 1s)
@@ -240,7 +240,7 @@ api:
   # retrieval can't hang a client indefinitely. Keep this >= the inner
   # models.local_llm.timeout_sec (300) so normal slow inference is not cut off;
   # the margin covers retrieval + soul-DB time.
-  graph_timeout_sec: 330
+  graph_timeout_sec: 330  # Must exceed models.local_llm.timeout_sec (300) — the 30s margin covers retrieval + routing + audit overhead. Formula: graph_timeout >= llm_timeout + 30.
   rate_limit:
     max_requests: 60       # per-IP request ceiling within the window
     window_seconds: 60     # sliding-window length in seconds
