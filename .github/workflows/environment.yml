@@ -32,6 +32,8 @@ dependencies:
   - pytest-cov
   - pip:
       - langgraph==1.2.6
+      - rank-bm25==0.2.2
+      - "websockets>=14,<16"
 
 # Optional: Create with mamba for speed
 # mamba env create -f environment.yml

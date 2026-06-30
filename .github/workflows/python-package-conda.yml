@@ -56,6 +56,13 @@ jobs:
         python -m pip install -e ".[test,dev]" --no-deps || echo "No [test,dev] extras yet — add to pyproject.toml"
         # If heavy deps live in environment.yml, they are already resolved by mamba
 
+    - name: Prepare hermetic test env
+      shell: bash -l {0}
+      run: |
+        mkdir -p data/personality index logs
+        echo '# Soul' > data/personality/soul.md
+        echo 'GROK_API_KEY=dummy' >> $GITHUB_ENV
+
     - name: Pytest — unit + integration + safe smoke (RAG/policy focused)
       shell: bash -l {0}
       run: |
