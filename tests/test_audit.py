@@ -173,7 +173,7 @@ class TestAuditLog:
             "details": {
                 "email": "user@example.com",
                 "ip": "192.168.1.1",
-                "secret": "AKIA0123456789ABCDEF",
+                "secret": "AKIAIOSFODNN7EXAMPLE",
                 "nested": {"more_email": "deeper@example.com"},
             },
         }, config_path)
@@ -183,7 +183,7 @@ class TestAuditLog:
         assert "user@example.com" not in raw
         assert "deeper@example.com" not in raw
         assert "192.168.1.1" not in raw
-        assert "AKIA0123456789ABCDEF" not in raw
+        assert "AKIAIOSFODNN7EXAMPLE" not in raw
         # And the redaction placeholders MUST be present.
         assert event["details"]["email"] == "[REDACTED_EMAIL]"
         assert event["details"]["ip"] == "[REDACTED_IP]"
@@ -195,12 +195,12 @@ class TestAuditLog:
         config_path, audit_file = audit_config
         audit_log({
             "event": "batch_event",
-            "errors": ["contact admin@example.com", "AKIA0123456789ABCDEF"],
+            "errors": ["contact admin@example.com", "AKIAIOSFODNN7EXAMPLE"],
         }, config_path)
         event = json.loads(Path(audit_file).read_text().strip())
         raw = json.dumps(event)
         assert "admin@example.com" not in raw
-        assert "AKIA0123456789ABCDEF" not in raw
+        assert "AKIAIOSFODNN7EXAMPLE" not in raw
         assert event["errors"][0] == "contact [REDACTED_EMAIL]"
         assert event["errors"][1] == "[REDACTED_SECRET]"
 
