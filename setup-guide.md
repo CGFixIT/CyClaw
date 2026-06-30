@@ -10,7 +10,7 @@ Tested & verified June 14 2026 — runs cleaner than 3.11 version
 | Requirement | Notes |
 |---|---|
 | Git | Any recent version |
-| Python 3.12 (or 3.11) | 3.12 is primary supported runtime |
+| Python 3.12 | 3.12 is primary supported runtime |
 | LM Studio | Running on `http://127.0.0.1:1234/v1` with `qwen2.5-7b-instruct` loaded |
 | Corpus `.md` files | Copy from local machine or `cgfixit.com/zSafeClaw/` |
 | Windows: PowerShell as admin | Linux: bash |
