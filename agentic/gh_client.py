@@ -54,12 +54,18 @@ _REPO_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9][A-Za-z0-9_.-]*$"
 def check_gh_version(
     gh_bin: str = "gh",
     min_version: tuple[int, int, int] = DEFAULT_MIN_GH,
+    retries: int = 1,
 ) -> tuple[int, int, int]:
     """Confirm ``gh`` is installed and at/above ``min_version``.
 
     Returns the parsed ``(major, minor, patch)`` tuple. Raises
     ``GhNotInstalledError`` if the binary is not on PATH, or ``GhVersionError``
     if the version is too old or unparseable.
+
+    ``retries`` adds up to N extra attempts with exponential backoff on
+    ``TimeoutExpired`` (the only transient failure possible for ``gh version``).
+    The default of 1 retry tolerates a single slow startup without silently
+    failing the agentic layer at import time on a loaded CI runner.
     """
     binary = shutil.which(gh_bin)
     if binary is None:
@@ -72,21 +78,32 @@ def check_gh_version(
             },
         )
 
-    try:
-        result = subprocess.run(  # noqa: S603 -- argv list, absolute binary, no shell
-            [binary, "version"],
-            capture_output=True,
-            text=True,
-            timeout=10,
-            check=False,
-        )
-    except subprocess.TimeoutExpired as exc:
-        raise GhVersionError(
-            f"gh version check timed out: {exc}",
-            details={"binary": binary},
-        ) from exc
+    attempts = max(1, retries + 1)
+    last_timeout_exc: subprocess.TimeoutExpired | None = None
+    result = None
+    for attempt in range(1, attempts + 1):
+        try:
+            result = subprocess.run(  # noqa: S603 -- argv list, absolute binary, no shell
+                [binary, "version"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=False,
+            )
+            last_timeout_exc = None
+            break
+        except subprocess.TimeoutExpired as exc:
+            last_timeout_exc = exc
+            if attempt < attempts:
+                time.sleep(2.0 ** (attempt - 1))
 
-    output = (result.stdout or "") + (result.stderr or "")
+    if last_timeout_exc is not None:
+        raise GhVersionError(
+            f"gh version check timed out after {attempts} attempt(s): {last_timeout_exc}",
+            details={"binary": binary, "attempts": attempts},
+        ) from last_timeout_exc
+
+    output = (result.stdout or "") + (result.stderr or "")  # type: ignore[union-attr]
     match = _GH_VERSION_RE.search(output)
     if not match:
         raise GhVersionError(

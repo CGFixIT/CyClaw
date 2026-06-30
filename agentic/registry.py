@@ -158,8 +158,15 @@ class SkillRegistry:
     def _atomic_write(self, data: dict) -> None:
         self.registry_path.parent.mkdir(parents=True, exist_ok=True)
         tmp_path = self.registry_path.with_suffix(self.registry_path.suffix + ".tmp")
-        tmp_path.write_text(json.dumps(data, indent=2, sort_keys=True), encoding="utf-8")
-        os.replace(tmp_path, self.registry_path)
+        try:
+            tmp_path.write_text(json.dumps(data, indent=2, sort_keys=True), encoding="utf-8")
+            os.replace(tmp_path, self.registry_path)
+        except (OSError, ValueError) as exc:
+            tmp_path.unlink(missing_ok=True)
+            raise SkillRegistryError(
+                f"Failed to write skills registry: {exc}",
+                details={"path": str(self.registry_path)},
+            ) from exc
 
     # --- scanning (mirrors PersonalityManager) ----------------------------
 
@@ -274,12 +281,14 @@ class SkillRegistry:
         # Heavy penalty for injection patterns (core invariant)
         penalty = min(len(flags) * 25, 80)
         score = 100 - penalty
-        # Structure bonuses are awarded ONLY for clean specs. A skill with any
-        # injection flag would be refused at the apply gate (safe_to_apply is
-        # False), so its governance score must stay visibly low -- a +8/+5
-        # description/body bonus must never inflate a refused skill back toward
-        # 100 (e.g. 1 flag -> 75 + 8 + 5 = 88) in the propose preview or the
-        # terminal status line that humans rely on during review.
+        # Any flagged skill is refused by the apply gate (safe_to_apply is
+        # False). Cap visibly low so the governance_score preview cannot mislead
+        # an operator into thinking a refused skill is near-passing (e.g. 1 flag
+        # -> 75 would look like a near-miss, but the apply gate will hard-reject
+        # it regardless of score). Structure bonuses are never awarded for flagged
+        # specs — there is nothing to bonus a skill that cannot be applied.
+        if flags:
+            return max(0, min(20, int(score)))
         if not flags:
             # Bonus for decent description (helps human review)
             if spec.get("description") and len(spec.get("description", "")) > 30:
