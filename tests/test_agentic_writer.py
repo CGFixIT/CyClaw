@@ -6,6 +6,7 @@ request still only DRY-RUNS (never executes), and that the executor is unwired.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -38,14 +39,27 @@ def _write_cfg() -> AgenticConfig:
     return AgenticConfig(mode="write", writes_enabled=True)
 
 
+def _audit_events(tmp_path: Path) -> list[dict]:
+    audit_file = tmp_path / "audit.jsonl"
+    return [
+        json.loads(line)
+        for line in audit_file.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+
+
 def test_execution_hard_disabled():
     assert EXECUTION_ENABLED is False
 
 
-def test_refuses_when_not_write_mode():
+def test_refuses_when_not_write_mode(tmp_path: Path):
     with pytest.raises(AgenticWriteRefused) as exc:
         plan_write(_read_cfg(), "pr_comment", "valid reason", confirm=True, number=1, body="hi")
     assert exc.value.details["failed_gate"] == "mode"
+    assert any(
+        event.get("event") == "agentic_write_refused" and event.get("gate") == "mode"
+        for event in _audit_events(tmp_path)
+    )
 
 
 def test_refuses_when_writes_disabled():
@@ -72,16 +86,39 @@ def test_unknown_op_raises():
         plan_write(_write_cfg(), "force_push", "valid reason", confirm=True)
 
 
-def test_full_gate_returns_dryrun_only():
+def test_full_gate_returns_dryrun_only(tmp_path: Path):
     plan = plan_write(_write_cfg(), "pr_comment", "explain the fix", confirm=True,
                       number=12, body="LGTM")
     assert plan["status"] == "dry_run_plan"
     assert plan["executed"] is False
     assert isinstance(plan["would_run"], list)
     assert "comment" in plan["would_run"]
+    assert any(
+        event.get("event") == "agentic_write_dryrun" and event.get("op") == "pr_comment"
+        for event in _audit_events(tmp_path)
+    )
 
 
-def test_executor_refused_by_kill_switch():
+def test_full_gate_pr_create_returns_dryrun_only():
+    plan = plan_write(_write_cfg(), "pr_create", "open focused fix PR", confirm=True,
+                      title="Fix thing", body="details")
+    assert plan["status"] == "dry_run_plan"
+    assert plan["executed"] is False
+    assert plan["would_run"] == [
+        "gh",
+        "pr",
+        "create",
+        "--repo",
+        "CGFixIT/CyClaw",
+        "--title",
+        "Fix thing",
+        "--body",
+        "details",
+        "--draft",
+    ]
+
+
+def test_executor_refused_by_kill_switch(tmp_path: Path):
     # EXECUTION_ENABLED is False (shipped state), so even a fully gate-satisfied
     # plan is refused at the execution boundary -- the kill switch is enforced,
     # not merely documented.
@@ -90,6 +127,11 @@ def test_executor_refused_by_kill_switch():
     with pytest.raises(AgenticWriteRefused) as exc:
         execute_write(plan)
     assert exc.value.details.get("failed_gate") == "execution_enabled"
+    assert any(
+        event.get("event") == "agentic_write_execution_blocked"
+        and event.get("gate") == "execution_enabled"
+        for event in _audit_events(tmp_path)
+    )
 
 
 def test_executor_unimplemented_even_with_flag_flipped(monkeypatch):
