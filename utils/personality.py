@@ -370,6 +370,18 @@ class PersonalityManager:
                 self._inserts_since_prune = 0
             self.conn.commit()
 
+    def close(self) -> None:
+        """Close the DB connection (SQLite or Postgres).
+
+        Called by gate.py's lifespan shutdown so the OS reclaims file
+        descriptors promptly on server restart. No-op if already closed.
+        """
+        if self.conn is not None:
+            try:
+                self.conn.close()
+            finally:
+                self.conn = None
+
     def maintenance(self, ttl_days: int | None = None) -> int:
         if ttl_days is None:
             ttl_days = self.ttl_days

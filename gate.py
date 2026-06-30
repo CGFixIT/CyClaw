@@ -226,6 +226,8 @@ async def lifespan(app: FastAPI):
     if grok is not None:
         grok.close()
     _rate_limiter.close()
+    if personality is not None:
+        personality.close()
 
 
 app = FastAPI(
