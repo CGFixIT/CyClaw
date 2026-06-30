@@ -1,7 +1,6 @@
 # CyClaw
 
 > **Offline-first, RAG-enforced, $ecure Local AI "Second Brain" with Dropbox Sync for data/corpus/ + secure, out-of-band, disabled by default agentic functionality**
-> Version 1.8.0 (agentic filesystem + SQL connectors, NeMo Guardrails layer)
 
 [![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.138-blue.svg)](https://fastapi.tiangolo.com/)
