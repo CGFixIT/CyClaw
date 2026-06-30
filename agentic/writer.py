@@ -37,14 +37,18 @@ _WRITE_OPS = frozenset({"pr_comment", "issue_comment", "pr_create"})
 def _build_write_argv(op: str, repo: str, params: dict, gh_bin: str = "gh") -> list[str]:
     """Build the argv a write WOULD use, for display in the dry-run plan only."""
     if op == "pr_comment":
+        if "number" not in params:
+            raise AgenticError(f"op {op!r} requires 'number' in params", details={"op": op})
         return [gh_bin, "pr", "comment", str(int(params["number"])),
-                "--repo", repo, "--body", str(params["body"])]
+                "--repo", repo, "--body", str(params.get("body", ""))]
     if op == "issue_comment":
+        if "number" not in params:
+            raise AgenticError(f"op {op!r} requires 'number' in params", details={"op": op})
         return [gh_bin, "issue", "comment", str(int(params["number"])),
-                "--repo", repo, "--body", str(params["body"])]
+                "--repo", repo, "--body", str(params.get("body", ""))]
     if op == "pr_create":
         return [gh_bin, "pr", "create", "--repo", repo,
-                "--title", str(params["title"]), "--body", str(params["body"]),
+                "--title", str(params.get("title", "")), "--body", str(params.get("body", "")),
                 "--draft"]
     raise AgenticError(f"Unknown write op: {op!r}", details={"op": op, "allowed": sorted(_WRITE_OPS)})
 

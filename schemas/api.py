@@ -98,3 +98,30 @@ class OpsAgenticRequest(BaseModel):
     body: str | None = Field(default=None, max_length=65536)
     reason: str | None = Field(default=None, max_length=4096)
     confirm: bool = False
+
+
+# --- Filesystem connector (out-of-band, /ops/fsconnect) ----------------------
+# Mirrors the fsconnect CLI subcommands. Read ops require root+path; write ops
+# additionally need reason and body. action is a closed Literal so unknown verbs
+# are rejected at the schema boundary (HTTP 422).
+class OpsFsConnectRequest(BaseModel):
+    model_config = ConfigDict(extra='forbid', strict=True)
+    action: Literal["status", "test", "list", "read", "stat", "grep", "glob"]
+    root: str | None = Field(default=None, max_length=1024)
+    path: str | None = Field(default=None, max_length=4096)
+    pattern: str | None = Field(default=None, max_length=1024)
+    regex: bool = False
+    recursive: bool = True
+
+
+# --- SQL connector (out-of-band, /ops/sqlconnect) -----------------------------
+# Mirrors the sqlconnect CLI subcommands. Read-only by construction. action is a
+# closed Literal; sql is capped to prevent oversized payloads.
+class OpsSqlConnectRequest(BaseModel):
+    model_config = ConfigDict(extra='forbid', strict=True)
+    action: Literal["status", "test", "schema", "query"]
+    sql: str | None = Field(default=None, max_length=65536)
+    table: str | None = Field(default=None, max_length=256)
+    explain: bool = False
+    count: bool = False
+    fmt: Literal["json", "csv"] = "json"

@@ -14,7 +14,7 @@ import sys
 import pytest
 
 from utils import ops_runner
-from utils.ops_runner import OpsError, run_agentic_op, run_sync_op
+from utils.ops_runner import OpsError, run_agentic_op, run_fsconnect_op, run_sqlconnect_op, run_sync_op
 
 
 def _fake_run(returncode: int = 0, stdout: str = "", stderr: str = ""):
@@ -223,6 +223,127 @@ def test_to_dict_shape(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(ops_runner, "_run", runner)
     d = run_sync_op("status").to_dict()
     assert set(d) == {"subsystem", "action", "exit_code", "ok", "label", "stdout", "stderr", "parsed"}
+
+
+# ----------------------------------------------------------------------- isolation
+
+
+# --------------------------------------------------------------------- fsconnect
+
+
+def test_fsconnect_unknown_action_raises() -> None:
+    with pytest.raises(OpsError):
+        run_fsconnect_op("rm-rf")
+
+
+def test_fsconnect_status_argv(monkeypatch: pytest.MonkeyPatch) -> None:
+    runner, captured = _fake_run(returncode=0, stdout="ok")
+    monkeypatch.setattr(ops_runner, "_run", runner)
+    res = run_fsconnect_op("status")
+    argv = captured[0]
+    assert argv[0] == sys.executable
+    assert argv[1:3] == ["-m", "agentic.fsconnect.cli"]
+    assert "--config" in argv and argv[-1] == "status"
+    assert res.ok is True and res.label == "ok"
+
+
+def test_fsconnect_list_argv(monkeypatch: pytest.MonkeyPatch) -> None:
+    runner, captured = _fake_run(returncode=0, stdout='[{"name": "file.txt"}]')
+    monkeypatch.setattr(ops_runner, "_run", runner)
+    res = run_fsconnect_op("list", root="/data", path="subdir")
+    argv = captured[0]
+    assert "--root" in argv and "/data" in argv
+    assert "--path" in argv and "subdir" in argv
+    assert res.parsed == [{"name": "file.txt"}]
+
+
+def test_fsconnect_grep_argv(monkeypatch: pytest.MonkeyPatch) -> None:
+    runner, captured = _fake_run(returncode=0, stdout='{"matches": []}')
+    monkeypatch.setattr(ops_runner, "_run", runner)
+    run_fsconnect_op("grep", root="/data", path="file.txt", pattern="hello", regex=True)
+    argv = captured[0]
+    assert "--pattern" in argv and "hello" in argv
+    assert "--regex" in argv
+
+
+def test_fsconnect_glob_no_recursive(monkeypatch: pytest.MonkeyPatch) -> None:
+    runner, captured = _fake_run(returncode=0, stdout="[]")
+    monkeypatch.setattr(ops_runner, "_run", runner)
+    run_fsconnect_op("glob", root="/data", pattern="*.md", recursive=False)
+    assert "--no-recursive" in captured[0]
+
+
+@pytest.mark.parametrize(
+    "code,ok,label",
+    [(0, True, "ok"), (2, False, "failed"), (3, False, "env_config"),
+     (4, False, "write_refused"), (99, False, "unknown")],
+)
+def test_fsconnect_exit_code_labels(monkeypatch: pytest.MonkeyPatch, code: int, ok: bool, label: str) -> None:
+    runner, _ = _fake_run(returncode=code)
+    monkeypatch.setattr(ops_runner, "_run", runner)
+    res = run_fsconnect_op("status")
+    assert res.ok is ok and res.label == label
+
+
+# ------------------------------------------------------------------- sqlconnect
+
+
+def test_sqlconnect_unknown_action_raises() -> None:
+    with pytest.raises(OpsError):
+        run_sqlconnect_op("drop-table")
+
+
+def test_sqlconnect_status_argv(monkeypatch: pytest.MonkeyPatch) -> None:
+    runner, captured = _fake_run(returncode=0, stdout="ok")
+    monkeypatch.setattr(ops_runner, "_run", runner)
+    res = run_sqlconnect_op("status")
+    argv = captured[0]
+    assert argv[0] == sys.executable
+    assert argv[1:3] == ["-m", "agentic.sqlconnect.cli"]
+    assert "--config" in argv and argv[-1] == "status"
+    assert res.ok is True and res.label == "ok"
+
+
+def test_sqlconnect_query_sql_argv(monkeypatch: pytest.MonkeyPatch) -> None:
+    runner, captured = _fake_run(returncode=0, stdout='{"rows": []}')
+    monkeypatch.setattr(ops_runner, "_run", runner)
+    res = run_sqlconnect_op("query", sql="SELECT 1", fmt="csv")
+    argv = captured[0]
+    assert "--sql" in argv and "SELECT 1" in argv
+    assert "--format" in argv and "csv" in argv
+    assert res.parsed == {"rows": []}
+
+
+def test_sqlconnect_query_table_count(monkeypatch: pytest.MonkeyPatch) -> None:
+    runner, captured = _fake_run(returncode=0, stdout='{"count": 42}')
+    monkeypatch.setattr(ops_runner, "_run", runner)
+    run_sqlconnect_op("query", table="public.users", count=True)
+    argv = captured[0]
+    assert "--table" in argv and "public.users" in argv
+    assert "--count" in argv
+
+
+def test_sqlconnect_query_explain(monkeypatch: pytest.MonkeyPatch) -> None:
+    runner, captured = _fake_run(returncode=0, stdout='{"plan": "Seq Scan"}')
+    monkeypatch.setattr(ops_runner, "_run", runner)
+    run_sqlconnect_op("query", sql="SELECT 1", explain=True)
+    assert "--explain" in captured[0]
+
+
+def test_sqlconnect_query_requires_sql_or_table() -> None:
+    with pytest.raises(OpsError):
+        run_sqlconnect_op("query")
+
+
+@pytest.mark.parametrize(
+    "code,ok,label",
+    [(0, True, "ok"), (2, False, "failed"), (3, False, "env_config"), (77, False, "unknown")],
+)
+def test_sqlconnect_exit_code_labels(monkeypatch: pytest.MonkeyPatch, code: int, ok: bool, label: str) -> None:
+    runner, _ = _fake_run(returncode=code)
+    monkeypatch.setattr(ops_runner, "_run", runner)
+    res = run_sqlconnect_op("status")
+    assert res.ok is ok and res.label == label
 
 
 # ----------------------------------------------------------------------- isolation

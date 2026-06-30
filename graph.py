@@ -233,7 +233,7 @@ def retrieve_node(state: GraphState, retriever: HybridRetriever, cfg: dict) -> d
 
 def route_by_score_node(state: GraphState, cfg: dict) -> dict:
     """Node 2: Compare top_score to threshold. Sets routing flag."""
-    threshold = cfg["retrieval"]["min_score"]
+    threshold = cfg.get("retrieval", {}).get("min_score", 0.4)
     top_score = state.get("top_score", 0.0)
 
     if top_score >= threshold:
@@ -348,7 +348,7 @@ def grok_fallback_node(state: GraphState, grok: GrokClient | None, cfg: dict) ->
         }
 
     query = state["query"]
-    send_ctx = cfg["policy"]["fallback"].get("send_local_context_to_grok", False)
+    send_ctx = cfg.get("policy", {}).get("fallback", {}).get("send_local_context_to_grok", False)
 
     if send_ctx:
         docs = state.get("retrieved_docs", [])
@@ -368,7 +368,7 @@ Answer the query using the partial context where relevant."""
     # framing, so this is an independent, operator-visible ceiling on per-call
     # token spend. Default is generous (no behavior change for normal queries);
     # lower it to tighten the budget. A value <= 0 disables the cap.
-    max_chars = cfg["policy"]["fallback"].get("grok_max_prompt_chars", 8000)
+    max_chars = cfg.get("policy", {}).get("fallback", {}).get("grok_max_prompt_chars", 8000)
     if max_chars and max_chars > 0 and len(prompt) > max_chars:
         original_len = len(prompt)
         logger.warning(

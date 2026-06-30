@@ -194,7 +194,21 @@ def build_read_argv(
             details={"op": op},
         )
 
-    num = str(int(number)) if number is not None else None
+    try:
+        num = str(int(number)) if number is not None else None
+    except (TypeError, ValueError) as exc:
+        raise AgenticError(
+            f"'number' must be an integer, got {type(number).__name__}: {number!r}",
+            details={"op": op},
+        ) from exc
+
+    try:
+        safe_limit = str(int(limit))
+    except (TypeError, ValueError) as exc:
+        raise AgenticError(
+            f"'limit' must be an integer, got {type(limit).__name__}: {limit!r}",
+            details={"op": op},
+        ) from exc
 
     if op == "pr_view":
         return [gh_bin, "pr", "view", num, "--repo", repo, "--json", _PR_FIELDS]
@@ -202,12 +216,12 @@ def build_read_argv(
         return [gh_bin, "pr", "diff", num, "--repo", repo]
     if op == "pr_list":
         return [gh_bin, "pr", "list", "--repo", repo, "--json", _PR_LIST_FIELDS,
-                "--limit", str(int(limit))]
+                "--limit", safe_limit]
     if op == "issue_view":
         return [gh_bin, "issue", "view", num, "--repo", repo, "--json", _ISSUE_FIELDS]
     if op == "issue_list":
         return [gh_bin, "issue", "list", "--repo", repo, "--json", _ISSUE_LIST_FIELDS,
-                "--limit", str(int(limit))]
+                "--limit", safe_limit]
     # op == "repo_view"
     return [gh_bin, "repo", "view", repo, "--json", _REPO_FIELDS]
 
