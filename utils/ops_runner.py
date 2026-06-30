@@ -51,6 +51,14 @@ _AGENTIC_ACTIONS = frozenset({"status", "test", "context", "propose-skill", "app
 # agentic subcommands that emit JSON on stdout (vs. human text).
 _AGENTIC_JSON_ACTIONS = frozenset({"context", "propose-skill", "apply-skill"})
 
+# fsconnect read-only CLI subcommands exposed via /ops/fsconnect.
+_FSCONNECT_ACTIONS = frozenset({"status", "test", "list", "read", "stat", "grep", "glob"})
+_FSCONNECT_JSON_ACTIONS = frozenset({"list", "read", "stat", "grep", "glob"})
+
+# sqlconnect read-only CLI subcommands exposed via /ops/sqlconnect.
+_SQLCONNECT_ACTIONS = frozenset({"status", "test", "schema", "query"})
+_SQLCONNECT_JSON_ACTIONS = frozenset({"schema", "query"})
+
 # exit code -> (ok, label)
 _SYNC_LABELS: dict[int, tuple[bool, str]] = {
     0: (True, "ok"),
@@ -64,6 +72,17 @@ _AGENTIC_LABELS: dict[int, tuple[bool, str]] = {
     2: (False, "failed"),
     3: (False, "env_config"),
     4: (False, "write_refused"),
+}
+_FSCONNECT_LABELS: dict[int, tuple[bool, str]] = {
+    0: (True, "ok"),
+    2: (False, "failed"),
+    3: (False, "env_config"),
+    4: (False, "write_refused"),
+}
+_SQLCONNECT_LABELS: dict[int, tuple[bool, str]] = {
+    0: (True, "ok"),
+    2: (False, "failed"),
+    3: (False, "env_config"),
 }
 
 
@@ -217,3 +236,80 @@ def run_agentic_op(
     finally:
         if body_file:
             Path(body_file).unlink(missing_ok=True)
+
+
+def run_fsconnect_op(
+    action: str,
+    *,
+    root: str | None = None,
+    path: str | None = None,
+    pattern: str | None = None,
+    regex: bool = False,
+    recursive: bool = True,
+) -> OpsResult:
+    """Invoke ``python -m agentic.fsconnect.cli <action>`` and normalize the result.
+
+    Read-only operations: status, test, list, read, stat, grep, glob. File-path
+    arguments are passed as ``--root``/``--path``; pattern as ``--pattern``
+    (``--regex`` when true). No write operations are exposed via this route.
+    """
+    if action not in _FSCONNECT_ACTIONS:
+        raise OpsError(f"Unknown fsconnect action: {action!r}")
+
+    argv = [sys.executable, "-m", "agentic.fsconnect.cli", "--config", str(_CONFIG_PATH), action]
+
+    if action in {"list", "read", "stat", "grep", "glob"}:
+        if root:
+            argv += ["--root", root]
+        if path:
+            argv += ["--path", path]
+        if pattern and action in {"grep", "glob"}:
+            argv += ["--pattern", pattern]
+        if regex and action == "grep":
+            argv.append("--regex")
+        if not recursive and action == "glob":
+            argv.append("--no-recursive")
+
+    proc = _run(argv)
+    ok, label = _FSCONNECT_LABELS.get(proc.returncode, (False, "unknown"))
+    parsed = _maybe_json(proc.stdout) if (ok and action in _FSCONNECT_JSON_ACTIONS) else None
+    return OpsResult("fsconnect", action, proc.returncode, ok, label, proc.stdout, proc.stderr, parsed)
+
+
+def run_sqlconnect_op(
+    action: str,
+    *,
+    sql: str | None = None,
+    table: str | None = None,
+    explain: bool = False,
+    count: bool = False,
+    fmt: str = "json",
+) -> OpsResult:
+    """Invoke ``python -m agentic.sqlconnect.cli <action>`` and normalize the result.
+
+    Read-only operations: status, test, schema, query. The ``query`` action
+    dispatches on ``--sql`` vs ``--table`` (with optional ``--explain`` / ``--count``).
+    """
+    if action not in _SQLCONNECT_ACTIONS:
+        raise OpsError(f"Unknown sqlconnect action: {action!r}")
+
+    argv = [sys.executable, "-m", "agentic.sqlconnect.cli", "--config", str(_CONFIG_PATH), action]
+
+    if action == "query":
+        if sql:
+            argv += ["--sql", sql]
+            if explain:
+                argv.append("--explain")
+            if fmt and fmt != "json":
+                argv += ["--format", fmt]
+        elif table:
+            argv += ["--table", table]
+            if count:
+                argv.append("--count")
+        else:
+            raise OpsError("sqlconnect query requires --sql or --table")
+
+    proc = _run(argv)
+    ok, label = _SQLCONNECT_LABELS.get(proc.returncode, (False, "unknown"))
+    parsed = _maybe_json(proc.stdout) if (ok and action in _SQLCONNECT_JSON_ACTIONS) else None
+    return OpsResult("sqlconnect", action, proc.returncode, ok, label, proc.stdout, proc.stderr, parsed)

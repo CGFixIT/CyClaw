@@ -74,7 +74,7 @@ from retrieval.hybrid_search import HybridRetriever
 from llm.client import LocalLLMClient, GrokClient
 from schemas.api import (
     QueryRequest, QueryResponse, SourceInfo, HealthResponse, SoulEvolutionRequest,
-    OpsSyncRequest, OpsAgenticRequest,
+    OpsSyncRequest, OpsAgenticRequest, OpsFsConnectRequest, OpsSqlConnectRequest,
 )
 from utils.logger import audit_log, setup_logging
 from fastapi.middleware.cors import CORSMiddleware
@@ -88,7 +88,7 @@ from utils.personality import PersonalityManager
 # Subprocess shim for the out-of-band sync/ + agentic/ control surface. This is a
 # subprocess wrapper ONLY — it never imports sync/ or agentic/, so gate.py's
 # out-of-band isolation invariant is preserved (see utils/ops_runner.py).
-from utils.ops_runner import run_sync_op, run_agentic_op, OpsError
+from utils.ops_runner import run_sync_op, run_agentic_op, run_fsconnect_op, run_sqlconnect_op, OpsError
 from metrics import load_events, compute_metrics
 
 _bearer_scheme = HTTPBearer(auto_error=False)
@@ -588,6 +588,90 @@ async def ops_agentic(request: Request, req: OpsAgenticRequest):
     })
     payload = result.to_dict()
     payload["config"] = _ops_agentic_config()
+    return payload
+
+
+def _ops_fsconnect_config() -> dict:
+    f = cfg.get("fsconnect", {}) or {}
+    return {
+        "enabled": bool(f.get("enabled", False)),
+        "allowed_roots": f.get("allowed_roots", []) or [],
+        "writes_enabled": bool(f.get("writes_enabled", False)),
+        "max_file_bytes": f.get("max_file_bytes", 5242880),
+    }
+
+
+def _ops_sqlconnect_config() -> dict:
+    s = cfg.get("sqlconnect", {}) or {}
+    return {
+        "enabled": bool(s.get("enabled", False)),
+        "driver": s.get("driver", "postgres"),
+        "read_only": bool(s.get("read_only", True)),
+        "max_rows": s.get("max_rows", 1000),
+    }
+
+
+@app.post("/ops/fsconnect", dependencies=[Depends(require_api_key)])
+async def ops_fsconnect(request: Request, req: OpsFsConnectRequest):
+    client_ip = request.client.host if request.client else "unknown"
+    if not check_rate_limit(client_ip):
+        audit_log({"event": "rate_limit_exceeded", "ip": client_ip})
+        raise HTTPException(
+            status_code=429,
+            detail={"error": "Rate limit exceeded (60/min)", "code": "RATE_LIMIT"},
+        )
+    try:
+        result = await asyncio.to_thread(
+            run_fsconnect_op, req.action,
+            root=req.root, path=req.path, pattern=req.pattern,
+            regex=req.regex, recursive=req.recursive,
+        )
+    except OpsError as e:
+        audit_log({"event": "ops_fsconnect_rejected", "action": req.action, "error": str(e)})
+        raise HTTPException(status_code=400, detail={"error": str(e), "code": "OPS_BAD_ACTION"}) from e
+    except Exception as e:
+        safe_msg = _sanitize_error(e)
+        audit_log({"event": "ops_fsconnect_error", "action": req.action, "error": safe_msg})
+        logger.exception("Unexpected error in /ops/fsconnect action=%r", req.action)
+        raise HTTPException(status_code=500, detail={"error": safe_msg, "code": "OPS_ERROR"}) from e
+    audit_log({
+        "event": "ops_fsconnect_executed", "action": req.action,
+        "exit_code": result.exit_code, "label": result.label,
+    })
+    payload = result.to_dict()
+    payload["config"] = _ops_fsconnect_config()
+    return payload
+
+
+@app.post("/ops/sqlconnect", dependencies=[Depends(require_api_key)])
+async def ops_sqlconnect(request: Request, req: OpsSqlConnectRequest):
+    client_ip = request.client.host if request.client else "unknown"
+    if not check_rate_limit(client_ip):
+        audit_log({"event": "rate_limit_exceeded", "ip": client_ip})
+        raise HTTPException(
+            status_code=429,
+            detail={"error": "Rate limit exceeded (60/min)", "code": "RATE_LIMIT"},
+        )
+    try:
+        result = await asyncio.to_thread(
+            run_sqlconnect_op, req.action,
+            sql=req.sql, table=req.table, explain=req.explain,
+            count=req.count, fmt=req.fmt,
+        )
+    except OpsError as e:
+        audit_log({"event": "ops_sqlconnect_rejected", "action": req.action, "error": str(e)})
+        raise HTTPException(status_code=400, detail={"error": str(e), "code": "OPS_BAD_ACTION"}) from e
+    except Exception as e:
+        safe_msg = _sanitize_error(e)
+        audit_log({"event": "ops_sqlconnect_error", "action": req.action, "error": safe_msg})
+        logger.exception("Unexpected error in /ops/sqlconnect action=%r", req.action)
+        raise HTTPException(status_code=500, detail={"error": safe_msg, "code": "OPS_ERROR"}) from e
+    audit_log({
+        "event": "ops_sqlconnect_executed", "action": req.action,
+        "exit_code": result.exit_code, "label": result.label,
+    })
+    payload = result.to_dict()
+    payload["config"] = _ops_sqlconnect_config()
     return payload
 
 
