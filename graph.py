@@ -150,7 +150,13 @@ def _context_char_budget(cfg: dict, *, soul_preamble: str, query: str, framing_c
     """
     budget = cfg.get("retrieval", {}).get("max_context_tokens", _DEFAULT_MAX_CONTEXT_TOKENS) * CHARS_PER_TOKEN
     reserved = len(soul_preamble) + len(query) + framing_chars
-    return max(_MIN_CONTEXT_CHARS, budget - reserved)
+    available = budget - reserved
+    if available < _MIN_CONTEXT_CHARS:
+        logger.debug(
+            "context budget squeezed: budget=%d reserved=%d (soul=%d query=%d framing=%d) → floored to %d",
+            budget, reserved, len(soul_preamble), len(query), framing_chars, _MIN_CONTEXT_CHARS,
+        )
+    return max(_MIN_CONTEXT_CHARS, available)
 
 
 def _format_context_chunks(
@@ -180,8 +186,10 @@ def _format_context_chunks(
             sep_len = len(SECTION_SEP) if parts else 0
             remaining = total_char_budget - used - sep_len
             if remaining <= 0:
+                logger.debug("context budget exhausted after %d chunks (%d of %d available)", len(parts), len(docs[:limit]) - len(parts), len(docs[:limit]))
                 break
             if len(part) > remaining:
+                logger.debug("truncating chunk %d from %d to %d chars", len(parts) + 1, len(part), remaining)
                 parts.append(part[:remaining])
                 break
             used += sep_len + len(part)
