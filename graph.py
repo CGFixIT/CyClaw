@@ -349,18 +349,20 @@ def grok_fallback_node(state: GraphState, grok: GrokClient | None, cfg: dict) ->
 
     query = state["query"]
     send_ctx = cfg.get("policy", {}).get("fallback", {}).get("send_local_context_to_grok", False)
+    docs = state.get("retrieved_docs", []) if send_ctx else []
 
-    if send_ctx:
-        docs = state.get("retrieved_docs", [])
-        context = _format_context_chunks(docs, limit=3, char_cap=200)
-        prompt = f"""USER QUERY: {query}
+    def _assemble(ctx: str) -> str:
+        if send_ctx:
+            return (
+                f"USER QUERY: {query}\n\n"
+                f"PARTIAL LOCAL CONTEXT {UNTRUSTED_NOTE}:\n"
+                f"{ctx}\n\n"
+                "Answer the query using the partial context where relevant."
+            )
+        return f"USER QUERY: {query}"
 
-PARTIAL LOCAL CONTEXT {UNTRUSTED_NOTE}:
-{context}
-
-Answer the query using the partial context where relevant."""
-    else:
-        prompt = f"USER QUERY: {query}"
+    context = _format_context_chunks(docs, limit=3, char_cap=200) if send_ctx else ""
+    prompt = _assemble(context)
 
     # Cost guard for the only external, paid API call in the topology. The
     # gateway already caps raw input length (policy.prompt_filter.max_input_chars),
@@ -371,17 +373,42 @@ Answer the query using the partial context where relevant."""
     max_chars = cfg.get("policy", {}).get("fallback", {}).get("grok_max_prompt_chars", 8000)
     if max_chars and max_chars > 0 and len(prompt) > max_chars:
         original_len = len(prompt)
+        # When the prompt carries a context block, the trailing
+        # "Answer the query using the partial context where relevant." instruction
+        # is the LAST element. A naive prompt[:max_chars] tail slice chops that
+        # instruction first, leaving Grok with a query and a dangling untrusted
+        # context block but no task framing. Budget the variable context instead
+        # so the framing + query + trailing instruction always survive.
+        if send_ctx:
+            framing_overhead = len(_assemble(""))
+            ctx_budget = max_chars - framing_overhead
+            if ctx_budget > 0:
+                context = _format_context_chunks(
+                    docs, limit=3, char_cap=200, total_char_budget=ctx_budget,
+                )
+                prompt = _assemble(context)
+            else:
+                # max_chars is so small it cannot fit even the framing + query;
+                # drop the context entirely and fall back to a query-only prompt
+                # that still preserves the USER QUERY label.
+                prompt = f"USER QUERY: {query}"
+            if len(prompt) > max_chars:
+                # Defensive tail slice for the residual no-context (or
+                # query-too-long) case; matches legacy behaviour for the no-ctx
+                # branch.
+                prompt = prompt[:max_chars]
+        else:
+            prompt = prompt[:max_chars]
         logger.warning(
             "Grok prompt truncated from %d to %d chars (policy.fallback.grok_max_prompt_chars)",
-            original_len, max_chars,
+            original_len, len(prompt),
         )
         audit_log({
             "event": "grok_prompt_truncated",
             "original_chars": original_len,
-            "truncated_chars": max_chars,
+            "truncated_chars": len(prompt),
             "query": state.get("query", ""),
         })
-        prompt = prompt[:max_chars]
 
     error: str | None = None
     try:

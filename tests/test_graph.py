@@ -380,6 +380,49 @@ class TestGrokFallbackPrompt:
         grok_fallback_node({"query": "what is RRF?"}, grok=grok, cfg=self._cfg(send_ctx=False))
         assert grok.last_prompt == "USER QUERY: what is RRF?"
 
+    def test_truncation_with_context_preserves_trailing_instruction(self, tmp_path):
+        """When send_local_context_to_grok=True and the prompt exceeds the cap,
+        the trailing 'Answer the query using the partial context...' instruction
+        must survive. Pre-fix a blind tail slice chopped it off, leaving Grok
+        with a query + dangling untrusted context block and no task framing."""
+        grok = MockGrokClient()
+        cfg = {"policy": {"fallback": {
+            "send_local_context_to_grok": True,
+            "grok_max_prompt_chars": 600,
+        }}}
+        # Force overflow via a long query + retrieved docs that the renderer
+        # would otherwise pad into the prompt.
+        long_doc = {"text": "X" * 2000, "source": "doc.md", "score": 0.5}
+        state = {
+            "query": "what does the system do under load?",
+            "retrieved_docs": [long_doc, long_doc, long_doc],
+        }
+        grok_fallback_node(state, grok=grok, cfg=cfg)
+
+        assert len(grok.last_prompt) <= 600
+        # The operative instruction must survive the truncation.
+        assert "Answer the query using the partial context where relevant." in grok.last_prompt
+        # The USER QUERY framing must also survive.
+        assert grok.last_prompt.startswith("USER QUERY: what does the system do under load?")
+        # The untrusted-context header must precede the (now-budgeted) context.
+        assert "PARTIAL LOCAL CONTEXT" in grok.last_prompt
+
+    def test_truncation_with_context_below_framing_drops_context(self, tmp_path):
+        """If the cap is below the framing+query+instruction overhead, the
+        context block is dropped entirely; the prompt still carries the
+        USER QUERY label (not a dangling context block)."""
+        grok = MockGrokClient()
+        cfg = {"policy": {"fallback": {
+            "send_local_context_to_grok": True,
+            "grok_max_prompt_chars": 40,  # smaller than the framing overhead
+        }}}
+        long_doc = {"text": "X" * 500, "source": "doc.md", "score": 0.5}
+        state = {"query": "q", "retrieved_docs": [long_doc]}
+        grok_fallback_node(state, grok=grok, cfg=cfg)
+
+        assert len(grok.last_prompt) <= 40
+        assert grok.last_prompt.startswith("USER QUERY: q")
+
     def test_grok_none_degrades_without_crash(self, tmp_path):
         result = grok_fallback_node({"query": "x"}, grok=None, cfg=self._cfg(False))
         assert result["answer_model"] == "offline-best-effort"
