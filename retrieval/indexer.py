@@ -46,7 +46,7 @@ def load_corpus(corpus_path: str, extensions: list[str]) -> list[tuple[str, str]
         try:
             content = file_path.read_text(encoding="utf-8")
             docs.append((str(file_path), content))
-        except Exception as e:
+        except (UnicodeDecodeError, OSError) as e:
             logger.warning("Skipping %s: %s", file_path, e)
     if not docs:
         raise CorpusEmptyError(f"No documents found in {corpus_path} with extensions {extensions}")
