@@ -634,11 +634,11 @@
 <!-- MAIN -->
 <div class="main">
   <div class="soul-toolbar">
-    <button class="toolbar-btn" id="soulToggleBtn" onclick="toggleSoulPanel()">Soul Console</button>
-    <button class="toolbar-btn" id="syncToggleBtn" onclick="toggleSyncPanel()">Sync Console</button>
-    <button class="toolbar-btn" id="agenticToggleBtn" onclick="toggleAgenticPanel()">Agentic Console</button>
-    <button class="toolbar-btn" id="fsToggleBtn" onclick="toggleFsPanel()">FS Console</button>
-    <button class="toolbar-btn" id="sqlToggleBtn" onclick="toggleSqlPanel()">SQL Console</button>
+    <button class="toolbar-btn" id="soulToggleBtn" onclick="toggleSoulPanel()" aria-label="Toggle Soul Console (Escape to close)">Soul Console</button>
+    <button class="toolbar-btn" id="syncToggleBtn" onclick="toggleSyncPanel()" aria-label="Toggle Sync Console (Escape to close)">Sync Console</button>
+    <button class="toolbar-btn" id="agenticToggleBtn" onclick="toggleAgenticPanel()" aria-label="Toggle Agentic Console (Escape to close)">Agentic Console</button>
+    <button class="toolbar-btn" id="fsToggleBtn" onclick="toggleFsPanel()" aria-label="Toggle FS Console (Escape to close)">FS Console</button>
+    <button class="toolbar-btn" id="sqlToggleBtn" onclick="toggleSqlPanel()" aria-label="Toggle SQL Console (Escape to close)">SQL Console</button>
     <span class="toolbar-hint">soul · corpus sync · agentic · fs · sql — all loopback, audited, API-key gated</span>
     <input id="apiKeyInput" type="password" placeholder="API key (optional)"
            style="margin-left:auto;background:var(--bg-input);border:1px solid var(--border);
@@ -755,7 +755,7 @@
     </div>
     <div class="soul-actions">
       <input class="soul-reason" id="fsRoot" type="text" placeholder="root path (allowed root)" style="max-width:300px;">
-      <input class="soul-reason" id="fsPath" type="text" placeholder="relative path" style="max-width:300px;">
+      <input class="soul-reason" id="fsPath" type="text" placeholder="relative path" style="max-width:300px;" maxlength="4096">
     </div>
     <div class="soul-actions">
       <button class="soul-btn" onclick="fsStatusCmd()">Status</button>
@@ -764,7 +764,7 @@
       <button class="soul-btn" onclick="fsStatCmd()">Stat</button>
     </div>
     <div class="soul-actions">
-      <input class="soul-reason" id="fsPattern" type="text" placeholder="pattern (grep/glob)" style="max-width:300px;">
+      <input class="soul-reason" id="fsPattern" type="text" placeholder="pattern (grep/glob)" style="max-width:300px;" maxlength="4096">
       <label class="gate-confirm-label"><input type="checkbox" id="fsRegex"> regex</label>
       <button class="soul-btn" onclick="fsGrepCmd()">Grep</button>
       <button class="soul-btn" onclick="fsGlobCmd()">Glob</button>
@@ -840,12 +840,12 @@
 
 <!-- FOOTER -->
 <div class="footer-bar">
-  <span id="footerLeft">cyclaw v1.8.0 · localhost:8787</span>
+  <span id="footerLeft">cyclaw · loading...</span>
   <span id="footerRight"></span>
 </div>
 
 <script>
-const API = 'http://127.0.0.1:8787';
+const API = window.location.origin;
 const apiKeyInput = document.getElementById('apiKeyInput');
 const resultsEl = document.getElementById('results');
 const emptyState = document.getElementById('emptyState');
@@ -953,6 +953,11 @@ async function checkHealth() {
     statusDot.className = 'status-dot';
     statusText.textContent = `gateway ${data.status}`;
     modeBadge.textContent = data.mode || 'offline';
+    const fl = document.getElementById('footerLeft');
+    if (fl) {
+      const ver = data.version ? ` v${data.version}` : '';
+      fl.textContent = `cyclaw${ver} · ${window.location.host} · ${data.mode || 'offline'}`;
+    }
     // Keep the /query client deadline above the server deadline so the server's
     // truthful 504 surfaces before the browser aborts. +10s covers the round trip.
     if (Number.isFinite(data.graph_timeout_sec) && data.graph_timeout_sec > 0) {
@@ -1703,11 +1708,24 @@ async function toggleSqlPanel() {
   if (open && !sqlLoaded && apiKeyInput.value.trim()) { sqlLoaded = true; await runSql('status'); }
 }
 
+const _escDiv = document.createElement('div');
 function escHtml(str) {
-  const d = document.createElement('div');
-  d.textContent = str;
-  return d.innerHTML;
+  _escDiv.textContent = str;
+  return _escDiv.innerHTML;
 }
+
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    document.querySelectorAll('.soul-panel.open').forEach(function(panel) {
+      panel.classList.remove('open');
+    });
+    soulToggleBtn.textContent = 'Soul Console';
+    syncToggleBtn.textContent = 'Sync Console';
+    agenticToggleBtn.textContent = 'Agentic Console';
+    fsToggleBtn.textContent = 'FS Console';
+    sqlToggleBtn.textContent = 'SQL Console';
+  }
+});
 
 checkHealth();
 setInterval(checkHealth, 15000);
