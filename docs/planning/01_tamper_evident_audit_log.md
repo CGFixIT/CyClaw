@@ -8,18 +8,38 @@
 ## 1. Problem & buyer need
 
 `logs/audit.jsonl` is written today with a plain append — `open(log_path, "a").write(json.dumps(record) + "\n")`
-(`utils/logger.py:148-149`). Any process with filesystem access (the operator, a backup script, or
-malware) can edit or delete any line with **zero detection**. For CyClaw's regulated-SMB ICP this is a
-named **RFP disqualifier**: `docs/agentic/FSCONNECT_SQL_ROADMAP.md:47-50` already calls out *"Hash-chain /
+(`utils/logger.py:148-149`). It carries **no integrity signal at all**: a line can be edited or deleted,
+and a later reader has no way to tell. For CyClaw's regulated-SMB ICP this is a named **RFP
+disqualifier**: `docs/agentic/FSCONNECT_SQL_ROADMAP.md:47-50` already calls out *"Hash-chain /
 append-only tamper-evident audit … Chain each `audit.jsonl` record to the prior record's hash and store
 the head where deployer access cannot rewrite history."* — but only as a one-paragraph stub. 2026
 auditors (SOC 2 Type II, HIPAA, state-bar retention rules) require immutable, **independently
 verifiable** trails. This feature makes the audit log cryptographically chained and ships a portable
 "evidence pack" an external auditor can verify with **zero CyClaw install**.
 
+> **Threat-model scope — state this plainly in the implementation and the evidence pack (do not
+> overclaim).** A hash chain whose head lives *beside* the log only raises the bar; it does **not** make
+> the log unforgeable against an attacker who controls the same filesystem, because that actor can
+> rewrite the log, recompute every `record_hash`, and overwrite the head — `verify_chain` would then
+> pass. Per `docs/THREAT_MODEL.md`, a **hostile local root / the operator themselves is explicitly
+> out of scope** (trusted). The chain's real, honest value is therefore: (1) **export-time / external
+> verification** — the auditor (or an append-only/WORM/external sink) records the chain head
+> *independently* at a point in time, so any later in-place rewrite is detectable by comparing against
+> that externally-held head; (2) detection of **partial or accidental** corruption/truncation (the
+> `seq` counter + head-vs-last-line check); and (3) detection of tampering by any process that can write
+> the log but **cannot also rewrite the head** (e.g. a compromised non-root subprocess, a backup/sync
+> job). The design below supports (1) by making the head a small, separately-exportable artifact; an
+> operator who needs protection against a local-root adversary must anchor the head in an external
+> append-only store — documented as an option, not built, since that adversary is out of CyClaw's
+> stated threat model.
+
 This also satisfies the "signed PDF/CSV evidence pack" roadmap extension noted in
 `docs/PSYCLAW_FEATURE_IDEAS.md` item #1 — where **"signed" is realized as the hash-chain proof**, not a
 cryptographic PDF signature (no PDF dependency; see ponytail self-check).
+
+In buyer/governance terms: this is the artifact a managing partner hands their auditor or malpractice
+insurer to answer *"prove your AI's activity log wasn't altered"* — provable governance and data
+sovereignty (the records never leave the operator's machine), not a claim.
 
 ---
 

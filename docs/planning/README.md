@@ -15,15 +15,28 @@ build the feature directly.
 ## Why these three
 
 2026 market research converges on a single dominant blocker to agentic-AI adoption: buyers no
-longer accept *claimed* security — they require it to be **provable**.
+longer accept *claimed* security — they require **provable governance**. The buyer's question has
+shifted from *"will the model be safe?"* to *"can we prove, auditably, that every AI action was
+governed — and that our data stayed ours?"* That is the language of governance, compliance, and
+data sovereignty, and it is the language these three features speak.
 
+- **Shadow AI is the lived reality of the ICP.** 66% of office professionals have used AI tools at
+  work they believed weren't permitted, and 89% first adopted AI *outside* work before bringing it
+  in (Wakefield / PagerDuty 2026 shadow-AI surveys). For a law/medical/accounting firm, that means
+  client data is already leaking into public models — CyClaw's offline-first, data-never-leaves
+  posture is the direct answer, but only if its governance is **demonstrable**.
 - 88% of organizations reported confirmed or suspected AI-agent security incidents in the past
   year, while 82% of executives *wrongly believe* their existing policies already protect them —
-  a documented blind spot.
+  a documented blind spot. Provable verification (Feature 2) closes it.
 - Auditors and regulated-industry RFPs now demand **immutable, independently verifiable, and
-  reconstructable** audit trails (SOC 2 Type II, HIPAA, state-bar record-retention rules).
-- Average AI-agent-related breach cost is ~$4.7M; the EU AI Act's high-risk provisions (Aug 2026)
-  require every autonomous action to be logged and defensible to an auditor.
+  reconstructable** audit trails (SOC 2 Type II, HIPAA, state-bar record-retention rules) — exactly
+  what Features 1 and 3 produce.
+- **Memory poisoning** is the highest-severity unaddressed-by-most threat for this ICP: indirect
+  injection that plants *persistent false beliefs* in an agent's memory (>95% injection success
+  rate in 2026 research; arXiv 2601.05504 / MINJA; Lakera 2026). CyClaw **already** defends it (the
+  `Memory/Persistence Manipulation` banned-pattern category in `config.yaml` + the enforced
+  soul-mutation gate in `utils/personality.py`); Feature 2's payload corpus **proves** that defense
+  holds on a live instance.
 
 CyClaw's core differentiator is already *trust enforced by graph topology, not prompts*. These
 three features turn that architecture into **evidence a buyer's own auditor can verify**:

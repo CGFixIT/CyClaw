@@ -68,9 +68,16 @@ is exactly what the single helper prevents.
   `None` / `is_available()` was the deciding factor) into their `gate_reason` extra. This captures the
   triple-gate "why" **without touching the router signatures** (which are directly unit-tested in
   `tests/test_graph.py`).
-- Modify `audit_logger_node` (`graph.py:500-552`): add `"trace": state.get("trace", [])` to the `event`
-  dict (after `"error"` at `:528`), so the trace rides into `audit_log()` and — when Feature 1 is enabled
-  — gets hash-chained automatically with everything else. **Zero Feature-1-specific code here.**
+- Modify `audit_logger_node` (`graph.py:500-552`): it is the terminal node, so it must include **its
+  own** trace entry, which the `operator.add` reducer cannot supply in time — a `trace` entry the node
+  *returns* is merged into state only *after* the node returns, i.e. after `event` is already built and
+  `audit_log()` already called. Build a **local** list inside the node:
+  `full_trace = state.get("trace", []) + ([_record_node_timing("audit_logger", start)] if trace_enabled else [])`,
+  then set `"trace": full_trace` on the `event` dict (after `"error"` at `:528`). (Returning the same
+  single-element entry under `"trace"` for the reducer is optional/harmless since nothing downstream of
+  the terminal node reads merged state, but include `event`'s copy so the persisted record is complete.)
+  This way the trace rides into `audit_log()` and — when Feature 1 is enabled — gets hash-chained
+  automatically with everything else. **Zero Feature-1-specific code here.**
 
 **Invariant safety (state explicitly in the doc):**
 - *Topology = policy holds.* Every trace entry is written *after* the node's routing-relevant fields are

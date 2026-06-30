@@ -47,8 +47,11 @@ opens a socket).
 
 Checks (each returns one or more `CheckResult`):
 - `check_injection_direct(base_url, corpus)` — for each `"direct"` payload, POST to `{base_url}/query`
-  and assert HTTP 400 with the `PROMPT_INJECTION` error code (the contract `gate.py` returns and
-  `tests/test_gate.py` already asserts).
+  and assert HTTP 400 with `detail.code == "PROMPT_INJECTION_BLOCKED"` (the actual code raised by
+  `PromptInjectionError`, `utils/errors.py:39`, surfaced at `gate.py:383-384` as
+  `{"error":…, "code": e.code, "details":…}`; `tests/test_gate.py` already asserts this 400). Assert
+  the code exactly — do **not** invent a shorter `PROMPT_INJECTION` string, which would falsely fail a
+  healthy deployment.
 - `check_injection_indirect(corpus)` — for each `"indirect"` (corpus-poisoning) payload, call the **real**
   `utils.sanitizer.sanitize_chunk` **directly via import** — the exact function `retrieval/indexer.py:113`
   uses at index time — and assert `"[FILTERED]"` replaces the payload. (Importing the production function
@@ -62,10 +65,13 @@ Checks (each returns one or more `CheckResult`):
   `reason` and assert HTTP 422 (pydantic `SoulEvolutionRequest.reason = Field(min_length=1, …)`,
   `schemas/api.py:72`); and POST with **no** `Authorization` header and assert HTTP 401
   (`require_api_key`, `gate.py:96`).
-- `check_audit_convergence(base_url)` — fire one query through each reachable path (high-score → local;
-  low-score + decline → offline best-effort) and confirm `GET /audit/summary`'s `total_events` /
-  `event_breakdown` increment accordingly (`/audit/summary` is API-key-gated, `gate.py:507`). Observable
-  proof of invariant #4, not code inspection.
+- `check_audit_convergence(base_url, api_key)` — fire one query through each reachable path (high-score
+  → local; low-score + decline → offline best-effort) and confirm `GET /audit/summary`'s `total_events`
+  / `event_breakdown` increment accordingly. **Must send the `Authorization: Bearer <api_key>` header**:
+  `/audit/summary` is `Depends(require_api_key)`-gated (`gate.py:507`), so on any deployment with
+  `CYCLAW_API_KEY` set an unauthenticated read returns 401 and the check cannot confirm the counters.
+  `run_suite` already holds `api_key` — thread it through. Observable proof of invariant #4, not code
+  inspection. (If no key is configured/available, this check SKIPs rather than FAILs.)
 
 Types & orchestration:
 - `@dataclass class CheckResult:` `name: str`, `status: Literal["PASS","FAIL","SKIP"]`, `detail: str`,
@@ -107,6 +113,41 @@ Seed ≥1 cited payload per the seven categories named in `config.yaml`'s own co
 Manipulation, Authority/Urgency, Tool/Action Hijacking, Light Obfuscation** — ~14–20 entries across
 `direct` and `indirect` modes. This is a *curated, citable* corpus proving black-box defense against
 paraphrases, **not** a 1:1 restatement of the 33 regexes.
+
+> **Why the `Memory/Persistence Manipulation` category carries extra weight for this ICP.** Memory
+> poisoning — indirect injection that plants *persistent false beliefs* an agent later defends as its
+> own — achieves **>95% injection success rate** against memory-based agents in 2026 research (arXiv
+> 2601.05504 / MINJA; Lakera 2026) and is the highest-severity vector most products do not address.
+> CyClaw already defends it at two layers (the banned-pattern category here + the enforced
+> soul-mutation gate in `utils/personality.py`); this corpus's memory-poisoning payloads make that
+> defense **demonstrable to a buyer's auditor**, both as direct `/query` rejections and as
+> index-time `sanitize_chunk` filtering of a poisoned corpus document.
+
+### Illustrative output (mock — not real test results)
+
+A buyer running `cyclaw-verify --format markdown` against their instance would get a report like the
+following. **This is a hand-written illustration of the intended shape, not output from a real run:**
+
+```markdown
+# CyClaw Security Verification Report
+target: http://127.0.0.1:8787   generated_at: 2026-06-30T22:40:00Z
+result: PASS (12 PASS · 1 SKIP · 0 FAIL)
+
+| Check | Status | Detail | Citation |
+|-------|--------|--------|----------|
+| injection.direct.core_override     | PASS | HTTP 400 code=PROMPT_INJECTION_BLOCKED on 3/3 payloads | OWASP LLM01:2025 |
+| injection.direct.memory_persist    | PASS | HTTP 400 code=PROMPT_INJECTION_BLOCKED on 2/2 memory-poisoning payloads | MINJA / arXiv 2601.05504 |
+| injection.indirect.sanitize_chunk  | PASS | "[FILTERED]" replaces 4/4 poisoned-doc payloads | retrieval/indexer.py |
+| invariant.triple_gate              | PASS | user_confirmed_online=false → model_used=offline-best-effort (never grok) | Invariant #3 |
+| invariant.audit_convergence        | PASS | /audit/summary total_events +3 across 3 paths | Invariant #4 |
+| soul.requires_reason               | PASS | empty reason → HTTP 422 | schemas/api.py:72 |
+| soul.requires_auth                 | PASS | no Authorization → HTTP 401 | gate.py:96 |
+| invariant.triple_gate.hybrid_path  | SKIP | instance is in offline mode — gate not reachable to test | Invariant #3 |
+```
+
+Exit code is `0` only when there are zero `FAIL` rows; `SKIP` rows (gates unreachable in the current
+mode) never pass the run silently — they are surfaced explicitly so an all-SKIP report cannot be
+mistaken for a clean PASS.
 
 ### `pyproject.toml`
 
