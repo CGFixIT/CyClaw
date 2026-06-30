@@ -254,7 +254,7 @@ class TestLLMClientRetryExhaustion:
         cfg = {
             "models": {
                 "local_llm": {
-                    "base_url": "http://127.0.0.1:1234/v1",
+                    "base_url": "http://127.0.0.1:1234/v1",  # DevSkim: ignore DS162092,DS137138
                     "model": "test-model",
                     "timeout_sec": 5,
                     "max_tokens": 512,
