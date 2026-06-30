@@ -165,6 +165,30 @@ def check_rate_limit(client_ip: str) -> bool:
     """Thin gateway-level wrapper over the shared RateLimiter instance."""
     return _rate_limiter.allow(client_ip)
 
+
+async def _audit(event: dict) -> None:
+    """Run audit_log() off the asyncio event loop.
+
+    audit_log() does synchronous disk I/O (mkdir + open + write). Calling it
+    directly inside an async handler stalls the single event-loop thread on
+    every audited event, so under concurrent load all in-flight requests
+    serialize behind each audit write. Hashing/redaction live inside
+    audit_log() and are unchanged.
+    """
+    await asyncio.to_thread(audit_log, event)
+
+
+async def _check_rate_limit_async(client_ip: str) -> bool:
+    """Offload check_rate_limit to a worker thread.
+
+    RateLimiter.allow() takes an internal lock and (when api.rate_limit
+    persistence is configured) performs a sqlite/Postgres write. Off-loop is
+    cheap and prevents persistence-mode head-of-line blocking; the in-memory
+    default path also benefits because the lock-protected critical section no
+    longer holds the event-loop thread.
+    """
+    return await asyncio.to_thread(check_rate_limit, client_ip)
+
 # Redact sensitive values from exception messages before returning in HTTP responses.
 # Strips Bearer tokens, known secret-like patterns, and any live env var values
 # that look like credentials (length > 8, not a common word).
@@ -301,8 +325,8 @@ if retriever is not None:
 @app.post("/query", response_model=QueryResponse)
 async def query_endpoint(request: Request, req: QueryRequest):
     client_ip = request.client.host if request.client else "unknown"
-    if not check_rate_limit(client_ip):
-        audit_log({"event": "rate_limit_exceeded", "ip": client_ip})
+    if not await _check_rate_limit_async(client_ip):
+        await _audit({"event": "rate_limit_exceeded", "ip": client_ip})
         raise HTTPException(
             status_code=429,
             detail={"error": "Rate limit exceeded (60/min)", "code": "RATE_LIMIT"}
@@ -322,7 +346,7 @@ async def query_endpoint(request: Request, req: QueryRequest):
         # truncating here yields a hash of only the first 50 chars that diverges
         # from the canonical full-query hash written by the graph audit node and
         # the MCP path. No raw text is persisted either way.
-        audit_log({"event": "prompt_injection_blocked", "query": req.query})
+        await _audit({"event": "prompt_injection_blocked", "query": req.query})
         raise HTTPException(
             status_code=400,
             detail={"error": e.message, "code": e.code, "details": e.details}
@@ -343,7 +367,7 @@ async def query_endpoint(request: Request, req: QueryRequest):
             timeout=graph_timeout,
         )
     except TimeoutError as e:
-        audit_log({"event": "graph_timeout", "query": req.query, "timeout_sec": graph_timeout})
+        await _audit({"event": "graph_timeout", "query": req.query, "timeout_sec": graph_timeout})
         logger.warning("graph invoke exceeded %ss deadline", graph_timeout)
         raise HTTPException(
             status_code=504,
@@ -360,7 +384,7 @@ async def query_endpoint(request: Request, req: QueryRequest):
         ) from e
     except Exception as e:
         safe_msg = _sanitize_error(e)
-        audit_log({"event": "graph_error", "query": req.query, "error": safe_msg})
+        await _audit({"event": "graph_error", "query": req.query, "error": safe_msg})
         raise HTTPException(status_code=500, detail={"error": safe_msg, "code": "GRAPH_ERROR"}) from e
 
     needs_confirm = result.get("needs_user_confirm", False)
@@ -421,7 +445,7 @@ async def query_endpoint(request: Request, req: QueryRequest):
 async def get_soul():
     if personality is None:
         raise HTTPException(status_code=404, detail="Personality system not enabled")
-    audit_log({"event": "soul_read", "version": personality.get_version()})
+    await _audit({"event": "soul_read", "version": personality.get_version()})
     return {
         "soul": personality.get_system_prompt_additive(),
         "version": personality.get_version(),
@@ -433,7 +457,7 @@ async def propose_soul_evolution(req: SoulEvolutionRequest):
     if personality is None:
         raise HTTPException(status_code=404, detail="Personality system not enabled")
     proposal = await asyncio.to_thread(personality.propose_evolution, req.new_soul, req.reason)
-    audit_log({"event": "soul_evolution_proposed", "reason": req.reason})
+    await _audit({"event": "soul_evolution_proposed", "reason": req.reason})
     return proposal
 
 @app.post("/soul/apply", dependencies=[Depends(require_api_key)])
@@ -443,7 +467,7 @@ async def apply_soul_evolution(req: SoulEvolutionRequest):
     try:
         result = await asyncio.to_thread(personality.apply_evolution, req.new_soul, req.reason)
     except PromptInjectionError as e:
-        audit_log({"event": "soul_apply_injection_blocked", "reason": req.reason})
+        await _audit({"event": "soul_apply_injection_blocked", "reason": req.reason})
         raise HTTPException(
             status_code=400,
             detail={"error": e.message, "code": e.code, "details": e.details},
@@ -539,8 +563,8 @@ def _ops_agentic_config() -> dict:
 @app.post("/ops/sync", dependencies=[Depends(require_api_key)])
 async def ops_sync(request: Request, req: OpsSyncRequest):
     client_ip = request.client.host if request.client else "unknown"
-    if not check_rate_limit(client_ip):
-        audit_log({"event": "rate_limit_exceeded", "ip": client_ip})
+    if not await _check_rate_limit_async(client_ip):
+        await _audit({"event": "rate_limit_exceeded", "ip": client_ip})
         raise HTTPException(
             status_code=429,
             detail={"error": "Rate limit exceeded (60/min)", "code": "RATE_LIMIT"},
@@ -548,14 +572,14 @@ async def ops_sync(request: Request, req: OpsSyncRequest):
     try:
         result = await asyncio.to_thread(run_sync_op, req.action, dry_run=req.dry_run)
     except OpsError as e:
-        audit_log({"event": "ops_sync_rejected", "action": req.action, "error": str(e)})
+        await _audit({"event": "ops_sync_rejected", "action": req.action, "error": str(e)})
         raise HTTPException(status_code=400, detail={"error": str(e), "code": "OPS_BAD_ACTION"}) from e
     except Exception as e:
         safe_msg = _sanitize_error(e)
-        audit_log({"event": "ops_sync_error", "action": req.action, "error": safe_msg})
+        await _audit({"event": "ops_sync_error", "action": req.action, "error": safe_msg})
         logger.exception("Unexpected error in /ops/sync action=%r", req.action)
         raise HTTPException(status_code=500, detail={"error": safe_msg, "code": "OPS_ERROR"}) from e
-    audit_log({
+    await _audit({
         "event": "ops_sync_executed", "action": req.action, "dry_run": req.dry_run,
         "exit_code": result.exit_code, "label": result.label,
     })
@@ -567,8 +591,8 @@ async def ops_sync(request: Request, req: OpsSyncRequest):
 @app.post("/ops/agentic", dependencies=[Depends(require_api_key)])
 async def ops_agentic(request: Request, req: OpsAgenticRequest):
     client_ip = request.client.host if request.client else "unknown"
-    if not check_rate_limit(client_ip):
-        audit_log({"event": "rate_limit_exceeded", "ip": client_ip})
+    if not await _check_rate_limit_async(client_ip):
+        await _audit({"event": "rate_limit_exceeded", "ip": client_ip})
         raise HTTPException(
             status_code=429,
             detail={"error": "Rate limit exceeded (60/min)", "code": "RATE_LIMIT"},
@@ -580,14 +604,14 @@ async def ops_agentic(request: Request, req: OpsAgenticRequest):
             name=req.name, desc=req.desc, body=req.body, reason=req.reason, confirm=req.confirm,
         )
     except OpsError as e:
-        audit_log({"event": "ops_agentic_rejected", "action": req.action, "error": str(e)})
+        await _audit({"event": "ops_agentic_rejected", "action": req.action, "error": str(e)})
         raise HTTPException(status_code=400, detail={"error": str(e), "code": "OPS_BAD_ACTION"}) from e
     except Exception as e:
         safe_msg = _sanitize_error(e)
-        audit_log({"event": "ops_agentic_error", "action": req.action, "error": safe_msg})
+        await _audit({"event": "ops_agentic_error", "action": req.action, "error": safe_msg})
         logger.exception("Unexpected error in /ops/agentic action=%r", req.action)
         raise HTTPException(status_code=500, detail={"error": safe_msg, "code": "OPS_ERROR"}) from e
-    audit_log({
+    await _audit({
         "event": "ops_agentic_executed", "action": req.action,
         "exit_code": result.exit_code, "label": result.label,
     })
@@ -619,8 +643,8 @@ def _ops_sqlconnect_config() -> dict:
 @app.post("/ops/fsconnect", dependencies=[Depends(require_api_key)])
 async def ops_fsconnect(request: Request, req: OpsFsConnectRequest):
     client_ip = request.client.host if request.client else "unknown"
-    if not check_rate_limit(client_ip):
-        audit_log({"event": "rate_limit_exceeded", "ip": client_ip})
+    if not await _check_rate_limit_async(client_ip):
+        await _audit({"event": "rate_limit_exceeded", "ip": client_ip})
         raise HTTPException(
             status_code=429,
             detail={"error": "Rate limit exceeded (60/min)", "code": "RATE_LIMIT"},
@@ -632,14 +656,14 @@ async def ops_fsconnect(request: Request, req: OpsFsConnectRequest):
             regex=req.regex, recursive=req.recursive,
         )
     except OpsError as e:
-        audit_log({"event": "ops_fsconnect_rejected", "action": req.action, "error": str(e)})
+        await _audit({"event": "ops_fsconnect_rejected", "action": req.action, "error": str(e)})
         raise HTTPException(status_code=400, detail={"error": str(e), "code": "OPS_BAD_ACTION"}) from e
     except Exception as e:
         safe_msg = _sanitize_error(e)
-        audit_log({"event": "ops_fsconnect_error", "action": req.action, "error": safe_msg})
+        await _audit({"event": "ops_fsconnect_error", "action": req.action, "error": safe_msg})
         logger.exception("Unexpected error in /ops/fsconnect action=%r", req.action)
         raise HTTPException(status_code=500, detail={"error": safe_msg, "code": "OPS_ERROR"}) from e
-    audit_log({
+    await _audit({
         "event": "ops_fsconnect_executed", "action": req.action,
         "exit_code": result.exit_code, "label": result.label,
     })
@@ -651,8 +675,8 @@ async def ops_fsconnect(request: Request, req: OpsFsConnectRequest):
 @app.post("/ops/sqlconnect", dependencies=[Depends(require_api_key)])
 async def ops_sqlconnect(request: Request, req: OpsSqlConnectRequest):
     client_ip = request.client.host if request.client else "unknown"
-    if not check_rate_limit(client_ip):
-        audit_log({"event": "rate_limit_exceeded", "ip": client_ip})
+    if not await _check_rate_limit_async(client_ip):
+        await _audit({"event": "rate_limit_exceeded", "ip": client_ip})
         raise HTTPException(
             status_code=429,
             detail={"error": "Rate limit exceeded (60/min)", "code": "RATE_LIMIT"},
@@ -664,14 +688,14 @@ async def ops_sqlconnect(request: Request, req: OpsSqlConnectRequest):
             count=req.count, fmt=req.fmt,
         )
     except OpsError as e:
-        audit_log({"event": "ops_sqlconnect_rejected", "action": req.action, "error": str(e)})
+        await _audit({"event": "ops_sqlconnect_rejected", "action": req.action, "error": str(e)})
         raise HTTPException(status_code=400, detail={"error": str(e), "code": "OPS_BAD_ACTION"}) from e
     except Exception as e:
         safe_msg = _sanitize_error(e)
-        audit_log({"event": "ops_sqlconnect_error", "action": req.action, "error": safe_msg})
+        await _audit({"event": "ops_sqlconnect_error", "action": req.action, "error": safe_msg})
         logger.exception("Unexpected error in /ops/sqlconnect action=%r", req.action)
         raise HTTPException(status_code=500, detail={"error": safe_msg, "code": "OPS_ERROR"}) from e
-    audit_log({
+    await _audit({
         "event": "ops_sqlconnect_executed", "action": req.action,
         "exit_code": result.exit_code, "label": result.label,
     })
