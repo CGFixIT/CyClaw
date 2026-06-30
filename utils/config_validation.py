@@ -1,15 +1,10 @@
-"""Startup validation for config.yaml's ``retrieval:`` block.
+"""Startup validation for config.yaml tunables.
 
-``graph.py`` (``route_by_score_node``), ``gate.py``, and
-``retrieval/hybrid_search.py`` read retrieval tunables (``min_score``,
-``top_k_semantic``, ``top_k_keyword``, ``rrf_k``) straight from the parsed config
-with no bounds checking. A typo'd value -- e.g. ``min_score: 1.5`` (the routing
-gate can never be cleared, so every query is forced to ``user_gate``) or
-``top_k_semantic: 0`` / ``-1`` (empty or malformed retrieval) -- surfaces only as
-silent mis-routing or an error deep inside a request, never at boot.
+Validates ``retrieval`` and ``personality`` blocks at boot so typos like
+``min_score: 1.5`` or ``soul_max_chars: 0`` surface as a clear ``ConfigError``
+instead of silent mis-routing or empty-prompt degradation at request time.
 
-This validator fails fast with a clear ``ConfigError`` at startup, mirroring the
-dataclass ``__post_init__`` validation that ``sync/config.py`` and
+Mirrors the dataclass ``__post_init__`` validation that ``sync/config.py`` and
 ``agentic/config.py`` already perform for their blocks.
 """
 
@@ -60,4 +55,26 @@ def validate_retrieval_config(cfg: dict[str, Any]) -> None:
             raise ConfigError(
                 f"retrieval.{key} must be a positive integer, got: {val!r}",
                 details={"received": val, "key": key},
+            )
+
+
+def validate_personality_config(cfg: dict[str, Any]) -> None:
+    """Validate ``cfg['personality']`` when the subsystem is enabled.
+
+    Checks:
+      * ``soul_max_chars`` is a positive integer (0 silently truncates the soul
+        to empty, dropping personality from every LLM prompt with no warning).
+
+    No-op when ``personality.enabled`` is false or the block is absent.
+    """
+    personality = cfg.get("personality")
+    if not isinstance(personality, dict) or not personality.get("enabled", False):
+        return
+
+    soul_max_chars = personality.get("soul_max_chars")
+    if soul_max_chars is not None:
+        if not isinstance(soul_max_chars, int) or isinstance(soul_max_chars, bool) or soul_max_chars <= 0:
+            raise ConfigError(
+                f"personality.soul_max_chars must be a positive integer, got: {soul_max_chars!r}",
+                details={"received": soul_max_chars},
             )
