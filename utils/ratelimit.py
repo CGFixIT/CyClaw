@@ -26,7 +26,11 @@ Behavior preserved:
 Note on scale-out: a Postgres round-trip per persisted request is heavier than a
 local sqlite write. Persistence is opt-in for durability; for true multi-instance
 rate limiting Redis (atomic counters + TTL) is the recommended target — not built
-here.
+here. The Postgres backend exists for operators who already run Postgres for the
+personality DB (see utils/personality_db.py) and want rate-limit state to survive
+restarts too, without standing up Redis as a second dependency for that alone —
+not for high-throughput multi-instance scale-out. See tests/test_ratelimit_postgres.py
+(gated on CYCLAW_DB_URL, run by the postgres-backend CI job) for live coverage.
 """
 
 import json

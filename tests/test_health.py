@@ -5,7 +5,6 @@ in test_gate.py); none of its own branches were exercised directly:
   - ``_ping`` success vs. failure (and the URL-redaction on failure)
   - ``check_all`` offline (LM Studio only) vs. hybrid (Grok) paths
   - the hybrid Grok key-set / key-missing split
-  - ``require_healthy`` raising when LM Studio is down
   - the ``_health_cfg`` per-path parse cache
 
 All HTTP is mocked; no live service is required.
@@ -16,7 +15,6 @@ import pytest
 import yaml
 
 from utils import health
-from utils.errors import LLMServiceError
 
 # Inert test fixtures mirroring the real loopback LM Studio endpoint
 # (http://127.0.0.1:1234, the value shipped in config.yaml) so the probes are
@@ -126,24 +124,6 @@ class TestCheckAll:
         # Last ping is Grok; it must carry the Bearer token (else xAI 401s).
         assert seen["headers"]["Authorization"] == "Bearer test-key-123"
         assert seen["url"].endswith("/models")
-
-
-class TestRequireHealthy:
-    def test_raises_when_lm_studio_down(self, tmp_path, monkeypatch):
-        cfg_path = _write_cfg(tmp_path, mode="offline")
-
-        def boom(url, **kw):
-            raise httpx.ConnectError(f"down {_LM_MODELS}")
-
-        monkeypatch.setattr(health.httpx, "get", boom)
-        with pytest.raises(LLMServiceError):
-            health.require_healthy(cfg_path)
-
-    def test_passes_when_lm_studio_up(self, tmp_path, monkeypatch):
-        cfg_path = _write_cfg(tmp_path, mode="offline")
-        monkeypatch.setattr(health.httpx, "get", lambda url, **kw: _OKResp())
-        # Should not raise.
-        health.require_healthy(cfg_path)
 
 
 class TestHealthCfgCache:

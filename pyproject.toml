@@ -62,6 +62,14 @@ Repository = "https://github.com/CGFixIT/CyClaw"
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+# CyClaw uses a flat repo layout (gate.py, graph.py, ... at the root plus
+# package dirs) rather than a single src/cyclaw/ tree, so hatchling's default
+# file-selection heuristic (look for a directory named after the project)
+# cannot auto-detect what to ship. List the actual modules/packages explicitly.
+[tool.hatch.build.targets.wheel]
+include = ["gate.py", "graph.py", "mcp_hybrid_server.py", "metrics.py"]
+packages = ["utils", "retrieval", "llm", "schemas", "sync", "agentic", "guardrails"]
+
 [tool.uv]
 index-strategy = "unsafe-best-match"
 

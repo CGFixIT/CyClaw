@@ -249,7 +249,9 @@ api:
     persist_path: null
     # Optional Postgres persistence (takes precedence over persist_path). Set to a
     # "postgresql://user:pass@host/dbname" DSN, or leave null and use the
-    # CYCLAW_RATELIMIT_DB_URL / CYCLAW_DB_URL env vars. In-memory stays the default.
+    # CYCLAW_RATELIMIT_DB_URL env var. In-memory stays the default. Does NOT
+    # fall back to CYCLAW_DB_URL (the personality DB URL) — set this
+    # explicitly to opt rate-limiting into Postgres.
     # database_url: null
 
 logging:

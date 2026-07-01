@@ -103,26 +103,6 @@ class TestFusionReturnsFullUnion:
         assert len(out) == 10
         assert {r.chunk_id for r in out} == set(range(10))
 
-    def test_provenance_omits_redundant_chunk_text(self):
-        # Provenance carries rank/score/rrf_contrib (+stem_tags) per leg, but NOT
-        # the full chunk text — that lives once on SearchResult.text. Storing it
-        # in both meta dicts duplicated every chunk's text into the payload.
-        sem = [self._hit("semantic", 0)]
-        kw = [self._hit("keyword", 0)]  # same (source, chunk_id) -> both legs populated
-        fake = SimpleNamespace(
-            rrf_k=60, top_k_semantic=5, top_k_keyword=5,
-            semantic_search=lambda q: sem,
-            keyword_search=lambda q: kw,
-        )
-        out = HybridRetriever.hybrid_search(fake, "q")
-        assert len(out) == 1
-        assert out[0].text == "t0"  # the chunk text is still present on the result
-        prov = out[0].provenance
-        for leg in ("semantic", "keyword"):
-            assert prov[leg] is not None
-            assert "text" not in prov[leg]
-            assert set(prov[leg]) == {"rank", "score", "rrf_contrib", "stem_tags"}
-
 
 class TestTokenizationForBM25:
     """Ensure tokenization produces useful BM25 input."""

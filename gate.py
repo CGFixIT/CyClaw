@@ -53,8 +53,7 @@ for k, v in _TELEMETRY_KILL.items():
 for _key in ("LANGCHAIN_API_KEY", "LANGSMITH_API_KEY", "LANGCHAIN_ENDPOINT"):
     os.environ.pop(_key, None)
     
-_EXPECTED = list(_TELEMETRY_KILL.keys())
-_verified = {k: os.environ.get(k, "NOT SET") for k in _EXPECTED}
+_verified = {k: os.environ.get(k, "NOT SET") for k in _TELEMETRY_KILL}
 print("[TELEMETRY KILL] Verified env state:")
 for k, v in _verified.items():
     # Compare against the expected kill value, not a generic "non-empty" check.
@@ -153,11 +152,13 @@ RATE_LIMIT_WINDOW = _rl_cfg.get("window_seconds", 60)  # seconds
 RATE_LIMIT_DB_PATH = _rl_cfg.get("persist_path") or None
 # Optional Postgres persistence for rate-limit state (opt-in; defaults to None →
 # sqlite persist_path if set, else in-memory). Resolution order: explicit
-# api.rate_limit.database_url → CYCLAW_RATELIMIT_DB_URL → shared CYCLAW_DB_URL.
+# api.rate_limit.database_url → CYCLAW_RATELIMIT_DB_URL. Deliberately does NOT
+# fall back to the shared CYCLAW_DB_URL (personality DB) — an operator setting
+# that for the soul database should not silently opt rate-limiting into
+# Postgres too; each subsystem's Postgres backend is opted into independently.
 RATE_LIMIT_DB_URL = (
     _rl_cfg.get("database_url")
     or os.environ.get("CYCLAW_RATELIMIT_DB_URL")
-    or os.environ.get("CYCLAW_DB_URL")
     or None
 )
 _rate_limiter = RateLimiter(
