@@ -56,7 +56,27 @@ def _embeddings_cfg(config_path: str) -> tuple:
         emb_cfg = yaml.safe_load(f)["models"]["embeddings"]
     return emb_cfg["model"], resolve_cache_dir(config_path, emb_cfg.get("cache_dir", ""))
 
-@lru_cache(maxsize=2048)
+def _default_query_cache_size() -> int:
+    """Resolve the query-embedding LRU cache size from CYCLAW_EMBED_CACHE_SIZE.
+
+    functools.lru_cache fixes maxsize at decoration time -- config.yaml isn't
+    parsed until the first call, so the size can't be read from it directly.
+    An env var lets operators tune the cache (memory footprint vs. hit rate)
+    per deployment without a code change; falls back to the prior hardcoded
+    2048 when unset or invalid.
+    """
+    raw = os.environ.get("CYCLAW_EMBED_CACHE_SIZE", "")
+    if raw:
+        try:
+            size = int(raw)
+        except ValueError:
+            size = 0
+        if size > 0:
+            return size
+    return 2048
+
+
+@lru_cache(maxsize=_default_query_cache_size())
 def _cached_embedding(text: str, config_path: str) -> tuple:
     """Memoize query embeddings keyed on (text, config_path).
 

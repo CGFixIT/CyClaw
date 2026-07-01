@@ -138,3 +138,23 @@ class TestBatch:
         out = embeddings.get_embeddings_batch(["a", "bb", "ccc"], cfg_path)
         assert out == [[1.0, 0.5], [2.0, 0.5], [3.0, 0.5]]
         assert fake_model.calls == 1  # one batched encode call
+
+
+class TestQueryCacheSize:
+    def test_defaults_to_2048_when_unset(self, monkeypatch):
+        monkeypatch.delenv("CYCLAW_EMBED_CACHE_SIZE", raising=False)
+        assert embeddings._default_query_cache_size() == 2048
+
+    def test_reads_positive_int_from_env(self, monkeypatch):
+        monkeypatch.setenv("CYCLAW_EMBED_CACHE_SIZE", "512")
+        assert embeddings._default_query_cache_size() == 512
+
+    def test_falls_back_on_non_positive_value(self, monkeypatch):
+        monkeypatch.setenv("CYCLAW_EMBED_CACHE_SIZE", "0")
+        assert embeddings._default_query_cache_size() == 2048
+        monkeypatch.setenv("CYCLAW_EMBED_CACHE_SIZE", "-5")
+        assert embeddings._default_query_cache_size() == 2048
+
+    def test_falls_back_on_non_numeric_value(self, monkeypatch):
+        monkeypatch.setenv("CYCLAW_EMBED_CACHE_SIZE", "not-a-number")
+        assert embeddings._default_query_cache_size() == 2048

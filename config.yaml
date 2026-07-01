@@ -61,6 +61,11 @@ models:
     model: "all-MiniLM-L6-v2"
     dim: 384
     cache_dir: ".emb_cache"
+    # Query-embedding LRU cache size (retrieval/embeddings.py::_cached_embedding)
+    # is NOT set here — functools.lru_cache fixes maxsize at import time, before
+    # this file is parsed. Override the default (2048) via the
+    # CYCLAW_EMBED_CACHE_SIZE env var if a deployment needs a different
+    # memory/hit-rate trade-off.
   grok:
     enabled: false
     base_url: "https://api.x.ai/v1"
