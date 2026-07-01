@@ -26,7 +26,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run Claude Code
-        uses: anthropics/claude-code-action@a92e7c70a4da9793dc164451d829089dc057a464  # beta
+        uses: anthropics/claude-code-action@fad22eb3fa582b7357fc0ea48af6645851b884fd  # beta
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
