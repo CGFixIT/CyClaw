@@ -53,7 +53,14 @@ def _build_write_argv(op: str, repo: str, params: dict, gh_bin: str = "gh") -> l
     raise AgenticError(f"Unknown write op: {op!r}", details={"op": op, "allowed": sorted(_WRITE_OPS)})
 
 
-def _refuse(reason_msg: str, *, op: str, gate: str, reason: str, config_path: str = "config.yaml") -> AgenticWriteRefused:
+def _refuse(
+    reason_msg: str,
+    *,
+    op: str,
+    gate: str,
+    reason: str,
+    config_path: str = "config.yaml",
+) -> AgenticWriteRefused:
     audit_log({
         "event": "agentic_write_refused",
         "op": op,
@@ -90,13 +97,31 @@ def plan_write(
         raise _refuse("agentic.mode is not 'write'", op=op, gate="mode", reason=reason, config_path=config_path)
     # Gate 2: explicit writes_enabled flag.
     if not cfg.writes_enabled:
-        raise _refuse("agentic.writes_enabled is False", op=op, gate="writes_enabled", reason=reason, config_path=config_path)
+        raise _refuse(
+            "agentic.writes_enabled is False",
+            op=op,
+            gate="writes_enabled",
+            reason=reason,
+            config_path=config_path,
+        )
     # Gate 3: human reason string.
     if not (isinstance(reason, str) and reason.strip()):
-        raise _refuse("a non-empty human reason is required", op=op, gate="reason", reason=reason, config_path=config_path)
+        raise _refuse(
+            "a non-empty human reason is required",
+            op=op,
+            gate="reason",
+            reason=reason,
+            config_path=config_path,
+        )
     # Gate 4: per-call confirmation.
     if confirm is not True:
-        raise _refuse("explicit confirm=True is required", op=op, gate="confirm", reason=reason, config_path=config_path)
+        raise _refuse(
+            "explicit confirm=True is required",
+            op=op,
+            gate="confirm",
+            reason=reason,
+            config_path=config_path,
+        )
 
     # All gates satisfied -- still a dry run in v0.1.
     argv = _build_write_argv(op, cfg.repo, dict(params), gh_bin=gh_bin)
