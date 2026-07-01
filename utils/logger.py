@@ -44,11 +44,13 @@ def _audit_handle(log_path: Path) -> TextIO:
         log_path.parent.mkdir(parents=True, exist_ok=True)
         # Intentionally long-lived: cached in _AUDIT_HANDLES and reused across
         # every subsequent audit_log() call for this path (see module docstring
-        # above). Closed by close_audit_handles(), registered via
-        # atexit.register() below and directly callable by tests that need fds
-        # released early. A static file-not-closed check cannot see across that
-        # module-level lifetime from this function alone -- accepted by design.
-        handle = open(log_path, "a", encoding="utf-8")  # noqa: SIM115
+        # above). A static file-not-closed check cannot see across that
+        # module-level lifetime from this function alone, so the close is
+        # registered right here (not only in the batch close_audit_handles()
+        # below) -- closing an already-closed file object is a no-op, so the
+        # two closers never conflict.
+        handle = open(log_path, "a", encoding="utf-8")  # noqa: SIM115  # codeql[py/file-not-closed] closed via atexit.register below and close_audit_handles()
+        atexit.register(handle.close)
         _AUDIT_HANDLES[key] = handle
     return handle
 
