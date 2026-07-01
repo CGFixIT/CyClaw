@@ -201,6 +201,42 @@ class TestTrustedHost:
         assert resp.status_code == 200
 
 
+class TestSecurityResponseHeaders:
+    """Every response must carry the full set of hardening headers added by
+    _SecurityHeadersMiddleware: CSP, X-Frame-Options, X-Content-Type-Options,
+    Referrer-Policy, Permissions-Policy, and X-Permitted-Cross-Domain-Policies."""
+
+    REQUIRED_HEADERS = {
+        "x-content-type-options": "nosniff",
+        "x-frame-options": "DENY",
+        "referrer-policy": "strict-origin-when-cross-origin",
+        "permissions-policy": "camera=(), microphone=(), geolocation=()",
+        "x-permitted-cross-domain-policies": "none",
+    }
+
+    def test_health_carries_all_security_headers(self, client):
+        test_client, _ = client
+        with patch("gate.check_all", return_value=[]):
+            resp = test_client.get("/health")
+        assert resp.status_code == 200
+        for header, expected in self.REQUIRED_HEADERS.items():
+            assert resp.headers.get(header) == expected, f"Missing or wrong {header}"
+        assert "content-security-policy" in resp.headers
+
+    def test_csp_header_present_on_query(self, client):
+        test_client, mock_graph = client
+        resp = test_client.post("/query", json={"query": "test"})
+        csp = resp.headers.get("content-security-policy", "")
+        assert "default-src 'none'" in csp
+        assert "frame-ancestors 'none'" in csp
+        assert "script-src 'self'" in csp
+
+    def test_static_page_has_cache_control(self, client):
+        test_client, _ = client
+        resp = test_client.get("/")
+        assert resp.headers.get("cache-control") == "no-store, no-cache, must-revalidate, max-age=0"
+
+
 class TestPromptInjection:
     def test_injection_blocked(self, client):
         test_client, _ = client

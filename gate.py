@@ -318,6 +318,14 @@ class _SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers.setdefault("X-Frame-Options", "DENY")
         response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
         response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+        response.headers.setdefault("X-Permitted-Cross-Domain-Policies", "none")
+        response.headers.setdefault(
+            "Content-Security-Policy",
+            "default-src 'none'; script-src 'self' 'unsafe-inline'; "
+            "style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
+            "connect-src 'self'; font-src 'self'; base-uri 'none'; "
+            "form-action 'none'; frame-ancestors 'none'"
+        )
         if request.url.path == "/" or request.url.path.startswith("/static/"):
             response.headers.setdefault(
                 "Cache-Control", "no-store, no-cache, must-revalidate, max-age=0"
