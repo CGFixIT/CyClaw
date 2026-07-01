@@ -8,7 +8,7 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 permissions:
   contents: read
@@ -18,6 +18,7 @@ permissions:
 jobs:
   ci:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -54,7 +55,7 @@ jobs:
     - name: Install CyClaw in editable mode + test extras
       shell: bash -l {0}
       run: |
-        python -m pip install -e ".[test,dev]" --no-deps || echo "No [test,dev] extras yet — add to pyproject.toml"
+        python -m pip install -e ".[test,dev]" --no-deps
         # If heavy deps live in environment.yml, they are already resolved by mamba
 
     - name: Prepare hermetic test env
