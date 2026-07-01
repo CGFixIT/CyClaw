@@ -100,7 +100,7 @@ The full deployment threat model — assumptions, in-scope/out-of-scope adversar
 
 - **chromadb** has a known CVE (pre-auth RCE); accepted because only `PersistentClient` (embedded) is used — `pip-audit` ignores it per threat model.
 - **torch** must be installed separately (`pip install torch==2.12.1+cpu`) **before** `requirements.txt` to ensure the post-CVE-2025-32434 build (fixed in 2.6.0; 2.12.1 is within the patched range) resolves from the PyTorch CPU index before any other dep triggers model loading.
-- Install requirements: `pip install -r requirements.txt --ignore-installed PyYAML`
+- Install requirements: `pip install -r requirements.txt -c constraints.txt --ignore-installed PyYAML`
 
 ### Agentic Layer (`agentic/`)
 

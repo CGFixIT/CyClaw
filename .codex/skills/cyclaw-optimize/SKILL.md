@@ -57,7 +57,7 @@ the optimization workflow:
 bash .codex/skills/cyclaw-optimize/bootstrap.sh codex/cyclaw-optimize-<topic>
 ```
 
-Omit the branch argument for a read-only inventory against the current branch.
+Omit the branch argument for a local inventory against the current branch.
 With a branch argument, the script fetches `origin/main` and creates or checks
 out the requested branch without force-resetting existing branch work.
 

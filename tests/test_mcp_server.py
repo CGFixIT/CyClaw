@@ -211,6 +211,39 @@ def test_unknown_method_returns_error_32601(retriever):
     assert result["error"]["code"] == -32601
 
 
+def test_non_object_message_returns_invalid_request(retriever):
+    result = handle_message(["not", "an", "object"], retriever)
+    assert result["error"]["code"] == -32600
+
+
+def test_tools_call_rejects_non_object_params(retriever):
+    msg = {"jsonrpc": "2.0", "id": 61, "method": "tools/call", "params": "bad"}
+    result = handle_message(msg, retriever)
+    assert result["error"]["code"] == -32602
+
+
+def test_tools_call_rejects_non_object_arguments(retriever):
+    msg = {
+        "jsonrpc": "2.0",
+        "id": 62,
+        "method": "tools/call",
+        "params": {"name": "hybrid_search", "arguments": "bad"},
+    }
+    result = handle_message(msg, retriever)
+    assert result["error"]["code"] == -32602
+
+
+def test_tools_call_rejects_missing_query(retriever):
+    msg = {
+        "jsonrpc": "2.0",
+        "id": 63,
+        "method": "tools/call",
+        "params": {"name": "hybrid_search", "arguments": {}},
+    }
+    result = handle_message(msg, retriever)
+    assert result["error"]["code"] == -32602
+
+
 # ---------------------------------------------------------------------------
 # 8. notifications/initialized → None
 # ---------------------------------------------------------------------------

@@ -14,10 +14,24 @@ Security note (2026-06):
 
 import os
 from functools import lru_cache
+from pathlib import Path
 
 import yaml
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
+
+def resolve_cache_dir(config_path: str, cache_dir: str | None) -> str:
+    """Resolve a configured embedding cache path relative to its config file."""
+    if not cache_dir:
+        return ""
+    if cache_dir.startswith(("/", "\\")):
+        return cache_dir
+    path = Path(cache_dir).expanduser()
+    if path.is_absolute():
+        return str(path)
+    return str((Path(config_path).expanduser().resolve().parent / path).resolve())
+
 
 @lru_cache(maxsize=1)
 def _load_model(model_name: str, cache_dir: str):
@@ -40,7 +54,7 @@ def _embeddings_cfg(config_path: str) -> tuple:
     """
     with open(config_path, encoding="utf-8") as f:
         emb_cfg = yaml.safe_load(f)["models"]["embeddings"]
-    return emb_cfg["model"], emb_cfg.get("cache_dir", "")
+    return emb_cfg["model"], resolve_cache_dir(config_path, emb_cfg.get("cache_dir", ""))
 
 @lru_cache(maxsize=2048)
 def _cached_embedding(text: str, config_path: str) -> tuple:

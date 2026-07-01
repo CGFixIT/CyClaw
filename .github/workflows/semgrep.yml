@@ -39,7 +39,7 @@ jobs:
       - name: Install and run Semgrep
         run: |
           pip install semgrep
-          semgrep scan --config p/python --config p/owasp-top-ten --sarif -o semgrep.sarif . || true
+          semgrep scan --config p/python --config p/owasp-top-ten --sarif -o semgrep.sarif .
 
       - name: Upload SARIF
         if: always()

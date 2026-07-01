@@ -21,7 +21,7 @@ structural flows are testable.
 ```bash
 # Python 3.12 required
 pip install torch==2.12.1+cpu --index-url https://download.pytorch.org/whl/cpu
-pip install -r requirements.txt --ignore-installed PyYAML
+pip install -r requirements.txt -c constraints.txt --ignore-installed PyYAML
 ```
 
 PyYAML conflict is harmless — skip the reinstall with `--ignore-installed PyYAML`.
@@ -54,7 +54,7 @@ bash .claude/skills/run-cyclaw/smoke.sh
 **Core API (gateway + graph)**
 1. `GET /health` — `index_ready=True`, `graph_ready=True`
 2. `POST /query` — direct local path (`needs_confirm=False`)
-3. `POST /query user_confirmed_online=false` — `model_used=local` (offline path)
+3. `POST /query user_confirmed_online=false` — `model_used=local` or `offline-best-effort`
 4. Prompt injection blocked → HTTP 400
 5. `GET /soul` with valid Bearer token → soul version returned
 5b. `GET /soul` without auth → HTTP 401 (fail-closed)

@@ -10,6 +10,7 @@ import hashlib
 import json
 import logging
 import re
+import threading
 from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
@@ -17,6 +18,7 @@ from pathlib import Path
 import yaml
 
 _logging_initialized = False
+_AUDIT_WRITE_LOCK = threading.Lock()
 
 
 def setup_logging(cfg: dict | None = None) -> None:
@@ -49,18 +51,16 @@ def setup_logging(cfg: dict | None = None) -> None:
 
     _logging_initialized = True
 
-_config_cache: dict | None = None
-
+@lru_cache(maxsize=8)
 def _get_config(config_path: str = "config.yaml") -> dict:
-    global _config_cache
-    if _config_cache is None:
-        with open(config_path, encoding="utf-8") as f:
-            _config_cache = yaml.safe_load(f)
-    return _config_cache
+    resolved = str(Path(config_path).expanduser().resolve())
+    with open(resolved, encoding="utf-8") as f:
+        return yaml.safe_load(f)
 
 def reset_config_cache() -> None:
-    global _config_cache
-    _config_cache = None
+    clear = getattr(_get_config, "cache_clear", None)
+    if clear is not None:
+        clear()
 
 def hash_query(query: str) -> str:
     return hashlib.sha256(query.encode("utf-8")).hexdigest()
@@ -131,8 +131,9 @@ def _redact_value(value: object, cfg: dict) -> object:
     return value
 
 
-def audit_log(event: dict, config_path: str = "config.yaml") -> None:
-    cfg = _get_config(config_path)
+def audit_log(event: dict, config_path: str = "config.yaml", cfg: dict | None = None) -> None:
+    if cfg is None:
+        cfg = _get_config(config_path)
     log_path = Path(cfg["logging"]["audit_file"])
     log_path.parent.mkdir(parents=True, exist_ok=True)
     audit_fields = cfg["logging"].get("audit_fields", {})
@@ -145,5 +146,7 @@ def audit_log(event: dict, config_path: str = "config.yaml") -> None:
             continue
         record[key] = _redact_value(value, cfg)
     record["timestamp"] = datetime.now(UTC).isoformat()
-    with open(log_path, "a", encoding="utf-8") as f:
-        f.write(json.dumps(record) + "\n")
+    line = json.dumps(record) + "\n"
+    with _AUDIT_WRITE_LOCK:
+        with open(log_path, "a", encoding="utf-8") as f:
+            f.write(line)

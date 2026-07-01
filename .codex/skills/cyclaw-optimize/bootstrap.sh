@@ -46,8 +46,16 @@ echo "set CODEX_GIT_USER_NAME / CODEX_GIT_USER_EMAIL to override for this repo"
 # ---------------------------------------------------------------------------
 # 2. Fetch main + position on a working branch cut from origin/main
 # ---------------------------------------------------------------------------
-echo "fetching origin/main ..."
-git fetch origin main --quiet || echo "WARN: fetch failed (offline?) - using local refs"
+if [ -n "$WORK_BRANCH" ]; then
+  if [ -n "$(git status --porcelain)" ]; then
+    echo "ERROR: working tree is dirty; commit or stash changes before switching optimizer branches" >&2
+    exit 1
+  fi
+  echo "fetching origin/main ..."
+  git fetch origin main --quiet || echo "WARN: fetch failed (offline?) - using local refs"
+else
+  echo "no branch requested - skipping fetch/checkout for local inventory"
+fi
 
 if [ -n "$WORK_BRANCH" ]; then
   if git show-ref --verify --quiet "refs/heads/${WORK_BRANCH}"; then

@@ -29,7 +29,7 @@ def _make_cache(tmp_path, name=".emb_cache"):
 
 def test_read_cache_dir_ok(tmp_path):
     cfg = _write_cfg(tmp_path, ".emb_cache")
-    assert clear_cache.read_cache_dir(cfg) == ".emb_cache"
+    assert clear_cache.read_cache_dir(cfg) == str((tmp_path / ".emb_cache").resolve())
 
 
 def test_read_cache_dir_unset_returns_empty(tmp_path):
@@ -71,6 +71,23 @@ def test_apply_removes_cache(tmp_path):
     rc = clear_cache.main(["--config", cfg, "--apply"])
     assert rc == clear_cache.EXIT_OK
     assert not cache.exists()
+
+
+def test_apply_relative_cache_dir_uses_config_dir(tmp_path, monkeypatch):
+    cfg_dir = tmp_path / "cfg"
+    cwd_dir = tmp_path / "cwd"
+    cfg_dir.mkdir()
+    cwd_dir.mkdir()
+    cfg_cache = _make_cache(cfg_dir)
+    cwd_cache = _make_cache(cwd_dir)
+    cfg = _write_cfg(cfg_dir, ".emb_cache")
+
+    monkeypatch.chdir(cwd_dir)
+    rc = clear_cache.main(["--config", cfg, "--apply"])
+
+    assert rc == clear_cache.EXIT_OK
+    assert not cfg_cache.exists()
+    assert cwd_cache.exists()
 
 
 def test_apply_when_absent_is_ok(tmp_path):

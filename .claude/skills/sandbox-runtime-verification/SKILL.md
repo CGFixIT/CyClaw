@@ -45,7 +45,8 @@ branch is verified on Python 3.12; non-zero means a required stage failed
 To verify the **latest** `main` (not your current checkout) first:
 
 ```bash
-git fetch origin main && git checkout main && git pull origin main
+git worktree add /tmp/cyclaw-main-verify origin/main
+cd /tmp/cyclaw-main-verify
 bash .claude/skills/sandbox-runtime-verification/verify.sh
 ```
 
@@ -80,7 +81,7 @@ Creates a fresh venv from `python3.12`, then installs:
 
 ```bash
 pip install torch==2.12.1+cpu --index-url https://download.pytorch.org/whl/cpu
-pip install -r requirements.txt --ignore-installed PyYAML
+pip install -r requirements.txt -c constraints.txt --ignore-installed PyYAML
 pip install pytest pytest-asyncio pytest-cov pyyaml
 ```
 

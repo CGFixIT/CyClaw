@@ -34,6 +34,15 @@ skip() { echo "  SKIP  $1"; SKIPS=$((SKIPS+1)); }
 jget() { "$PYTHON" -c "import sys,json; d=json.load(sys.stdin); print($1)"; }
 section() { echo ""; echo "══════════════════════════════════════════════"; echo "  $1"; echo "══════════════════════════════════════════════"; }
 
+cleanup() {
+  [ -n "${SERVER_PID:-}" ] && kill "$SERVER_PID" 2>/dev/null || true
+  if [ -n "$SOUL_BACKUP" ] && [ -f "$SOUL_BACKUP" ]; then
+    mv "$SOUL_BACKUP" data/personality/soul.md
+  fi
+  rm -rf /tmp/cyclaw-smoke-writezone /tmp/cyclaw-smoke-cfg.yaml 2>/dev/null || true
+}
+trap cleanup EXIT
+
 # ── index (idempotent, with temp soul.md) ───────────────────────────────────
 if [ ! -f index/bm25.json ]; then
   echo "[smoke] Building retrieval index..."
@@ -51,15 +60,6 @@ echo "[smoke] Starting server on :$PORT ..."
 GROK_API_KEY="$GROK_API_KEY" CYCLAW_API_KEY="$CYCLAW_API_KEY" \
   "$PYTHON" -m uvicorn gate:app --host 127.0.0.1 --port "$PORT" > "$LOG" 2>&1 &  # DevSkim: ignore DS162092
 SERVER_PID=$!
-
-cleanup() {
-  kill "$SERVER_PID" 2>/dev/null || true
-  if [ -n "$SOUL_BACKUP" ] && [ -f "$SOUL_BACKUP" ]; then
-    mv "$SOUL_BACKUP" data/personality/soul.md
-  fi
-  rm -rf /tmp/cyclaw-smoke-writezone /tmp/cyclaw-smoke-cfg.yaml 2>/dev/null || true
-}
-trap cleanup EXIT
 
 for i in $(seq 1 30); do
   curl -sf "$BASE/health" > /dev/null 2>&1 && break
@@ -93,8 +93,8 @@ R=$(curl -sf -X POST "$BASE/query" \
   -H "Content-Type: application/json" \
   -d '{"query":"What is CyClaw?","user_confirmed_online":false}')
 MODEL=$(echo "$R" | jget "d['model_used']")
-[ "$MODEL" = "local" ] \
-  && pass "POST /query user_confirmed_online=false  (model_used=local)" \
+{ [ "$MODEL" = "local" ] || [ "$MODEL" = "offline-best-effort" ]; } \
+  && pass "POST /query user_confirmed_online=false  (model_used=$MODEL)" \
   || fail "POST /query user_confirmed_online=false  model_used=$MODEL"
 
 # 4. Prompt injection blocked (HTTP 400)

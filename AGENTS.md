@@ -115,7 +115,7 @@ Runtime prep required before app/tests that touch the gateway:
 
 ```bash
 mkdir -p data/personality index logs
-printf '# Soul\n' > data/personality/soul.md
+[ -f data/personality/soul.md ] || printf '# Soul\n' > data/personality/soul.md
 export GROK_API_KEY=dummy
 ```
 

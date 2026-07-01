@@ -49,7 +49,7 @@ def reg(tmp_path: Path):
     reset_config_cache()
     from utils.logger import _get_config
     cfg = _get_config(str(cfg_path))
-    ac = AgenticConfig(registry_path=rel)
+    ac = AgenticConfig(registry_path=rel, mode="write", writes_enabled=True)
     registry = SkillRegistry(cfg, ac)
     yield registry
     reset_config_cache()
@@ -72,7 +72,7 @@ def _lock_dir(registry: SkillRegistry) -> Path:
 def _twin(registry: SkillRegistry) -> SkillRegistry:
     """A second SkillRegistry over the SAME file -- simulates another process."""
     rel = str(Path(registry.registry_path).relative_to(REPO_ROOT))
-    return SkillRegistry(registry.cfg, AgenticConfig(registry_path=rel))
+    return SkillRegistry(registry.cfg, AgenticConfig(registry_path=rel, mode="write", writes_enabled=True))
 
 
 def test_propose_never_writes(reg):
@@ -126,6 +126,29 @@ def test_apply_blocks_injection(reg):
 def test_apply_requires_reason(reg):
     with pytest.raises(SkillRegistryError):
         reg.apply_skill(_spec(), reason="   ")
+
+
+def test_apply_requires_write_mode_and_writes_enabled(tmp_path):
+    rel = f"data/agentic/_pytest_{uuid.uuid4().hex}.json"
+    cfg_doc = dict(SCAN_CFG)
+    cfg_doc["logging"] = {"audit_file": str(tmp_path / "audit.jsonl"), "audit_fields": {}}
+    target = (REPO_ROOT / rel).resolve()
+    try:
+        read_mode = SkillRegistry(cfg_doc, AgenticConfig(registry_path=rel, mode="read", writes_enabled=False))
+        with pytest.raises(SkillRegistryError, match="write"):
+            read_mode.apply_skill(_spec(), reason="blocked")
+
+        write_mode_disabled = SkillRegistry(
+            cfg_doc, AgenticConfig(registry_path=rel, mode="write", writes_enabled=False)
+        )
+        with pytest.raises(SkillRegistryError, match="writes_enabled"):
+            write_mode_disabled.apply_skill(_spec(), reason="blocked")
+
+        assert not target.exists()
+    finally:
+        reset_config_cache()
+        if target.exists():
+            target.unlink()
 
 
 def test_apply_rejects_bad_name(reg):
@@ -211,7 +234,10 @@ def test_reload_sees_persisted_skill(reg):
     reg.apply_skill(_spec(), reason="persist")
     # A fresh registry over the same path must see the applied skill.
     reg2 = SkillRegistry(reg.cfg, AgenticConfig(
-        registry_path=str(Path(reg.registry_path).relative_to(REPO_ROOT))))
+        registry_path=str(Path(reg.registry_path).relative_to(REPO_ROOT)),
+        mode="write",
+        writes_enabled=True,
+    ))
     assert reg2.get_skill("demo") is not None
     assert reg2.version() == 1
 
@@ -226,7 +252,7 @@ def _registry_with_cfg(tmp_path: Path, cfg_doc: dict) -> SkillRegistry:
     reset_config_cache()
     from utils.logger import _get_config
     cfg = _get_config(str(cfg_path))
-    return SkillRegistry(cfg, AgenticConfig(registry_path=rel))
+    return SkillRegistry(cfg, AgenticConfig(registry_path=rel, mode="write", writes_enabled=True))
 
 
 def test_owasp_baseline_is_the_floor_with_no_prompt_filter(tmp_path):

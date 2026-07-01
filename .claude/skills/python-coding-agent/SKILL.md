@@ -64,7 +64,7 @@ Adapt your role to the task: library extension, DevOps automation, agent orchest
 | Tests | `pytest` 9.1+ + `coverage` ≥80% | — |
 
 **CyClaw-specific install quirks:**
-- PyYAML: `pip install -r requirements.txt --ignore-installed PyYAML`
+- PyYAML: `pip install -r requirements.txt -c constraints.txt --ignore-installed PyYAML`
 - torch: install `torch==2.12.1+cpu` **before** `requirements.txt` (CVE-2025-32434 fixed in 2.6.0; 2.12.1 is within patched range — install order still matters for CPU wheel resolution)
 - ChromaDB CVE-2026-45829: accepted — `PersistentClient` (embedded) only; threat model excludes HTTP client
 
@@ -207,5 +207,5 @@ Stay current with these evolving patterns — apply when they offer concrete ben
 - **LangGraph multi-agent:** `StateGraph` with subgraph composition for complex topologies; avoid monolithic graphs beyond ~10 nodes.
 - **Claude API / Agent SDK:** when building harnesses that call Claude, use `anthropic` SDK with tool use and streaming; respect token budgets and caching.
 - **Local LLM advances:** LM Studio continues to add OpenAI-compatible endpoints — keep `llm/client.py` endpoint-agnostic.
-- **`uv` adoption:** `uv pip install` is faster than `pip`; migrate when the team is ready; keep `requirements.txt` as the source of truth.
+- **`uv` adoption:** `uv pip install` is faster than `pip`; keep `pyproject.toml` primary and `requirements.txt` as the legacy CI path.
 - **Python 3.13+ features:** `locals()` semantics, `PEP 696` defaults — annotate with `# 3.13+` when used.

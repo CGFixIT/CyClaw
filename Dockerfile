@@ -34,7 +34,8 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 COPY . .
 
 # Non-root user (Veeam-style least privilege)
-RUN useradd --create-home --uid 1000 --gid 1000 cyclaw && \
+RUN groupadd --gid 1000 cyclaw && \
+    useradd --create-home --uid 1000 --gid cyclaw cyclaw && \
     chown -R cyclaw:cyclaw /app /tmp
 USER cyclaw
 

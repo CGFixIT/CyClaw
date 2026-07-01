@@ -193,7 +193,7 @@ GROK_API_KEY=dummy pytest tests/test_graph.py -q --tb=short
 > Python deps installed** — `pytest` import fails outright. Install first via
 > the `/run-cyclaw` or `/sandbox-runtime-verification` skill (note the CyClaw
 > install quirks: `torch==2.12.1+cpu` before `requirements.txt`, and
-> `pip install -r requirements.txt --ignore-installed PyYAML`). For
+> `pip install -r requirements.txt -c constraints.txt --ignore-installed PyYAML`). For
 > CI-/docs-/workflow-only PRs that touch no Python, the YAML/lint changes are
 > validated by the repo's own CI on push — a local pytest run is not required.
 

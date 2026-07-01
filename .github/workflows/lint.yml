@@ -36,7 +36,7 @@ jobs:
           python-version: '3.12'
 
       - name: Install ruff
-        run: pip install ruff
+        run: pip install -c constraints.txt ruff
 
       - name: ruff check
         run: ruff check --select E,F,I,B,C4,UP,S .

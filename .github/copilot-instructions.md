@@ -79,7 +79,7 @@ Important:
 - **Always install CPU-only torch first**. Otherwise Linux may try to pull the huge CUDA wheel.
 - `requirements.txt` is now **deprecated**; prefer `uv pip install -r pyproject.toml --constraint constraints.txt` for local development.
 - CI install gate runs `pip install -r requirements.txt -c constraints.txt pytest pytest-cov`; `constraints.txt` pins the full dependency set for reproducible CI runs (see PR #343).
-- If PyYAML reinstall conflicts in your environment, repo docs note `pip install -r requirements.txt --ignore-installed PyYAML` as a fallback.
+- If PyYAML reinstall conflicts in your environment, repo docs note `pip install -r requirements.txt -c constraints.txt --ignore-installed PyYAML` as a fallback.
 - Optional Postgres support exists via `psycopg[binary]`, but default behavior is local-file based.
 - A `Dockerfile` exists for production deployments (Python 3.12-slim-bookworm, non-root `cyclaw` user, uv install preferred, exposes port 8000).
 

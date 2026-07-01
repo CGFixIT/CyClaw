@@ -33,6 +33,7 @@ from pathlib import Path
 
 import yaml
 
+from retrieval.embeddings import resolve_cache_dir
 from utils.errors import ConfigError
 
 EXIT_OK = 0
@@ -59,7 +60,7 @@ def read_cache_dir(config_path: str) -> str:
         raise ConfigError(
             f"config '{config_path}' missing models.embeddings section"
         ) from exc
-    return cache_dir or ""
+    return resolve_cache_dir(config_path, cache_dir)
 
 
 def dir_stats(path: Path) -> tuple[int, int]:

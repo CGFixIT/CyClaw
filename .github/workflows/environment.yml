@@ -33,7 +33,7 @@ dependencies:
   - pip:
       - langgraph==1.2.6
       - rank-bm25==0.2.2
-      - "websockets>=14,<16"
+      - websockets==15.0.1
 
 # Optional: Create with mamba for speed
 # mamba env create -f environment.yml

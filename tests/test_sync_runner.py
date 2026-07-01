@@ -237,6 +237,16 @@ def test_hash_changed_files_streams_and_skips_deleted(tmp_path):
     assert by_path["missing.md"].sha256 is None  # not on disk -> None
 
 
+def test_hash_changed_files_skips_paths_outside_local_root(tmp_path):
+    root = tmp_path / "corpus"
+    root.mkdir()
+    (tmp_path / "secret.md").write_text("secret", encoding="utf-8")
+
+    out = hash_changed_files([FileEvent(kind="modified", path="../secret.md")], str(root))
+
+    assert out[0].sha256 is None
+
+
 # ---------------------------------------------------------------------------
 # Audit dicts -- "file" key, never "query", no secret fields
 # ---------------------------------------------------------------------------

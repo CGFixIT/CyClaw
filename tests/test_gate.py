@@ -9,6 +9,7 @@ Tests the HTTP layer including:
 *** REVIEW THIS SOON TO ENHANCE AND VERIFY***
 """
 
+import copy
 import pytest
 from unittest.mock import patch, MagicMock
 from fastapi.testclient import TestClient
@@ -26,7 +27,7 @@ def client(tmp_path):
     from utils.logger import reset_config_cache
     reset_config_cache()
 
-    cfg = {**TEST_CONFIG}
+    cfg = copy.deepcopy(TEST_CONFIG)
     cfg["logging"]["audit_file"] = str(tmp_path / "audit.jsonl")
     cfg["logging"]["log_file"] = str(tmp_path / "gateway.log")
 
@@ -257,12 +258,10 @@ class TestSoulAndErrorPaths:
     # Auth tests for GET /soul (security/gate-get-soul-auth)
     # ------------------------------------------------------------------
 
-    def test_get_soul_requires_auth_no_key_env(self, client):
+    def test_get_soul_requires_auth_no_key_env(self, client, monkeypatch):
         """GET /soul returns 401 when CYCLAW_API_KEY is not set at all."""
         test_client, _ = client
-        # monkeypatch NOT used — CYCLAW_API_KEY absent from env by default in tests
-        import os
-        os.environ.pop("CYCLAW_API_KEY", None)
+        monkeypatch.delenv("CYCLAW_API_KEY", raising=False)
         resp = test_client.get("/soul")
         assert resp.status_code == 401
 

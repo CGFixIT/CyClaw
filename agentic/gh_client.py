@@ -98,6 +98,11 @@ def check_gh_version(
             last_timeout_exc = exc
             if attempt < attempts:
                 time.sleep(2.0 ** (attempt - 1))
+        except OSError as exc:
+            raise GhNotInstalledError(
+                f"Could not execute GitHub CLI (gh): {exc}",
+                details={"binary": binary},
+            ) from exc
 
     if last_timeout_exc is not None:
         raise GhVersionError(

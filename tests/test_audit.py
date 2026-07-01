@@ -6,6 +6,7 @@
 """Unit tests for audit logging — hashing, redaction, JSONL format."""
 
 import json
+import threading
 from pathlib import Path
 
 import pytest
@@ -136,6 +137,46 @@ class TestAuditLog:
 
         lines = Path(audit_file).read_text().strip().split("\n")
         assert len(lines) == 2
+
+    def test_config_cache_is_keyed_by_path(self, tmp_path):
+        cfg_a = tmp_path / "a.yaml"
+        cfg_b = tmp_path / "b.yaml"
+        audit_a = tmp_path / "a.jsonl"
+        audit_b = tmp_path / "b.jsonl"
+        base = {
+            "logging": {"audit_fields": {"include_query_hash": True}},
+            "policy": {"privacy": {"redact_emails": False, "redact_ips": False, "redact_secrets_like": []}},
+        }
+        cfg_a.write_text(
+            yaml.safe_dump({**base, "logging": {**base["logging"], "audit_file": str(audit_a)}}),
+            encoding="utf-8",
+        )
+        cfg_b.write_text(
+            yaml.safe_dump({**base, "logging": {**base["logging"], "audit_file": str(audit_b)}}),
+            encoding="utf-8",
+        )
+
+        audit_log({"event": "a"}, str(cfg_a))
+        audit_log({"event": "b"}, str(cfg_b))
+
+        assert json.loads(audit_a.read_text(encoding="utf-8"))["event"] == "a"
+        assert json.loads(audit_b.read_text(encoding="utf-8"))["event"] == "b"
+
+    def test_threaded_writes_are_complete_jsonl_lines(self, audit_config):
+        config_path, audit_file = audit_config
+
+        def write_one(i: int) -> None:
+            audit_log({"event": "threaded", "idx": i}, config_path)
+
+        threads = [threading.Thread(target=write_one, args=(i,)) for i in range(40)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+
+        lines = Path(audit_file).read_text(encoding="utf-8").splitlines()
+        assert len(lines) == 40
+        assert {json.loads(line)["idx"] for line in lines} == set(range(40))
 
     def test_retrieval_error_secret_redacted_in_audit(self, tmp_path):
         """PR #99 #10: a retrieval-degraded error string carrying a token must be

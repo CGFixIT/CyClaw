@@ -72,6 +72,8 @@ def _handle_search(msg_id, args: dict, retriever: HybridRetriever) -> dict:
     # parity with the HTTP path is ever desired, add check_input(query) below and
     # mirror the HTTP audit-on-block; it is omitted by design today.
     query = args.get("query", "")
+    if not isinstance(query, str) or not query:
+        return _error(msg_id, -32602, "hybrid_search requires a non-empty string query")
     top_k = _coerce_top_k(args.get("top_k", _DEFAULT_TOP_K))
     # Normalise mode BEFORE dispatch so the audit event and the response
     # metadata record what was actually executed. Previously the raw client
@@ -123,6 +125,8 @@ def _handle_search(msg_id, args: dict, retriever: HybridRetriever) -> dict:
         return _error(msg_id, -32000, f"Search error: {safe_err}")
 
 def handle_message(msg: dict, retriever: HybridRetriever) -> dict:
+    if not isinstance(msg, dict):
+        return _error(None, -32600, "Invalid Request")
     method = msg.get("method")
     msg_id = msg.get("id")
     if method == "initialize":
@@ -135,8 +139,12 @@ def handle_message(msg: dict, retriever: HybridRetriever) -> dict:
         return {"jsonrpc": "2.0", "id": msg_id, "result": {"tools": TOOLS}}
     elif method == "tools/call":
         params = msg.get("params", {})
+        if not isinstance(params, dict):
+            return _error(msg_id, -32602, "tools/call params must be an object")
         tool_name = params.get("name")
         args = params.get("arguments", {})
+        if not isinstance(args, dict):
+            return _error(msg_id, -32602, "tools/call arguments must be an object")
         if tool_name == "hybrid_search":
             return _handle_search(msg_id, args, retriever)
         return _error(msg_id, -32601, f"Unknown tool: {tool_name}")

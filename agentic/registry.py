@@ -128,6 +128,7 @@ class SkillRegistry:
     def __init__(self, cfg: dict, agentic_cfg: AgenticConfig | None = None):
         self.cfg = cfg
         ac = agentic_cfg or AgenticConfig()
+        self.agentic_cfg = ac
         self.registry_path = Path(ac.registry_path)
         self._lock = threading.Lock()
         self._injection_patterns = self._build_injection_patterns()
@@ -195,7 +196,7 @@ class SkillRegistry:
                 "event": "agentic_skill_pattern_compile_failed",
                 "dropped_count": len(dropped),
                 "patterns": dropped[:10],
-            })
+            }, cfg=self.cfg)
         # Fail closed. Unlike the soul scanner (advisory at propose time), this
         # scanner is ENFORCED at apply_skill: an empty pattern set would make
         # _scan_injection a silent no-op, so every skill would pass the injection
@@ -345,6 +346,15 @@ class SkillRegistry:
             raise SkillRegistryError(
                 "apply_skill requires a non-empty human reason",
                 details={"name": spec.get("name")},
+            )
+        if not (self.agentic_cfg.is_write_mode and self.agentic_cfg.writes_enabled):
+            raise SkillRegistryError(
+                "apply_skill requires agentic.mode='write' and agentic.writes_enabled=true",
+                details={
+                    "name": spec.get("name"),
+                    "mode": self.agentic_cfg.mode,
+                    "writes_enabled": self.agentic_cfg.writes_enabled,
+                },
             )
 
         canonical = self._canonical(spec)

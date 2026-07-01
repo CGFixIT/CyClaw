@@ -316,11 +316,21 @@ def hash_changed_files(events: Sequence[FileEvent], local_root: str) -> list[Fil
     is untouched.
     """
     out: list[FileEvent] = []
+    root = os.path.abspath(local_root)
+    root_norm = os.path.normcase(root)
     for ev in events:
         if ev.kind == "deleted":
             out.append(ev)
             continue
-        abs_path = os.path.join(local_root, ev.path)
+        abs_path = os.path.abspath(os.path.join(root, ev.path))
+        abs_norm = os.path.normcase(abs_path)
+        try:
+            if os.path.commonpath([root_norm, abs_norm]) != root_norm:
+                out.append(ev)
+                continue
+        except ValueError:
+            out.append(ev)
+            continue
         try:
             with open(abs_path, "rb") as f:
                 h = hashlib.sha256()
@@ -648,12 +658,15 @@ def run_sync(
     ``_LOCK_STALE_SEC``.
     """
     check_rclone_version(rclone_bin)
+    resolved_rclone = shutil.which(rclone_bin)
+    if resolved_rclone is None:  # pragma: no cover -- check_rclone_version already guards this
+        raise RcloneNotInstalledError("rclone binary disappeared after version check")
 
     os.makedirs(cfg.log_dir or ".", exist_ok=True)
     lock_dir = os.path.join(cfg.log_dir or ".", "sync.lock.d")
     _acquire_sync_lock(lock_dir)
     try:
-        return _run_sync_locked(cfg, dry_run, resync, rclone_bin)
+        return _run_sync_locked(cfg, dry_run, resync, resolved_rclone)
     finally:
         _release_sync_lock(lock_dir)
 

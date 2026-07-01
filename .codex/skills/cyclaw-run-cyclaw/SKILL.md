@@ -24,7 +24,7 @@ CPU torch must be installed before the rest of the Python dependencies:
 ```bash
 python -m pip install --upgrade "pip>=26.1.2"
 pip install torch==2.12.1+cpu --index-url https://download.pytorch.org/whl/cpu
-pip install -r requirements.txt --ignore-installed PyYAML
+pip install -r requirements.txt -c constraints.txt --ignore-installed PyYAML
 ```
 
 Use `pyproject.toml` plus `constraints.txt` or `uv` when the environment already

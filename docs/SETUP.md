@@ -27,7 +27,7 @@ python -m venv venv
 .\venv\Scripts\Activate.ps1
 
 # 2. Torch CPU first (keeps install lean + offline-friendly)
-pip install torch==2.4.1+cpu --index-url https://download.pytorch.org/whl/cpu
+pip install torch==2.12.1+cpu --index-url https://download.pytorch.org/whl/cpu
 
 # 3. All other deps (pinned, verified Python 3.12 tree)
 pip install -r requirements.txt -c constraints.txt
@@ -64,7 +64,7 @@ python3.12 -m venv venv
 source venv/bin/activate
 
 # 2. Torch CPU (recommended even on Linux to avoid ~2.5 GB CUDA build)
-pip install torch==2.4.1+cpu --index-url https://download.pytorch.org/whl/cpu
+pip install torch==2.12.1+cpu --index-url https://download.pytorch.org/whl/cpu
 
 # 3. All other deps
 pip install -r requirements.txt -c constraints.txt
@@ -102,11 +102,15 @@ in offline mode. If you want full hygiene, set it to any non-empty string.
 The NLTK punkt tokenizer data is cached locally after the first `nltk.download()`
 call — subsequent runs are fully offline.
 
-### Known intentional test failures
-Some tests in `test_personality`, `test_personality_changes`, `test_stemmer`,
-and `test_audit` are marked as targeting a future (Dropbox-sync-pending) build
-and will intentionally fail against HEAD. This is expected — not a broken
-install. The `apipsTest.ps1` HTTP smoke test suite runs fully green.
+### Test gate
+The committed pytest suite is the install gate:
+
+```bash
+GROK_API_KEY=dummy pytest tests/ -q --tb=short
+```
+
+Failures are defects unless a test explicitly skips for a missing optional
+service.
 
 ### constraints.txt
 The `-c constraints.txt` flag pins the full transitive dependency tree for

@@ -118,6 +118,13 @@ class TestEmbeddingsCfg:
         cfg_path = _write_cfg(tmp_path, model="my-model", cache_dir="/tmp/cache")
         assert embeddings._embeddings_cfg(cfg_path) == ("my-model", "/tmp/cache")
 
+    def test_relative_cache_dir_resolves_from_config_dir(self, tmp_path):
+        cfg_path = _write_cfg(tmp_path, model="my-model", cache_dir=".emb_cache")
+        assert embeddings._embeddings_cfg(cfg_path) == (
+            "my-model",
+            str((tmp_path / ".emb_cache").resolve()),
+        )
+
     def test_cfg_cached_per_path(self, tmp_path):
         cfg_path = _write_cfg(tmp_path)
         first = embeddings._embeddings_cfg(cfg_path)
