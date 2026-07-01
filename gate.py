@@ -468,9 +468,10 @@ async def query_endpoint(request: Request, req: QueryRequest):
         else:
             skipped_sources += 1
     if skipped_sources:
-        # Should never happen — graph nodes emit dict sources. Surface the gap
-        # rather than silently returning fewer sources than the graph produced.
         logger.warning("Dropped %d non-dict source(s) from /query response", skipped_sources)
+        await _audit({"event": "skipped_sources", "query": req.query,
+                       "skipped_count": skipped_sources,
+                       "total_sources": len(docs)})
 
     return QueryResponse(
         answer=result.get("answer", "[No answer generated]"),

@@ -541,10 +541,6 @@ def audit_logger_node(state: GraphState, cfg: dict,
     # Record to personality DB if available
     if personality and state.get("answer_model"):
         try:
-            # record_interaction(query_hash, outcome) — 2-arg contract per
-            # PersonalityManager + tests/test_personality.py. Hash the query with
-            # the same helper the audit log uses so the raw query is never stored;
-            # encode model/score/hits into the outcome string (no schema change).
             query_hash = hash_query(query)
             outcome = (
                 f"{state.get('answer_model', 'unknown')}"
@@ -552,10 +548,9 @@ def audit_logger_node(state: GraphState, cfg: dict,
                 f"|hits={len(state.get('retrieved_docs', []))}"
             )
             personality.record_interaction(query_hash, outcome)
-        except Exception:
-            # Personality DB failure must never break query flow — but surface it
-            # at ERROR with full traceback so persistent failures are visible in logs.
+        except Exception as exc:
             logger.error("personality.record_interaction failed (non-fatal)", exc_info=True)
+            event["personality_db_error"] = str(exc)
 
     return {"audit_event": event}
 

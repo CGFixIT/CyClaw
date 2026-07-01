@@ -16,6 +16,7 @@ from pathlib import Path
 from graph import (
     build_graph, retrieve_node, local_llm_node,
     offline_best_effort_node, grok_fallback_node,
+    audit_logger_node,
     CHARS_PER_TOKEN, _MIN_CONTEXT_CHARS, _DEFAULT_MAX_CONTEXT_TOKENS,
     _context_char_budget,
 )
@@ -231,6 +232,49 @@ class TestAuditLogging:
 
         assert "audit_event" in result
         assert result["audit_event"]["model_used"] == "offline-best-effort"
+
+    def test_personality_db_failure_surfaces_in_audit(self, tmp_path):
+        """When personality.record_interaction raises, the audit event must
+        include a personality_db_error field so the failure is visible in
+        the audit log, not just application logs."""
+        from unittest.mock import MagicMock
+        cfg = _make_cfg(tmp_path)
+
+        personality = MagicMock()
+        personality.record_interaction.side_effect = RuntimeError("DB connection lost")
+
+        state = {
+            "query": "test query",
+            "answer_model": "local",
+            "answer_sources": [],
+            "retrieved_docs": [],
+            "top_score": 0.9,
+            "retrieval_mode": "hybrid",
+        }
+        result = audit_logger_node(state, cfg=cfg, personality=personality)
+        assert "personality_db_error" in result["audit_event"]
+        assert "DB connection lost" in result["audit_event"]["personality_db_error"]
+
+    def test_user_gate_pause_event_recorded(self, tmp_path):
+        """When no answer_model is set (user_gate pause), the audit event
+        should record event=user_gate_pause and skip personality recording."""
+        from unittest.mock import MagicMock
+        cfg = _make_cfg(tmp_path)
+
+        personality = MagicMock()
+
+        state = {
+            "query": "off topic query",
+            "answer_model": "",
+            "answer_sources": [],
+            "retrieved_docs": [{"text": "...", "score": 0.3, "source": "t.md", "chunk_id": 0}],
+            "top_score": 0.3,
+            "retrieval_mode": "hybrid",
+            "needs_user_confirm": True,
+        }
+        result = audit_logger_node(state, cfg=cfg, personality=personality)
+        assert result["audit_event"]["event"] == "user_gate_pause"
+        personality.record_interaction.assert_not_called()
 
 
 # Soul preamble used to assert identity ownership in the offline node.
