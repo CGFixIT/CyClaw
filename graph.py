@@ -41,17 +41,23 @@ CHANGES FROM ORIGINAL (soul.md / persistent personality integration):
 """
 
 import logging
-from typing import Literal, TypedDict
+from typing import Literal, Protocol, TypedDict
 
 from langgraph.graph import END, StateGraph
 
 from llm.client import GrokClient, LocalLLMClient
 from retrieval.hybrid_search import HybridRetriever
-from utils.errors import GrokServiceError, LLMServiceError, RAGError
+from utils.errors import RAGError
 from utils.logger import audit_log, hash_query
 from utils.personality import PersonalityManager
 
 logger = logging.getLogger("cyclaw.graph")
+
+
+class _GeneratingClient(Protocol):
+    """Structural type for LocalLLMClient/GrokClient — both expose generate(prompt) -> str."""
+
+    def generate(self, prompt: str) -> str: ...
 
 # =============================================================================
 # State Definition
@@ -197,6 +203,23 @@ def _format_context_chunks(
         parts.append(part)
     return SECTION_SEP.join(parts)
 
+
+def _generate_or_error(client: _GeneratingClient, prompt: str, *, label: str) -> tuple[str, str | None]:
+    """Call client.generate(prompt); translate a RAGError into a safe answer.
+
+    local_llm_node, offline_best_effort_node (both call LocalLLMClient) and
+    grok_fallback_node (GrokClient) each independently re-derived this same
+    try/except + "[<label> Error: ...]" formatting. LLMServiceError and
+    GrokServiceError both derive from RAGError with .code/.message, so one
+    handler covers both clients. Returns (answer, error) where error is the
+    "{code}: {message}" string for audit_logger_node, or None on success —
+    node functions and their public signatures/return dicts are unchanged.
+    """
+    try:
+        return client.generate(prompt), None
+    except RAGError as e:
+        return f"[{label} Error: {e.message}]", f"{e.code}: {e.message}"
+
 # =============================================================================
 # Node Functions
 # =============================================================================
@@ -295,12 +318,7 @@ Answer based STRICTLY on the retrieved context above. If the context is insuffic
             est_prompt_tokens, max_ctx_tokens,
         )
 
-    error: str | None = None
-    try:
-        answer = llm.generate(prompt)
-    except LLMServiceError as e:
-        answer = f"[LLM Error: {e.message}]"
-        error = f"{e.code}: {e.message}"
+    answer, error = _generate_or_error(llm, prompt, label="LLM")
 
     out: dict = {
         "answer": answer,
@@ -420,12 +438,7 @@ def grok_fallback_node(state: GraphState, grok: GrokClient | None, cfg: dict) ->
             "query": state.get("query", ""),
         })
 
-    error: str | None = None
-    try:
-        answer = grok.generate(prompt)
-    except GrokServiceError as e:
-        answer = f"[Grok Error: {e.message}]"
-        error = f"{e.code}: {e.message}"
+    answer, error = _generate_or_error(grok, prompt, label="Grok")
 
     # No fabricated source. The previous stub
     # {"source": "Grok Fallback", "score": 0.0, "chunk_id": -1, ...} is not a real
@@ -488,12 +501,7 @@ No local knowledge base context was available for this query.
 
 Provide the best general answer you can. Clearly note that your local knowledge base did not have relevant information for this query."""
 
-    error: str | None = None
-    try:
-        answer = llm.generate(prompt)
-    except LLMServiceError as e:
-        answer = f"[LLM Error: {e.message}]"
-        error = f"{e.code}: {e.message}"
+    answer, error = _generate_or_error(llm, prompt, label="LLM")
 
     out: dict = {
         "answer": answer,
