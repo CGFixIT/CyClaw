@@ -205,12 +205,6 @@ class LocalLLMClient:
     def close(self) -> None:
         self._client.close()
 
-    def __enter__(self) -> "LocalLLMClient":
-        return self
-
-    def __exit__(self, *exc: object) -> None:
-        self.close()
-
     def generate(self, prompt: str) -> str:
         def do_post() -> httpx.Response:
             headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
@@ -263,12 +257,6 @@ class GrokClient:
 
     def close(self) -> None:
         self._client.close()
-
-    def __enter__(self) -> "GrokClient":
-        return self
-
-    def __exit__(self, *exc: object) -> None:
-        self.close()
 
     def is_available(self) -> bool:
         return bool(self.api_key)

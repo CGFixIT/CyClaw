@@ -11,7 +11,7 @@ import time
 import httpx
 import yaml
 
-from .errors import HealthStatus, LLMServiceError
+from .errors import HealthStatus
 
 _cfg_cache: dict[str, tuple[dict, float]] = {}
 _cfg_ttl_sec = 60
@@ -60,15 +60,6 @@ def check_all(config_path: str = "config.yaml") -> list[HealthStatus]:
             ))
     results.append(HealthStatus(name="embeddings_local", healthy=True, latency_ms=0.0))
     return results
-
-def require_healthy(config_path: str = "config.yaml") -> None:
-    statuses = check_all(config_path)
-    for s in statuses:
-        if not s.healthy and s.name == "lm_studio":
-            raise LLMServiceError(
-                f"{s.name} unreachable: {s.error}",
-                details={"endpoint": s.name}
-            )
 
 def _ping(url: str, name: str, headers: dict | None = None) -> HealthStatus:
     try:

@@ -7,7 +7,7 @@ Degrades gracefully if one retrieval path fails.
 
 import heapq
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 import yaml
@@ -37,7 +37,6 @@ class SearchResult:
     rrf_score: float | None = None
     rrf_semantic_contrib: float | None = None
     rrf_keyword_contrib: float | None = None
-    provenance: dict = field(default_factory=dict)
 
 class HybridRetriever:
     def __init__(self, config_path: str = "config.yaml"):
@@ -96,7 +95,6 @@ class HybridRetriever:
                 text=r["text"], score=score, source=r["source"],
                 chunk_id=r["chunk_id"], stem_tags=r["stem_tags"],
                 retrieval_mode="semantic", semantic_score=score, semantic_rank=i,
-                provenance={"semantic": {"rank": i, "score": score}}
             ))
         return hits
 
@@ -127,7 +125,6 @@ class HybridRetriever:
                     source=meta["source"], chunk_id=meta["chunk_id"],
                     stem_tags=stem_tags, retrieval_mode="keyword",
                     keyword_score=scores[idx], keyword_rank=len(hits),
-                    provenance={"keyword": {"rank": len(hits), "score": scores[idx]}}
                 ))
         return hits
 
@@ -198,10 +195,8 @@ class HybridRetriever:
         keyword_meta = {}
 
         # No "text" in the per-leg meta dicts below: the merged SearchResult
-        # already carries the chunk text (text=hit.text from all_hits), and the
-        # provenance dict is only ever read for rank/score/rrf_contrib. Storing
-        # hit.text here duplicated every chunk's full text into the provenance
-        # payload (and thence into graph state) per leg, for zero functional gain.
+        # already carries the chunk text (text=hit.text from all_hits). These
+        # dicts only feed the merged result's semantic_*/keyword_* fields below.
         for rank, hit in enumerate(semantic_hits):
             key = (hit.source, hit.chunk_id)
             contrib = 1 / (self.rrf_k + rank)
@@ -234,7 +229,6 @@ class HybridRetriever:
                 rrf_score=score,
                 rrf_semantic_contrib=sm["rrf_contrib"] if sm else None,
                 rrf_keyword_contrib=km["rrf_contrib"] if km else None,
-                provenance={"semantic": sm, "keyword": km}
             ))
 
         # Return the full RRF-fused union. The previous

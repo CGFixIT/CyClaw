@@ -81,8 +81,10 @@ class PersonalityManager:
         self.soul_max_chars = pers_cfg.get("soul_max_chars", 8000)
         self.soul_core: str = ""
         # Compile the injection scanner once: config banned_patterns ∪ OWASP.
-        self._advisory_patterns = self._build_advisory_patterns()
-        self._enforced_patterns = self._build_enforced_patterns()
+        # Enforced = critical/write-boundary set (never written to soul.md).
+        # Advisory = broader set surfaced for propose_evolution human review.
+        self._advisory_patterns = self._build_patterns(OWASP_INJECTION_PATTERNS)
+        self._enforced_patterns = self._build_patterns(ENFORCED_SOUL_PATTERNS)
         self._lock = threading.Lock()
         self._init_db()
         self._load_soul()
@@ -196,37 +198,16 @@ class PersonalityManager:
             ).fetchone()
         return int(row["max_id"]) if row and row["max_id"] is not None else 0
 
-    def _build_enforced_patterns(self) -> list[tuple]:
-        """Compile critical patterns for soul-write enforcement.
+    def _build_patterns(self, base: list[str]) -> list[tuple]:
+        """Compile ``base`` + all config-specified banned patterns.
 
-        These are memory-poisoning patterns that must never be written to soul.md.
-        Includes ENFORCED_SOUL_PATTERNS (hardcoded critical ones) + all config
-        patterns (admin-specified banned list). Config patterns are trusted since
-        they come from the admin's explicit blocking list. Returns (source, compiled)
-        pairs; invalid regexes are skipped.
+        Config patterns (admin-specified banned list) are trusted and appended
+        to whichever base set the caller passes: ENFORCED_SOUL_PATTERNS for the
+        critical write-boundary set, or OWASP_INJECTION_PATTERNS for the broader
+        advisory set. Returns (source, compiled) pairs; invalid regexes are
+        skipped.
         """
-        sources: list[str] = list(ENFORCED_SOUL_PATTERNS)
-        pf = (self.cfg.get("policy") or {}).get("prompt_filter") or {}
-        for p in (pf.get("banned_patterns") or []):
-            if p not in sources:
-                sources.append(p)
-        compiled: list[tuple] = []
-        for p in sources:
-            try:
-                compiled.append((p, re.compile(p, re.IGNORECASE)))
-            except re.error:
-                continue
-        return compiled
-
-    def _build_advisory_patterns(self) -> list[tuple]:
-        """Compile advisory patterns for propose_evolution human review.
-
-        Broader set: config patterns + OWASP baseline. These are surfaced for
-        human review when proposing soul changes but are not enforced, allowing
-        legitimate identity text like "You are now CyClaw; act as...". Returns
-        (source, compiled) pairs; invalid regexes are skipped.
-        """
-        sources: list[str] = list(OWASP_INJECTION_PATTERNS)
+        sources: list[str] = list(base)
         pf = (self.cfg.get("policy") or {}).get("prompt_filter") or {}
         for p in (pf.get("banned_patterns") or []):
             if p not in sources:
@@ -343,8 +324,6 @@ class PersonalityManager:
 
     def reload(self) -> None:
         self._load_soul()
-
-    reload_soul = reload
 
     def record_interaction(self, query_hash: str, outcome: str) -> None:
         with self._lock:
