@@ -432,6 +432,7 @@
     margin-right: 6px;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
+  .cancel-hint { color: var(--text-muted); font-size: 0.85em; }
 
   /* ── EMPTY STATE ── */
   .empty-state {
@@ -1085,6 +1086,10 @@ let queryDeadlineMs = 340000;
 let pendingConfirmQuery = null;
 let pendingSoulProposal = null;
 let entryCounter = 0;
+let activeQueryController = null;
+let healthBackoffMs = 15000;
+const HEALTH_BASE_INTERVAL = 15000;
+const HEALTH_MAX_INTERVAL = 120000;
 
 function authHeaders() {
   const key = apiKeyInput ? apiKeyInput.value.trim() : '';
@@ -1142,18 +1147,19 @@ async function checkHealth() {
       const ver = data.version ? ` v${data.version}` : '';
       fl.textContent = `cyclaw${ver} · ${window.location.host} · ${data.mode || 'offline'}`;
     }
-    // Keep the /query client deadline above the server deadline so the server's
-    // truthful 504 surfaces before the browser aborts. +10s covers the round trip.
     if (Number.isFinite(data.graph_timeout_sec) && data.graph_timeout_sec > 0) {
       queryDeadlineMs = (data.graph_timeout_sec + 10) * 1000;
     }
     if (data.status !== 'ok') {
       statusDot.classList.add('error');
     }
+    healthBackoffMs = HEALTH_BASE_INTERVAL;
   } catch (e) {
     statusDot.className = 'status-dot offline';
     statusText.textContent = 'gateway unreachable';
+    healthBackoffMs = Math.min(healthBackoffMs * 2, HEALTH_MAX_INTERVAL);
   }
+  scheduleHealthCheck();
 }
 
 async function submitQuery(confirmedOnline = null) {
@@ -1171,10 +1177,11 @@ async function submitQuery(confirmedOnline = null) {
     addEntry('query', 'QUERY', query);
   }
 
-  const loadingId = addEntry('system', '', '<span class="spinner"></span>searching vault...', true);
+  const loadingId = addEntry('system', '', '<span class="spinner"></span>searching vault... <span class="cancel-hint">(Esc to cancel)</span>', true);
   sendBtn.disabled = true;
   const startTime = performance.now();
 
+  activeQueryController = new AbortController();
   try {
     const body = { query };
     if (confirmedOnline !== null) {
@@ -1185,11 +1192,14 @@ async function submitQuery(confirmedOnline = null) {
     // UI forever. queryDeadlineMs is synced from /health to stay just ABOVE the
     // server's graph_timeout_sec, so the server's truthful 504 GRAPH_TIMEOUT
     // message wins the race instead of being masked by a premature client abort.
-    const resp = await fetchWithTimeout(`${API}/query`, {
+    const timeoutId = window.setTimeout(() => activeQueryController.abort(), queryDeadlineMs);
+    const resp = await fetch(`${API}/query`, {
       method: 'POST',
       headers: authHeaders(),
-      body: JSON.stringify(body)
-    }, queryDeadlineMs);
+      body: JSON.stringify(body),
+      signal: activeQueryController.signal
+    });
+    window.clearTimeout(timeoutId);
 
     const elapsed = Math.round(performance.now() - startTime);
     removeEntry(loadingId);
@@ -1227,12 +1237,18 @@ async function submitQuery(confirmedOnline = null) {
     footerRight.textContent = `queries: ${queryCount} · last: ${elapsed}ms`;
   } catch (e) {
     removeEntry(loadingId);
-    if (e.name === 'TimeoutError' || e.name === 'AbortError') {
-      addEntry('error', 'ERROR', `Request timed out (${Math.round(queryDeadlineMs / 1000)}s, client-side). The local LLM may be stalled — check that LM Studio is running and that its loaded context length exceeds the prompt + max_tokens.`);
+    if (e.name === 'AbortError') {
+      const elapsed = Math.round(performance.now() - startTime);
+      if (elapsed >= queryDeadlineMs - 500) {
+        addEntry('error', 'ERROR', `Request timed out (${Math.round(queryDeadlineMs / 1000)}s, client-side). The local LLM may be stalled — check that LM Studio is running and that its loaded context length exceeds the prompt + max_tokens.`);
+      } else {
+        addEntry('system', 'CANCELLED', 'Query cancelled by user.');
+      }
     } else {
       addEntry('error', 'ERROR', `Network error: ${e.message}`);
     }
   } finally {
+    activeQueryController = null;
     sendBtn.disabled = false;
     input.focus();
   }
@@ -1893,6 +1909,10 @@ function escHtml(str) {
 
 document.addEventListener('keydown', function(e) {
   if (e.key === 'Escape') {
+    if (activeQueryController) {
+      activeQueryController.abort();
+      return;
+    }
     document.querySelectorAll('.soul-panel.open').forEach(function(panel) {
       panel.classList.remove('open');
     });
@@ -1904,8 +1924,12 @@ document.addEventListener('keydown', function(e) {
   }
 });
 
+let healthTimer = null;
+function scheduleHealthCheck() {
+  if (healthTimer) clearTimeout(healthTimer);
+  healthTimer = setTimeout(checkHealth, healthBackoffMs);
+}
 checkHealth();
-setInterval(checkHealth, 15000);
 input.focus();
 </script>
 </body>
