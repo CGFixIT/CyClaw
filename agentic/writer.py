@@ -53,13 +53,13 @@ def _build_write_argv(op: str, repo: str, params: dict, gh_bin: str = "gh") -> l
     raise AgenticError(f"Unknown write op: {op!r}", details={"op": op, "allowed": sorted(_WRITE_OPS)})
 
 
-def _refuse(reason_msg: str, *, op: str, gate: str, reason: str) -> AgenticWriteRefused:
+def _refuse(reason_msg: str, *, op: str, gate: str, reason: str, config_path: str = "config.yaml") -> AgenticWriteRefused:
     audit_log({
         "event": "agentic_write_refused",
         "op": op,
         "gate": gate,
         "reason": reason or "",
-    })
+    }, config_path)
     return AgenticWriteRefused(reason_msg, details={"op": op, "failed_gate": gate})
 
 
@@ -70,6 +70,7 @@ def plan_write(
     *,
     confirm: bool = False,
     gh_bin: str = "gh",
+    config_path: str = "config.yaml",
     **params: object,
 ) -> dict:
     """Validate the write gate and return a DRY-RUN plan. Never executes.
@@ -86,16 +87,16 @@ def plan_write(
 
     # Gate 1: write mode.
     if not cfg.is_write_mode:
-        raise _refuse("agentic.mode is not 'write'", op=op, gate="mode", reason=reason)
+        raise _refuse("agentic.mode is not 'write'", op=op, gate="mode", reason=reason, config_path=config_path)
     # Gate 2: explicit writes_enabled flag.
     if not cfg.writes_enabled:
-        raise _refuse("agentic.writes_enabled is False", op=op, gate="writes_enabled", reason=reason)
+        raise _refuse("agentic.writes_enabled is False", op=op, gate="writes_enabled", reason=reason, config_path=config_path)
     # Gate 3: human reason string.
     if not (isinstance(reason, str) and reason.strip()):
-        raise _refuse("a non-empty human reason is required", op=op, gate="reason", reason=reason)
+        raise _refuse("a non-empty human reason is required", op=op, gate="reason", reason=reason, config_path=config_path)
     # Gate 4: per-call confirmation.
     if confirm is not True:
-        raise _refuse("explicit confirm=True is required", op=op, gate="confirm", reason=reason)
+        raise _refuse("explicit confirm=True is required", op=op, gate="confirm", reason=reason, config_path=config_path)
 
     # All gates satisfied -- still a dry run in v0.1.
     argv = _build_write_argv(op, cfg.repo, dict(params), gh_bin=gh_bin)
@@ -113,11 +114,11 @@ def plan_write(
         "op": op,
         "repo": cfg.repo,
         "reason": reason,
-    })
+    }, config_path)
     return plan
 
 
-def execute_write(plan: dict) -> dict:
+def execute_write(plan: dict, *, config_path: str = "config.yaml") -> dict:
     """Placeholder executor, gated by the ``EXECUTION_ENABLED`` kill switch.
 
     The kill switch is now *enforced* here, not merely documented. While
@@ -133,7 +134,7 @@ def execute_write(plan: dict) -> dict:
             "event": "agentic_write_execution_blocked",
             "op": op,
             "gate": "execution_enabled",
-        })
+        }, config_path)
         raise AgenticWriteRefused(
             "Agentic write execution is disabled (EXECUTION_ENABLED is False)",
             details={"failed_gate": "execution_enabled", "op": op},

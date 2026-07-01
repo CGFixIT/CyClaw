@@ -48,13 +48,25 @@ def _audit_events(tmp_path: Path) -> list[dict]:
     ]
 
 
+def _config_path(tmp_path: Path) -> str:
+    return str(tmp_path / "config.yaml")
+
+
 def test_execution_hard_disabled():
     assert EXECUTION_ENABLED is False
 
 
 def test_refuses_when_not_write_mode(tmp_path: Path):
     with pytest.raises(AgenticWriteRefused) as exc:
-        plan_write(_read_cfg(), "pr_comment", "valid reason", confirm=True, number=1, body="hi")
+        plan_write(
+            _read_cfg(),
+            "pr_comment",
+            "valid reason",
+            confirm=True,
+            config_path=_config_path(tmp_path),
+            number=1,
+            body="hi",
+        )
     assert exc.value.details["failed_gate"] == "mode"
     assert any(
         event.get("event") == "agentic_write_refused" and event.get("gate") == "mode"
@@ -87,8 +99,15 @@ def test_unknown_op_raises():
 
 
 def test_full_gate_returns_dryrun_only(tmp_path: Path):
-    plan = plan_write(_write_cfg(), "pr_comment", "explain the fix", confirm=True,
-                      number=12, body="LGTM")
+    plan = plan_write(
+        _write_cfg(),
+        "pr_comment",
+        "explain the fix",
+        confirm=True,
+        config_path=_config_path(tmp_path),
+        number=12,
+        body="LGTM",
+    )
     assert plan["status"] == "dry_run_plan"
     assert plan["executed"] is False
     assert isinstance(plan["would_run"], list)
@@ -122,10 +141,17 @@ def test_executor_refused_by_kill_switch(tmp_path: Path):
     # EXECUTION_ENABLED is False (shipped state), so even a fully gate-satisfied
     # plan is refused at the execution boundary -- the kill switch is enforced,
     # not merely documented.
-    plan = plan_write(_write_cfg(), "issue_comment", "explain", confirm=True,
-                      number=1, body="note")
+    plan = plan_write(
+        _write_cfg(),
+        "issue_comment",
+        "explain",
+        confirm=True,
+        config_path=_config_path(tmp_path),
+        number=1,
+        body="note",
+    )
     with pytest.raises(AgenticWriteRefused) as exc:
-        execute_write(plan)
+        execute_write(plan, config_path=_config_path(tmp_path))
     assert exc.value.details.get("failed_gate") == "execution_enabled"
     assert any(
         event.get("event") == "agentic_write_execution_blocked"
