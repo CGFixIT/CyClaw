@@ -6,6 +6,7 @@ Query text is SHA256-hashed to prevent the audit log from becoming
 a data exfiltration vector.
 """
 
+import atexit
 import hashlib
 import json
 import logging
@@ -14,11 +15,54 @@ import threading
 from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
+from typing import TextIO
 
 import yaml
 
 _logging_initialized = False
 _AUDIT_WRITE_LOCK = threading.Lock()
+
+# audit_log() previously opened, wrote, and closed the audit file on every
+# single call — each event paid a fresh open() (path resolution, inode
+# lookup, possible file creation) plus a close(). Under sustained query
+# volume that syscall overhead dominates the write itself. Instead, keep one
+# append-mode handle open per resolved audit-file path and reuse it across
+# calls; still flush() after every write so readers observe each event
+# immediately (audit_log's synchronous-visibility contract is unchanged —
+# only the repeated open/close is eliminated, not the durability guarantee).
+_AUDIT_HANDLES: dict[str, TextIO] = {}
+
+
+def _audit_handle(log_path: Path) -> TextIO:
+    """Return the cached append-mode handle for log_path, opening it if needed.
+
+    Caller must hold _AUDIT_WRITE_LOCK.
+    """
+    key = str(log_path)
+    handle = _AUDIT_HANDLES.get(key)
+    if handle is None or handle.closed:
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        handle = open(log_path, "a", encoding="utf-8")  # noqa: SIM115 -- kept open intentionally, see module docstring
+        _AUDIT_HANDLES[key] = handle
+    return handle
+
+
+def close_audit_handles() -> None:
+    """Flush and close all cached audit file handles.
+
+    Called automatically at process exit; also useful for tests that need to
+    release file descriptors before deleting their tmp_path audit files.
+    """
+    with _AUDIT_WRITE_LOCK:
+        for handle in _AUDIT_HANDLES.values():
+            try:
+                handle.close()
+            except OSError:
+                pass
+        _AUDIT_HANDLES.clear()
+
+
+atexit.register(close_audit_handles)
 
 
 def setup_logging(cfg: dict | None = None) -> None:
@@ -135,7 +179,6 @@ def audit_log(event: dict, config_path: str = "config.yaml", cfg: dict | None = 
     if cfg is None:
         cfg = _get_config(config_path)
     log_path = Path(cfg["logging"]["audit_file"])
-    log_path.parent.mkdir(parents=True, exist_ok=True)
     audit_fields = cfg["logging"].get("audit_fields", {})
     record = dict(event)  # work on a shallow copy — never mutate the caller's dict
     if "query" in record and audit_fields.get("include_query_hash", True):
@@ -148,5 +191,6 @@ def audit_log(event: dict, config_path: str = "config.yaml", cfg: dict | None = 
     record["timestamp"] = datetime.now(UTC).isoformat()
     line = json.dumps(record) + "\n"
     with _AUDIT_WRITE_LOCK:
-        with open(log_path, "a", encoding="utf-8") as f:
-            f.write(line)
+        handle = _audit_handle(log_path)
+        handle.write(line)
+        handle.flush()
