@@ -5,7 +5,10 @@ without requiring live sentence-transformers or ChromaDB indices.
 """
 
 import pytest
+from functools import lru_cache
 from types import SimpleNamespace
+
+from rank_bm25 import BM25Okapi
 
 from retrieval.stemmer import tokenize_and_stem
 from retrieval.hybrid_search import HybridRetriever, SearchResult
@@ -153,3 +156,87 @@ class TestParseStemTags:
 
     def test_empty_string_returns_empty(self):
         assert parse_stem_tags("") == []
+
+
+class TestBM25ScoreCache:
+    """keyword_search()'s BM25 score cache must speed up repeated identical
+    queries without letting downstream mutation of one call's SearchResult
+    objects (RRF fusion sets hit.score / hit.rrf_score in place) leak into a
+    later identical call's results.
+    """
+
+    @staticmethod
+    def _make_retriever():
+        # Bypass HybridRetriever.__init__ (which also builds a vector-store
+        # reader) -- these tests only exercise the BM25/keyword leg, so only
+        # the attributes keyword_search()/_normalize_single_path() touch are
+        # set, mirroring exactly what __init__ assigns for those.
+        chunks = ["RAG retrieval augmented generation", "ChromaDB vector database",
+                  "BM25 keyword search algorithm"]
+        metadata = [{"source": f"doc{i}.md", "chunk_id": i, "stem_tags": "[]"}
+                    for i in range(len(chunks))]
+        # Tokenize the corpus the same way retrieval/indexer.py does (via
+        # tokenize_and_stem), not a naive .split() -- otherwise query tokens
+        # (stemmed) never match corpus tokens (unstemmed) and every query
+        # scores 0 against every chunk.
+        tokenized = [tokenize_and_stem(c) for c in chunks]
+        r = object.__new__(HybridRetriever)
+        r.bm25 = BM25Okapi(tokenized)
+        r.bm25_chunks = chunks
+        r.bm25_metadata = metadata
+        r.top_k_keyword = 5
+        r.rrf_k = 60
+        r._bm25_scores = lru_cache(maxsize=256)(r.bm25.get_scores)
+        return r
+
+    def test_repeated_identical_query_hits_cache(self):
+        r = self._make_retriever()
+        calls = []
+        real_get_scores = r.bm25.get_scores
+
+        def counting_get_scores(query):
+            calls.append(query)
+            return real_get_scores(query)
+
+        r.bm25.get_scores = counting_get_scores
+        r._bm25_scores = lru_cache(maxsize=256)(r.bm25.get_scores)
+
+        r.keyword_search("retrieval augmented generation")
+        r.keyword_search("retrieval augmented generation")
+        # Second identical call served from the cache -> get_scores ran once.
+        assert len(calls) == 1
+
+    def test_cached_scores_survive_downstream_mutation(self):
+        # This is the exact hazard the cache design must avoid: RRF fusion
+        # mutates SearchResult.score / .rrf_score in place
+        # (_normalize_single_path). If keyword_search() cached and returned
+        # the SAME SearchResult objects across calls, mutating the first
+        # call's results would corrupt the second call's results too.
+        r = self._make_retriever()
+        first = r.keyword_search("retrieval augmented generation")
+        assert first  # sanity: the fixture corpus does match this query
+        original_scores = [h.score for h in first]
+
+        # Simulate what hybrid_search()/_normalize_single_path() do downstream.
+        for h in first:
+            h.score = 999.0
+            h.rrf_score = 999.0
+
+        second = r.keyword_search("retrieval augmented generation")
+        assert [h.score for h in second] == original_scores
+        assert all(h.rrf_score is None for h in second)
+        # And the two calls must not even share object identity.
+        assert all(a is not b for a, b in zip(first, second, strict=True))
+
+    def test_hybrid_search_bm25_only_fallback_not_corrupted_by_repeat_calls(self):
+        # End-to-end version of the above via the real fallback path: with no
+        # semantic hits, hybrid_search() routes through _normalize_single_path,
+        # which mutates hit.score/.rrf_score in place. Calling hybrid_search()
+        # twice for the same query must give the same rrf_score both times.
+        r = self._make_retriever()
+        r.semantic_search = lambda query, k=None: []
+
+        first = r.hybrid_search("retrieval augmented generation")
+        second = r.hybrid_search("retrieval augmented generation")
+        assert [h.rrf_score for h in first] == [h.rrf_score for h in second]
+        assert [h.score for h in first] == [h.score for h in second]

@@ -41,10 +41,22 @@ def stem_token(token: str) -> str:
         return _CUSTOM_STEMS[lower]
     return _stemmer.stem(lower)
 
-def tokenize_and_stem(text: str) -> list[str]:
+@lru_cache(maxsize=4096)
+def _tokenize_and_stem_cached(text: str) -> tuple[str, ...]:
     # _WORD_RE.findall() already guarantees each token matches [a-z][a-z0-9_-]+
     # (letter-led, length >= 2). The previous `if _TOKEN_RE.match(t)` filter
     # re-validated that exact same shape and therefore always returned True —
     # a redundant per-token regex match on the index/query hot path. Dropping it
     # produces byte-for-byte identical output with one fewer regex op per token.
-    return [stem_token(t) for t in _WORD_RE.findall(text.lower())]
+    #
+    # Returns a tuple, not a list: stem_token() is already memoized per-token,
+    # but repeated identical queries (common on the retrieval hot path) still
+    # paid the regex findall() + list-build on every call. Caching here skips
+    # that too. A tuple (immutable) is cached rather than a list so a caller
+    # can never mutate the cached object in place and corrupt it for the next
+    # hit — tokenize_and_stem() below converts back to a fresh list per call.
+    return tuple(stem_token(t) for t in _WORD_RE.findall(text.lower()))
+
+
+def tokenize_and_stem(text: str) -> list[str]:
+    return list(_tokenize_and_stem_cached(text))
