@@ -26,10 +26,31 @@
     --accent-blue-dim: rgba(74,158,255,0.08);
     --mono: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace;
     --sans: 'IBM Plex Sans', -apple-system, sans-serif;
-    --radius: 3px;
+    --radius: 8px;
+    --radius-pill: 999px;
+    --control-height: 36px;
+    --focus-ring: 0 0 0 3px rgba(212,146,11,0.18);
   }
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  button, input, textarea, select {
+    font: inherit;
+  }
+
+  button {
+    touch-action: manipulation;
+  }
+
+  button:focus-visible,
+  input:focus-visible,
+  textarea:focus-visible,
+  select:focus-visible,
+  .sources-toggle:focus-visible {
+    outline: 2px solid var(--border-focus);
+    outline-offset: 2px;
+    box-shadow: var(--focus-ring);
+  }
 
   body {
     background: var(--bg-primary);
@@ -50,6 +71,8 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
     flex-shrink: 0;
   }
   .header-left {
@@ -99,7 +122,7 @@
     font-family: var(--mono);
     font-size: 10px;
     padding: 2px 8px;
-    border-radius: 2px;
+    border-radius: var(--radius-pill);
     background: var(--bg-tertiary);
     border: 1px solid var(--border);
     color: var(--text-secondary);
@@ -123,6 +146,8 @@
     display: flex;
     flex-direction: column;
     gap: 2px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) var(--bg-primary);
   }
   .results::-webkit-scrollbar { width: 6px; }
   .results::-webkit-scrollbar-track { background: var(--bg-primary); }
@@ -131,6 +156,7 @@
   /* ── INDIVIDUAL RESULT ENTRY ── */
   .entry {
     border-left: 2px solid var(--border);
+    border-radius: 0 var(--radius) var(--radius) 0;
     padding: 10px 14px;
     animation: entry-in 0.2s ease-out;
   }
@@ -208,11 +234,15 @@
     color: var(--accent-blue);
     cursor: pointer;
     margin-top: 8px;
-    padding: 2px 0;
+    padding: 3px 8px;
+    border-radius: var(--radius-pill);
     user-select: none;
     display: inline-block;
   }
-  .sources-toggle:hover { color: var(--text-primary); }
+  .sources-toggle:hover {
+    background: var(--accent-blue-dim);
+    color: var(--text-primary);
+  }
   .sources-list {
     display: none;
     margin-top: 6px;
@@ -240,6 +270,7 @@
     display: flex;
     gap: 8px;
     align-items: baseline;
+    flex-wrap: wrap;
   }
   .source-score {
     color: var(--accent-amber);
@@ -270,23 +301,30 @@
     display: flex;
     gap: 8px;
     margin-top: 10px;
+    flex-wrap: wrap;
   }
   .btn-confirm {
+    min-height: var(--control-height);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     font-family: var(--mono);
     font-size: 11px;
-    padding: 5px 14px;
+    padding: 0 14px;
     border: 1px solid var(--border);
-    border-radius: var(--radius);
+    border-radius: var(--radius-pill);
     cursor: pointer;
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    transition: all 0.15s;
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
     background: var(--bg-tertiary);
     color: var(--text-secondary);
+    white-space: nowrap;
   }
   .btn-confirm:hover {
     border-color: var(--accent-amber);
     color: var(--text-primary);
+    transform: translateY(-1px);
   }
   .btn-confirm.yes {
     border-color: var(--accent-amber-dim);
@@ -302,6 +340,7 @@
   .btn-confirm:disabled {
     opacity: 0.3;
     cursor: not-allowed;
+    transform: none;
   }
 
   /* ── INPUT BAR ── */
@@ -316,6 +355,7 @@
   }
   .input-wrapper {
     flex: 1;
+    min-width: 0;
     position: relative;
   }
   .input-prefix {
@@ -338,7 +378,7 @@
     font-size: 13px;
     color: var(--text-primary);
     outline: none;
-    transition: border-color 0.15s;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
     resize: none;
     overflow: hidden;
     line-height: 1.4;
@@ -349,26 +389,34 @@
   .query-input:focus { border-color: var(--border-focus); }
 
   .send-btn {
+    min-height: var(--control-height);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     background: var(--accent-amber);
     color: var(--bg-primary);
     border: none;
-    border-radius: var(--radius);
-    padding: 9px 18px;
+    border-radius: var(--radius-pill);
+    padding: 0 20px;
     font-family: var(--mono);
     font-size: 12px;
     font-weight: 600;
     cursor: pointer;
     text-transform: uppercase;
     letter-spacing: 1px;
-    transition: all 0.15s;
+    transition: background-color 0.15s ease, transform 0.15s ease;
     white-space: nowrap;
     height: 38px;
   }
-  .send-btn:hover { background: #e8a40c; }
+  .send-btn:hover {
+    background: #e8a40c;
+    transform: translateY(-1px);
+  }
   .send-btn:disabled {
     background: var(--bg-tertiary);
     color: var(--text-muted);
     cursor: not-allowed;
+    transform: none;
   }
 
   /* ── LOADING SPINNER ── */
@@ -430,31 +478,63 @@
   .soul-toolbar {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 8px 20px;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 10px 20px;
     background: var(--bg-secondary);
     border-bottom: 1px solid var(--border);
     flex-shrink: 0;
   }
   .toolbar-btn {
+    min-height: 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     background: var(--bg-tertiary);
     color: var(--text-secondary);
     border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 6px 10px;
+    border-radius: var(--radius-pill);
+    padding: 0 12px;
     font-family: var(--mono);
     font-size: 11px;
     cursor: pointer;
     text-transform: uppercase;
     letter-spacing: 0.5px;
+    white-space: nowrap;
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
   }
   .toolbar-btn:hover {
+    background: rgba(212,146,11,0.06);
     color: var(--text-primary);
     border-color: var(--accent-amber);
+    transform: translateY(-1px);
   }
   .toolbar-hint {
+    flex: 1 1 280px;
+    min-width: 220px;
     font-family: var(--mono);
     font-size: 10px;
+    color: var(--text-muted);
+    line-height: 1.4;
+  }
+  .api-key-input,
+  .compact-select {
+    min-height: 32px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-pill);
+    padding: 0 10px;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-secondary);
+    outline: none;
+  }
+  .api-key-input {
+    flex: 0 1 220px;
+    min-width: 180px;
+    margin-left: auto;
+  }
+  .api-key-input::placeholder {
     color: var(--text-muted);
   }
   .soul-panel {
@@ -517,22 +597,36 @@
     display: flex;
     gap: 8px;
     flex-wrap: wrap;
+    align-items: center;
+  }
+  .soul-actions > .soul-reason {
+    flex: 1 1 240px;
+    min-width: 180px;
+    width: auto;
   }
   .soul-btn {
+    min-height: 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     background: var(--bg-tertiary);
     color: var(--text-secondary);
     border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 7px 12px;
+    border-radius: var(--radius-pill);
+    padding: 0 13px;
     font-family: var(--mono);
     font-size: 11px;
     cursor: pointer;
     text-transform: uppercase;
     letter-spacing: 0.5px;
+    white-space: nowrap;
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
   }
   .soul-btn:hover {
+    background: rgba(212,146,11,0.06);
     color: var(--text-primary);
     border-color: var(--accent-amber);
+    transform: translateY(-1px);
   }
   .soul-btn.apply {
     border-color: var(--accent-green);
@@ -576,6 +670,8 @@
     color: var(--text-primary);
     max-height: 220px;
     overflow: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) var(--bg-primary);
   }
   /* ── AGENTIC 4-GATE CHECKLIST (Sync/Agentic panels reuse all soul classes) ── */
   .gate-checklist {
@@ -604,11 +700,92 @@
     cursor: not-allowed;
     border-color: var(--border);
     color: var(--text-muted);
+    transform: none;
   }
   .soul-btn:disabled:hover {
     color: var(--text-muted);
     border-color: var(--border);
-    background: transparent;
+    background: var(--bg-tertiary);
+  }
+
+  @media (max-width: 720px) {
+    .header,
+    .soul-toolbar,
+    .soul-panel,
+    .results,
+    .input-bar,
+    .footer-bar {
+      padding-left: 14px;
+      padding-right: 14px;
+    }
+
+    .header-right {
+      width: 100%;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .toolbar-btn {
+      flex: 1 1 calc(50% - 8px);
+      min-width: 140px;
+    }
+
+    .toolbar-hint {
+      order: 2;
+      flex-basis: 100%;
+      min-width: 0;
+    }
+
+    .api-key-input {
+      order: 1;
+      flex: 1 1 220px;
+      margin-left: 0;
+      min-width: 180px;
+    }
+
+    .input-bar {
+      align-items: stretch;
+    }
+
+    .send-btn {
+      height: auto;
+    }
+
+    .footer-bar {
+      flex-wrap: wrap;
+      gap: 4px 12px;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .toolbar-btn,
+    .btn-confirm,
+    .send-btn {
+      width: 100%;
+    }
+
+    .toolbar-btn {
+      flex-basis: 100%;
+    }
+
+    .confirm-buttons {
+      flex-direction: column;
+    }
+
+    .input-bar {
+      flex-direction: column;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+      scroll-behavior: auto !important;
+    }
   }
 </style>
 </head>
@@ -640,10 +817,7 @@
     <button class="toolbar-btn" id="fsToggleBtn" onclick="toggleFsPanel()" aria-label="Toggle FS Console (Escape to close)">FS Console</button>
     <button class="toolbar-btn" id="sqlToggleBtn" onclick="toggleSqlPanel()" aria-label="Toggle SQL Console (Escape to close)">SQL Console</button>
     <span class="toolbar-hint">soul · corpus sync · agentic · fs · sql — all loopback, audited, API-key gated</span>
-    <input id="apiKeyInput" type="password" placeholder="API key (optional)"
-           style="margin-left:auto;background:var(--bg-input);border:1px solid var(--border);
-           border-radius:var(--radius);padding:4px 8px;font-family:var(--mono);font-size:10px;
-           color:var(--text-secondary);width:180px;outline:none;">
+    <input class="api-key-input" id="apiKeyInput" type="password" placeholder="API key (optional)">
   </div>
 
   <div class="soul-panel" id="soulPanel">
@@ -800,7 +974,7 @@
     <div class="soul-actions">
       <button class="soul-btn" onclick="sqlRunCmd()">Run Query</button>
       <button class="soul-btn" onclick="sqlExplainCmd()">Explain</button>
-      <select id="sqlFmt" style="background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);padding:4px 8px;font-family:var(--mono);font-size:10px;color:var(--text-secondary);">
+      <select class="compact-select" id="sqlFmt">
         <option value="json">JSON</option>
         <option value="csv">CSV</option>
       </select>
@@ -919,6 +1093,16 @@ function authHeaders() {
   return h;
 }
 
+async function fetchWithTimeout(url, options = {}, timeoutMs = 15000) {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    window.clearTimeout(timer);
+  }
+}
+
 input.addEventListener('input', () => {
   input.style.height = 'auto';
   input.style.height = Math.min(input.scrollHeight, 120) + 'px';
@@ -948,7 +1132,7 @@ function setSoulStatus(message, tone = '') {
 
 async function checkHealth() {
   try {
-    const resp = await fetch(`${API}/health`, { signal: AbortSignal.timeout(3000) });
+    const resp = await fetchWithTimeout(`${API}/health`, {}, 3000);
     const data = await resp.json();
     statusDot.className = 'status-dot';
     statusText.textContent = `gateway ${data.status}`;
@@ -1001,12 +1185,11 @@ async function submitQuery(confirmedOnline = null) {
     // UI forever. queryDeadlineMs is synced from /health to stay just ABOVE the
     // server's graph_timeout_sec, so the server's truthful 504 GRAPH_TIMEOUT
     // message wins the race instead of being masked by a premature client abort.
-    const resp = await fetch(`${API}/query`, {
+    const resp = await fetchWithTimeout(`${API}/query`, {
       method: 'POST',
       headers: authHeaders(),
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(queryDeadlineMs)
-    });
+      body: JSON.stringify(body)
+    }, queryDeadlineMs);
 
     const elapsed = Math.round(performance.now() - startTime);
     removeEntry(loadingId);
@@ -1222,10 +1405,9 @@ async function toggleSoulPanel() {
 async function loadSoul() {
   setSoulStatus('Loading soul...');
   try {
-    const resp = await fetch(`${API}/soul`, {
+    const resp = await fetchWithTimeout(`${API}/soul`, {
       headers: authHeaders(),
-      signal: AbortSignal.timeout(5000),
-    });
+    }, 5000);
     const data = await resp.json().catch(() => ({}));
     if (!resp.ok) {
       throw new Error(extractErrorMessage(data, 'Failed to load soul'));
@@ -1244,11 +1426,10 @@ async function loadSoul() {
 async function reloadSoul() {
   setSoulStatus('Reloading soul from disk...');
   try {
-    const resp = await fetch(`${API}/soul/reload`, {
+    const resp = await fetchWithTimeout(`${API}/soul/reload`, {
       method: 'POST',
-      headers: authHeaders(),
-      signal: AbortSignal.timeout(10000)
-    });
+      headers: authHeaders()
+    }, 10000);
     const data = await resp.json().catch(() => ({}));
     if (!resp.ok) {
       throw new Error(extractErrorMessage(data, 'Failed to reload soul'));
@@ -1274,12 +1455,11 @@ async function proposeSoulEvolution() {
   proposalBox.style.display = 'none';
   setSoulStatus('Creating proposal...');
   try {
-    const resp = await fetch(`${API}/soul/propose`, {
+    const resp = await fetchWithTimeout(`${API}/soul/propose`, {
       method: 'POST',
       headers: authHeaders(),
-      body: JSON.stringify({ new_soul: newSoul, reason }),
-      signal: AbortSignal.timeout(10000)
-    });
+      body: JSON.stringify({ new_soul: newSoul, reason })
+    }, 10000);
     const data = await resp.json().catch(() => ({}));
     if (!resp.ok) {
       throw new Error(extractErrorMessage(data, 'Failed to create proposal'));
@@ -1308,12 +1488,11 @@ async function applySoulEvolution() {
 
   setSoulStatus('Applying soul evolution...');
   try {
-    const resp = await fetch(`${API}/soul/apply`, {
+    const resp = await fetchWithTimeout(`${API}/soul/apply`, {
       method: 'POST',
       headers: authHeaders(),
-      body: JSON.stringify(pendingSoulProposal),
-      signal: AbortSignal.timeout(10000)
-    });
+      body: JSON.stringify(pendingSoulProposal)
+    }, 10000);
     const data = await resp.json().catch(() => ({}));
     if (!resp.ok) {
       throw new Error(extractErrorMessage(data, 'Failed to apply soul evolution'));
@@ -1332,11 +1511,10 @@ async function applySoulEvolution() {
 async function restoreSoul() {
   setSoulStatus('Restoring from .bak...');
   try {
-    const resp = await fetch(`${API}/soul/restore`, {
+    const resp = await fetchWithTimeout(`${API}/soul/restore`, {
       method: 'POST',
-      headers: authHeaders(),
-      signal: AbortSignal.timeout(10000)
-    });
+      headers: authHeaders()
+    }, 10000);
     const data = await resp.json().catch(() => ({}));
     if (!resp.ok) {
       throw new Error(extractErrorMessage(data, 'Failed to restore soul'));
@@ -1363,12 +1541,11 @@ async function callOps(path, body) {
   // 60s ceiling: /ops/* shells out to CLIs (rclone, gh) that can stall; without
   // a timeout a hung subprocess would hang the browser tab indefinitely (parity
   // with the /query, /soul/*, and /health fetches which all bound their waits).
-  const resp = await fetch(`${API}${path}`, {
+  const resp = await fetchWithTimeout(`${API}${path}`, {
     method: 'POST',
     headers: authHeaders(),
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(60000)
-  });
+    body: JSON.stringify(body)
+  }, 60000);
   const data = await resp.json().catch(() => ({}));
   if (!resp.ok) {
     throw new Error(extractErrorMessage(data, 'Ops request failed'));
