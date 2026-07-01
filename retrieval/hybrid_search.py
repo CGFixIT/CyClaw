@@ -8,6 +8,7 @@ Degrades gracefully if one retrieval path fails.
 import heapq
 import json
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 
 import yaml
@@ -73,6 +74,24 @@ class HybridRetriever:
         self.top_k_keyword = self.cfg["retrieval"]["top_k_keyword"]
         self.rrf_k = self.cfg["retrieval"]["rrf_k"]
 
+        # Per-instance BM25 score cache: repeated identical queries (common on
+        # the retrieval hot path) previously re-ran get_scores() -- an
+        # O(corpus size) computation over the full BM25 term/document matrix
+        # -- on every single call. Built as an lru_cache-wrapped closure over
+        # this instance's own bound self.bm25.get_scores and stored as an
+        # instance attribute, NOT a bare @lru_cache decorating the method
+        # itself: the latter would be one cache shared by the whole class,
+        # pinning every HybridRetriever instance ever passed to it alive for
+        # the life of the process (a real leak across the many short-lived
+        # instances tests construct). This way the cache dies with the
+        # instance. Caches only the raw, never-mutated scores array returned
+        # by BM25Okapi -- NOT the SearchResult objects keyword_search() builds
+        # from it below, since downstream RRF fusion mutates those objects in
+        # place (hit.score / hit.rrf_score in _normalize_single_path and
+        # hybrid_search) and returning shared instances across calls would
+        # leak one query's fusion state into the next identical query.
+        self._bm25_scores = lru_cache(maxsize=256)(self.bm25.get_scores)
+
     def close(self) -> None:
         """Close the underlying vector store connection.
 
@@ -112,7 +131,12 @@ class HybridRetriever:
         if k is None:
             k = self.top_k_keyword
         query_tokens = tokenize_and_stem(query)
-        scores = self.bm25.get_scores(query_tokens)
+        # lru_cache requires hashable args -- tokenize_and_stem() returns a
+        # list (its public contract; callers elsewhere may hold/extend it),
+        # so convert to a tuple only for the cache key. This tuple() call is
+        # O(number of query tokens), trivial next to the O(corpus size)
+        # get_scores() computation it lets repeated identical queries skip.
+        scores = self._bm25_scores(tuple(query_tokens))
         # Top-k selection only: heapq.nlargest is O(n log k) and matches the
         # ordering of sorted(..., reverse=True)[:k], avoiding a full O(n log n)
         # sort of every chunk in the corpus on each keyword query.

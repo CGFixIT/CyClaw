@@ -59,3 +59,15 @@ class TestTokenizeAndStem:
         t1 = tokenize_and_stem("backup configuration")
         t2 = tokenize_and_stem("backup configuration")
         assert t1 == t2
+
+    def test_repeated_call_returns_independent_list(self):
+        # tokenize_and_stem() is now backed by an lru_cache (keyed on the whole
+        # query text) so repeated identical queries skip re-tokenizing. That
+        # cache stores an immutable tuple internally and returns list(tuple)
+        # -- a FRESH list -- on every call. Prove a caller mutating the first
+        # result can't corrupt what a later identical call returns.
+        t1 = tokenize_and_stem("backup configuration")
+        t1.append("junk")
+        t1.clear()
+        t2 = tokenize_and_stem("backup configuration")
+        assert t2 == ["backup", "configur"]
