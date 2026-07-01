@@ -217,7 +217,14 @@ class _PgVectorWriter(_PgVectorBase):
             stem = meta.get("stem_tags", "[]")
             if not isinstance(stem, str):
                 stem = json.dumps(stem)
-            rows.append((meta["source"], int(meta["chunk_id"]), meta.get("source_sha256", ""), doc, stem, _as_list(emb)))
+            rows.append((
+                meta["source"],
+                int(meta["chunk_id"]),
+                meta.get("source_sha256", ""),
+                doc,
+                stem,
+                _as_list(emb),
+            ))
         with conn.cursor() as cur:
             cur.executemany(
                 f"INSERT INTO {_PG_TABLE} (source, chunk_id, source_sha256, content, stem_tags, embedding) "  # noqa: S608
